@@ -13,7 +13,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    /** Application-scoped coroutine scope for background collectors (e.g. backend URL sync). */
+    /** Application-scoped coroutine scope for long-lived background collectors. */
     @Provides
     @Singleton
     fun provideAppScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

@@ -21,15 +21,17 @@ class SettingsRepositoryTest {
     fun setUp() = runBlocking { repo.clear() } // DataStore is a JVM singleton; isolate from other tests
 
     @Test
-    fun defaultsThenPersists() = runTest {
-        assertEquals(SettingsRepository.DEFAULT_BACKEND_URL, repo.backendUrl.first())
+    fun profileAndCurrencyDefaultsThenPersist() = runTest {
         assertEquals("", repo.profileName.first())
+        assertEquals(SettingsRepository.DEFAULT_CURRENCY_SYMBOL, repo.currencySymbol.first())
+        assertEquals(SettingsRepository.DEFAULT_CURRENCY_CODE, repo.currencyCode.first())
 
         repo.setProfileName("  Dev  ")
-        repo.setBackendUrl("http://192.168.1.5:8080")
+        repo.setDefaultCurrency("€", "EUR")
 
         assertEquals("Dev", repo.profileName.first())
-        assertEquals("http://192.168.1.5:8080", repo.backendUrl.first())
+        assertEquals("€", repo.currencySymbol.first())
+        assertEquals("EUR", repo.currencyCode.first())
     }
 
     @Test

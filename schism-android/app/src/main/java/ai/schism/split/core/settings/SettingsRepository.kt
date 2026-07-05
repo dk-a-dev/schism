@@ -14,8 +14,9 @@ import javax.inject.Singleton
 private val Context.dataStore by preferencesDataStore("settings")
 
 /**
- * Device-local settings: the backend base URL, the device profile name (used to resolve "you"),
- * and the set of group ids this device has joined/created.
+ * Device-local settings: the device profile name (used to resolve "you"), the app-wide default
+ * currency, and the set of group ids this device has joined/created. The backend URL is NOT here —
+ * it comes from build/env config (see [ai.schism.split.core.net.BackendUrlProvider]).
  */
 @Singleton
 class SettingsRepository @Inject constructor(
@@ -23,17 +24,12 @@ class SettingsRepository @Inject constructor(
 ) {
     private val ds = context.dataStore
 
-    val backendUrl: Flow<String> = ds.data.map { it[KEY_URL] ?: DEFAULT_BACKEND_URL }
     val profileName: Flow<String> = ds.data.map { it[KEY_NAME] ?: "" }
     val knownGroupIds: Flow<Set<String>> = ds.data.map { it[KEY_GROUPS] ?: emptySet() }
 
     /** App-wide default currency for new groups (symbol + ISO code). Defaults to Indian Rupee. */
     val currencySymbol: Flow<String> = ds.data.map { it[KEY_CUR_SYMBOL] ?: DEFAULT_CURRENCY_SYMBOL }
     val currencyCode: Flow<String> = ds.data.map { it[KEY_CUR_CODE] ?: DEFAULT_CURRENCY_CODE }
-
-    suspend fun setBackendUrl(url: String) {
-        ds.edit { it[KEY_URL] = url.trim() }
-    }
 
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
@@ -64,10 +60,8 @@ class SettingsRepository @Inject constructor(
     }
 
     companion object {
-        const val DEFAULT_BACKEND_URL = "http://10.0.2.2:8080"
         const val DEFAULT_CURRENCY_SYMBOL = "₹"
         const val DEFAULT_CURRENCY_CODE = "INR"
-        private val KEY_URL = stringPreferencesKey("backend_url")
         private val KEY_NAME = stringPreferencesKey("profile_name")
         private val KEY_GROUPS = stringSetPreferencesKey("known_group_ids")
         private val KEY_CUR_SYMBOL = stringPreferencesKey("currency_symbol")

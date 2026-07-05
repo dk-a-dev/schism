@@ -1,9 +1,6 @@
 package ai.schism.split.core.net
 
-import ai.schism.split.core.settings.SettingsRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import ai.schism.split.BuildConfig
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -11,24 +8,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Holds the current backend base URL (kept in sync with settings) so a single long-lived
- * [ApiService] can target a user-configurable host. Retrofit is built with a placeholder base URL;
- * [BackendUrlInterceptor] rewrites each request's scheme/host/port to the current value.
+ * Supplies the backend base URL from build/env config ([BuildConfig.BACKEND_URL], overridable via the
+ * SCHISM_BACKEND_URL env var or `schism.backendUrl` Gradle property) — it is deliberately NOT a user
+ * setting. Retrofit is built with a placeholder base URL; [BackendUrlInterceptor] rewrites each
+ * request's scheme/host/port to this value so a single long-lived [ApiService] targets the right host.
  */
 @Singleton
-class BackendUrlProvider @Inject constructor(
-    settings: SettingsRepository,
-    scope: CoroutineScope,
-) {
-    @Volatile
-    var baseUrl: String = SettingsRepository.DEFAULT_BACKEND_URL
-        private set
-
-    init {
-        settings.backendUrl
-            .onEach { if (it.isNotBlank()) baseUrl = it }
-            .launchIn(scope)
-    }
+class BackendUrlProvider @Inject constructor() {
+    val baseUrl: String = BuildConfig.BACKEND_URL
 }
 
 class BackendUrlInterceptor(private val provider: BackendUrlProvider) : Interceptor {

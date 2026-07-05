@@ -7,6 +7,12 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Backend base URL is build/env config, not a user setting: override with the SCHISM_BACKEND_URL
+// env var or a `schism.backendUrl` Gradle property; defaults to the Android emulator's host loopback.
+val backendUrl: String = System.getenv("SCHISM_BACKEND_URL")
+    ?: (project.findProperty("schism.backendUrl") as String?)
+    ?: "http://10.0.2.2:8080"
+
 android {
     namespace = "ai.schism.split"
     compileSdk = 35
@@ -18,6 +24,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
     }
 
     buildTypes {
