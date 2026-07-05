@@ -7,8 +7,9 @@ import (
 )
 
 type participantDTO struct {
-	ID   *string `json:"id"`
-	Name string  `json:"name"`
+	ID     *string `json:"id"`
+	Name   string  `json:"name"`
+	UserID *string `json:"userId"`
 }
 type groupFormDTO struct {
 	Name         string           `json:"name"`
@@ -21,7 +22,7 @@ type groupFormDTO struct {
 func (d groupFormDTO) toInput() store.GroupInput {
 	parts := make([]store.ParticipantInput, len(d.Participants))
 	for i, p := range d.Participants {
-		parts[i] = store.ParticipantInput{ID: p.ID, Name: p.Name}
+		parts[i] = store.ParticipantInput{ID: p.ID, Name: p.Name, UserID: p.UserID}
 	}
 	return store.GroupInput{
 		Name: d.Name, Information: d.Information, Currency: d.Currency,

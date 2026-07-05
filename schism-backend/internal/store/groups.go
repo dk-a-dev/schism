@@ -15,8 +15,9 @@ type Store struct{ pool *pgxpool.Pool }
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 type ParticipantInput struct {
-	ID   *string
-	Name string
+	ID     *string
+	Name   string
+	UserID *string
 }
 type GroupInput struct {
 	Name         string
@@ -26,9 +27,10 @@ type GroupInput struct {
 	Participants []ParticipantInput
 }
 type Participant struct {
-	ID      string `json:"id"`
-	GroupID string `json:"groupId"`
-	Name    string `json:"name"`
+	ID      string  `json:"id"`
+	GroupID string  `json:"groupId"`
+	Name    string  `json:"name"`
+	UserID  *string `json:"userId"`
 }
 type Group struct {
 	ID           string        `json:"id"`
@@ -56,8 +58,8 @@ func (s *Store) CreateGroup(ctx context.Context, in GroupInput) (Group, error) {
 	}
 	for _, p := range in.Participants {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO participants (id, group_id, name) VALUES ($1,$2,$3)`,
-			id.New(), gid, p.Name); err != nil {
+			`INSERT INTO participants (id, group_id, name, user_id) VALUES ($1,$2,$3,$4)`,
+			id.New(), gid, p.Name, nullifyPtr(p.UserID)); err != nil {
 			return Group{}, err
 		}
 	}
@@ -93,7 +95,7 @@ func (s *Store) GetGroup(ctx context.Context, gid string) (*Group, error) {
 
 func (s *Store) participants(ctx context.Context, gid string) ([]Participant, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, group_id, name FROM participants WHERE group_id=$1 ORDER BY name`, gid)
+		`SELECT id, group_id, name, user_id FROM participants WHERE group_id=$1 ORDER BY name`, gid)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +103,7 @@ func (s *Store) participants(ctx context.Context, gid string) ([]Participant, er
 	out := []Participant{}
 	for rows.Next() {
 		var p Participant
-		if err := rows.Scan(&p.ID, &p.GroupID, &p.Name); err != nil {
+		if err := rows.Scan(&p.ID, &p.GroupID, &p.Name, &p.UserID); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -147,14 +149,16 @@ func (s *Store) UpdateGroup(ctx context.Context, gid string, in GroupInput) (*Gr
 		if p.ID != nil {
 			keep[*p.ID] = true
 			if _, err := tx.Exec(ctx,
-				`UPDATE participants SET name=$2 WHERE id=$1 AND group_id=$3`, *p.ID, p.Name, gid); err != nil {
+				`UPDATE participants SET name=$2, user_id=$4 WHERE id=$1 AND group_id=$3`,
+				*p.ID, p.Name, gid, nullifyPtr(p.UserID)); err != nil {
 				return nil, err
 			}
 		} else {
 			newID := id.New()
 			keep[newID] = true
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO participants (id, group_id, name) VALUES ($1,$2,$3)`, newID, gid, p.Name); err != nil {
+				`INSERT INTO participants (id, group_id, name, user_id) VALUES ($1,$2,$3,$4)`,
+				newID, gid, p.Name, nullifyPtr(p.UserID)); err != nil {
 				return nil, err
 			}
 		}
@@ -195,4 +199,11 @@ func nullify(s string) any {
 		return nil
 	}
 	return s
+}
+
+func nullifyPtr(s *string) any {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return *s
 }
