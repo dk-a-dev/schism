@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only override: permit cleartext HTTP to ANY host so a backend on a LAN IP
+  (e.g. http://192.168.x.x:8080 via SCHISM_BACKEND_URL) works during development.
+  This file replaces the main network_security_config.xml in debug builds only;
+  release builds keep the loopback-only policy.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
