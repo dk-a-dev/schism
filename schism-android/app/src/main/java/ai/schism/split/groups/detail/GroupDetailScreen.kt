@@ -4,6 +4,7 @@ import ai.schism.split.core.ui.UiState
 import ai.schism.split.groups.detail.tabs.ActivityTab
 import ai.schism.split.groups.detail.tabs.BalancesTab
 import ai.schism.split.groups.detail.tabs.ExpensesTab
+import ai.schism.split.groups.join.shareGroupInvite
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -32,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -69,6 +72,10 @@ fun GroupDetailScreen(
                 },
                 actions = {
                     if (groupId != null) {
+                        val context = LocalContext.current
+                        IconButton(onClick = { shareGroupInvite(context, groupId, g?.name ?: "group") }) {
+                            Icon(Icons.Filled.Share, contentDescription = "Share invite")
+                        }
                         IconButton(onClick = { onOpenDashboard(groupId) }) {
                             Icon(Icons.Filled.BarChart, contentDescription = "Insights")
                         }

@@ -3,6 +3,11 @@
 package ai.schism.split.groups.create
 
 import ai.schism.split.core.ui.InitialAvatar
+import android.content.Context
+import android.net.Uri
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,6 +42,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -142,16 +149,27 @@ fun CreateGroupScreen(
                     )
                 }
 
-                OutlinedButton(
-                    onClick = viewModel::addParticipant,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        Icons.Filled.PersonAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text("Add participant", modifier = Modifier.padding(start = 8.dp))
+                val context = LocalContext.current
+                val pickContact = rememberLauncherForActivityResult(
+                    ActivityResultContracts.PickContact(),
+                ) { uri ->
+                    if (uri != null) contactDisplayName(context, uri)?.let(viewModel::addParticipantNamed)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = viewModel::addParticipant,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Add", modifier = Modifier.padding(start = 8.dp))
+                    }
+                    OutlinedButton(
+                        onClick = { pickContact.launch(null) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.Contacts, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Contacts", modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
 
@@ -185,6 +203,15 @@ fun CreateGroupScreen(
         }
     }
 }
+
+/**
+ * Reads the display name of a contact the user picked. The picker grants temporary read access to
+ * this one contact URI, so no READ_CONTACTS permission is needed.
+ */
+private fun contactDisplayName(context: Context, uri: Uri): String? =
+    context.contentResolver
+        .query(uri, arrayOf(ContactsContract.Contacts.DISPLAY_NAME), null, null, null)
+        ?.use { c -> if (c.moveToFirst()) c.getString(0)?.takeIf { it.isNotBlank() } else null }
 
 @Composable
 private fun SectionCard(

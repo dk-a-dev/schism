@@ -66,6 +66,20 @@ class CreateGroupViewModel @Inject constructor(
     fun addParticipant() =
         _state.update { it.copy(form = it.form.copy(participants = it.form.participants + "")) }
 
+    /** Add a participant picked from contacts: fills the first empty row, otherwise appends. */
+    fun addParticipantNamed(name: String) = _state.update { s ->
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return@update s
+        val parts = s.form.participants
+        val emptyIdx = parts.indexOfLast { it.isBlank() }
+        val next = if (emptyIdx >= 0) {
+            parts.toMutableList().also { it[emptyIdx] = trimmed }
+        } else {
+            parts + trimmed
+        }
+        s.copy(form = s.form.copy(participants = next), participantsError = null)
+    }
+
     fun removeParticipant(index: Int) = _state.update { s ->
         if (s.form.participants.size <= 1) return@update s
         s.copy(form = s.form.copy(participants = s.form.participants.filterIndexed { i, _ -> i != index }))
