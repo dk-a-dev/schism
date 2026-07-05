@@ -163,6 +163,11 @@ class ExpenseEditViewModel @Inject constructor(
     val groupId: String = checkNotNull(savedStateHandle["groupId"])
     val expenseId: String? = savedStateHandle["expenseId"]
 
+    // Who is acting: the device's active participant in this group. Stamped onto new expenses so the
+    // group can attribute and gate edits; on an edit we keep the original creator instead.
+    private var youParticipantId: String? = null
+    private var existingAddedBy: String = ""
+
     private val _state = MutableStateFlow(ExpenseEditUiState(isEdit = expenseId != null))
     val state: StateFlow<ExpenseEditUiState> = _state.asStateFlow()
 
@@ -187,6 +192,7 @@ class ExpenseEditViewModel @Inject constructor(
                         notes = existing.notes,
                     )
                 }
+                existingAddedBy = existing.addedBy
             }
             val paidForById = existing?.paidFor?.associateBy { it.participantId } ?: emptyMap()
 
@@ -196,6 +202,7 @@ class ExpenseEditViewModel @Inject constructor(
                     _state.update { it.copy(loading = false) }
                     return@collect
                 }
+                youParticipantId = group.activeParticipantId
                 _state.update { s ->
                     val byId = s.rows.associateBy { it.participantId }
                     val rows = group.participants.map { p ->
@@ -228,7 +235,9 @@ class ExpenseEditViewModel @Inject constructor(
     /** Build + validate the request (no network), then create or update on success. */
     fun submit(onSaved: () -> Unit) {
         buildExpenseRequest(currentForm()).fold(
-            onSuccess = { request ->
+            onSuccess = { built ->
+                // Stamp the creator: "you" on a new expense, the original creator on an edit.
+                val request = built.copy(addedBy = if (expenseId == null) youParticipantId else existingAddedBy)
                 viewModelScope.launch {
                     _state.update { it.copy(submitting = true, error = null) }
                     val result = if (expenseId == null) {

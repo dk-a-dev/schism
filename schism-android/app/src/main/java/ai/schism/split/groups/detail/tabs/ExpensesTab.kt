@@ -14,10 +14,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,13 +59,18 @@ private fun ExpenseCard(
     youParticipantId: String?,
     onEditExpense: (String) -> Unit,
 ) {
-    val isYou = expense.paidById == youParticipantId
-    val payer = if (isYou) "You" else participantNames[expense.paidById] ?: "someone"
-    Card(
-        onClick = { onEditExpense(expense.id) },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    fun label(id: String) = if (id == youParticipantId) "You" else participantNames[id] ?: "someone"
+    val payer = label(expense.paidById)
+    // You can only edit expenses you added. Legacy rows (no creator recorded) stay editable.
+    val editable = expense.addedBy.isBlank() || expense.addedBy == youParticipantId
+    val subtitle = buildString {
+        append("Paid by $payer")
+        if (expense.addedBy.isNotBlank() && expense.addedBy != expense.paidById) {
+            append(" · added by ${label(expense.addedBy)}")
+        }
+    }
+    val cardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    val body: @Composable () -> Unit = {
         Row(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -75,16 +84,31 @@ private fun ExpenseCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "Paid by $payer",
+                    subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                formatMinor(expense.amount, currency),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    formatMinor(expense.amount, currency),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (!editable) {
+                    Icon(
+                        Icons.Filled.Lock,
+                        contentDescription = "Only the person who added this can edit it",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
+    }
+    if (editable) {
+        Card(onClick = { onEditExpense(expense.id) }, colors = cardColors, modifier = Modifier.fillMaxWidth()) { body() }
+    } else {
+        Card(colors = cardColors, modifier = Modifier.fillMaxWidth()) { body() }
     }
 }

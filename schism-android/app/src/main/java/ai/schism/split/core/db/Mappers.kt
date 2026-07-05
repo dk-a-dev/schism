@@ -33,6 +33,7 @@ fun ExpenseDto.toEntity(): ExpenseEntity = ExpenseEntity(
     isReimbursement = isReimbursement,
     notes = notes,
     createdAt = createdAt,
+    addedBy = addedBy,
 )
 
 fun ExpenseDto.paidForEntities(): List<PaidForEntity> =
@@ -65,5 +66,6 @@ fun ExpenseWithPaidFor.toDomain(): Expense = Expense(
     splitMode = expense.splitMode,
     isReimbursement = expense.isReimbursement,
     notes = expense.notes,
+    addedBy = expense.addedBy,
     paidFor = paidFor.map { PaidFor(it.participantId, it.shares) },
 )

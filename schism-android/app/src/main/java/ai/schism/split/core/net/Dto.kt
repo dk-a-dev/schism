@@ -48,6 +48,7 @@ data class ExpenseDto(
     val isReimbursement: Boolean = false,
     val notes: String = "",
     val createdAt: String = "",
+    val addedBy: String = "",
     val paidFor: List<PaidForDto> = emptyList(),
 )
 
@@ -114,6 +115,7 @@ data class ExpenseRequest(
     val splitMode: String = "EVENLY",
     val isReimbursement: Boolean = false,
     val notes: String = "",
+    val addedBy: String? = null,
     val paidFor: List<PaidForDto>,
 )
 

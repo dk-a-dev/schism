@@ -16,5 +16,6 @@ data class Expense(
     val splitMode: String,
     val isReimbursement: Boolean,
     val notes: String,
+    val addedBy: String = "",
     val paidFor: List<PaidFor>,
 )

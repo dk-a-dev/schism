@@ -44,6 +44,7 @@ data class ExpenseEntity(
     val isReimbursement: Boolean,
     val notes: String,
     val createdAt: String,
+    val addedBy: String = "",
 )
 
 @Entity(
