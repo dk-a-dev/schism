@@ -1,6 +1,7 @@
 package ai.schism.split.core.nav
 
 import ai.schism.split.groups.create.CreateGroupScreen
+import ai.schism.split.groups.join.JoinGroupScreen
 import ai.schism.split.groups.list.GroupsListScreen
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,13 +73,19 @@ fun AppNav() {
                 GroupsListScreen(
                     onOpenGroup = { /* Task 10: group detail */ },
                     onCreateGroup = { navController.navigate(Routes.CREATE_GROUP) },
-                    onJoinGroup = { /* Task 8: join group */ },
+                    onJoinGroup = { navController.navigate(Routes.JOIN_GROUP) },
                 )
             }
             composable(Routes.CREATE_GROUP) {
                 CreateGroupScreen(
                     onBack = { navController.popBackStack() },
                     onCreated = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.JOIN_GROUP) {
+                JoinGroupScreen(
+                    onBack = { navController.popBackStack() },
+                    onJoined = { navController.popBackStack() },
                 )
             }
             composable(Routes.DASHBOARD) { PlaceholderScreen("Dashboard") }

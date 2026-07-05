@@ -5,4 +5,5 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val SETTINGS = "settings"
     const val CREATE_GROUP = "groups/create"
+    const val JOIN_GROUP = "groups/join"
 }
