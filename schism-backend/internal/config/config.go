@@ -21,7 +21,12 @@ func Load() (Config, error) {
 		LogRequests: isTruthy(os.Getenv("LOG_REQUESTS")),
 	}
 	if c.Addr == "" {
-		c.Addr = ":8080"
+		// Many PaaS inject the port to listen on as PORT; fall back to that, then to :8080.
+		if p := os.Getenv("PORT"); p != "" {
+			c.Addr = ":" + p
+		} else {
+			c.Addr = ":8080"
+		}
 	}
 	if c.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
