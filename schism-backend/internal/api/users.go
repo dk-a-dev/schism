@@ -3,10 +3,11 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
+// registerUser creates an unverified identity from the onboarding fields and returns it. There is no
+// GET-by-id endpoint on purpose: email/phone are PII and, without auth, must not be readable by
+// anyone holding a user id.
 func (h *Handler) registerUser(w http.ResponseWriter, r *http.Request) {
 	var d struct {
 		Name  string `json:"name"`
@@ -17,22 +18,9 @@ func (h *Handler) registerUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	u, err := h.store.UpsertUser(r.Context(), d.Name, d.Email, d.Phone)
+	u, err := h.store.CreateUser(r.Context(), d.Name, d.Email, d.Phone)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, u)
-}
-
-func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
-	u, err := h.store.GetUser(r.Context(), chi.URLParam(r, "userID"))
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if u == nil {
-		writeErr(w, http.StatusNotFound, "user not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, u)

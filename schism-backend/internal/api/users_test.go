@@ -23,42 +23,24 @@ func registerUser(t *testing.T, srv string, name, email, phone string) store.Use
 	return u
 }
 
-func TestRegisterUserUpsert(t *testing.T) {
+func TestRegisterUserAlwaysCreates(t *testing.T) {
 	srv := newTestServer(t)
 
-	// Same email upserts onto the same id, updating the name.
+	// Email is unverified, so it is NOT a unique key: registering the same email twice yields two
+	// distinct ids (no account takeover). The response echoes what was sent.
 	email := "alice-" + id.New() + "@example.com"
 	u1 := registerUser(t, srv.URL, "Alice", email, "111")
 	require.NotEmpty(t, u1.ID)
 	require.Equal(t, "Alice", u1.Name)
+	require.Equal(t, email, u1.Email)
 
-	u2 := registerUser(t, srv.URL, "Alice Cooper", email, "222")
-	require.Equal(t, u1.ID, u2.ID)
-	require.Equal(t, "Alice Cooper", u2.Name)
-	require.Equal(t, "222", u2.Phone)
+	u2 := registerUser(t, srv.URL, "Mallory", email, "222")
+	require.NotEqual(t, u1.ID, u2.ID)
 
-	// Empty email always inserts a distinct id.
+	// Empty email also always inserts a distinct id.
 	e1 := registerUser(t, srv.URL, "Anon", "", "")
 	e2 := registerUser(t, srv.URL, "Anon", "", "")
-	require.NotEmpty(t, e1.ID)
-	require.NotEmpty(t, e2.ID)
 	require.NotEqual(t, e1.ID, e2.ID)
-}
-
-func TestGetUser(t *testing.T) {
-	srv := newTestServer(t)
-	u := registerUser(t, srv.URL, "Bob", "bob-"+id.New()+"@example.com", "333")
-
-	resp, err := http.Get(srv.URL + "/v1/users/" + u.ID)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var got store.User
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
-	require.Equal(t, u.ID, got.ID)
-	require.Equal(t, "Bob", got.Name)
-
-	resp2, _ := http.Get(srv.URL + "/v1/users/nope")
-	require.Equal(t, http.StatusNotFound, resp2.StatusCode)
 }
 
 func TestGroupParticipantUserID(t *testing.T) {
