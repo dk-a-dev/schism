@@ -11,6 +11,13 @@ data class ReceiptDraft(
     val totalMinor: Long,
     val currency: String,
     val date: String?, // ISO yyyy-MM-dd when found
+    val lineItems: List<ReceiptLineItem> = emptyList(),
+)
+
+/** A single purchased line item on a receipt: a name and its amount in minor units. */
+data class ReceiptLineItem(
+    val name: String,
+    val amountMinor: Long,
 )
 
 /** Currency symbol/code hints → the symbol we store for display. */
@@ -22,7 +29,10 @@ private val CURRENCY_HINTS = mapOf(
 )
 
 private val AMOUNT_REGEX = Regex("""(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)""")
-private val TOTAL_LABEL = Regex("""(?i)\b(grand\s*total|total|amount\s*(?:due|payable)|net\s*payable|balance)\b""")
+// An amount at the very end of a line (optionally prefixed by a currency symbol), used to split an
+// item line into "name" + "price".
+private val TRAILING_AMOUNT = Regex("""[₹$€£]?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*$""")
+private val TOTAL_LABEL = Regex("""(?i)\b(grand\s*total|sub\s*total|subtotal|total|amount\s*(?:due|payable)|net\s*payable|balance|tax|gst|vat|change|cash|tip)\b""")
 // dd/mm/yyyy, dd-mm-yy, yyyy-mm-dd, etc.
 private val DATE_REGEX = Regex("""\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b|\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})\b""")
 
@@ -53,8 +63,34 @@ fun parseReceipt(lines: List<String>): ReceiptDraft? {
 
     val date = clean.firstNotNullOfOrNull { isoDate(it) }
 
-    return ReceiptDraft(merchant = merchant.take(60), totalMinor = total, currency = currency, date = date)
+    val lineItems = extractLineItems(clean, merchant)
+
+    return ReceiptDraft(
+        merchant = merchant.take(60),
+        totalMinor = total,
+        currency = currency,
+        date = date,
+        lineItems = lineItems,
+    )
 }
+
+/**
+ * Item lines are those that contain some letters (a name) AND end with a monetary amount, excluding
+ * lines that are totals/subtotals/tax/etc. (the [TOTAL_LABEL] rows) and the merchant header itself.
+ * The item name is the line with its trailing amount stripped off.
+ */
+private fun extractLineItems(lines: List<String>, merchant: String): List<ReceiptLineItem> =
+    lines.mapNotNull { line ->
+        if (TOTAL_LABEL.containsMatchIn(line)) return@mapNotNull null
+        if (line == merchant) return@mapNotNull null
+        if (!line.any { it.isLetter() }) return@mapNotNull null
+        if (isoDate(line) != null) return@mapNotNull null
+        val trailing = TRAILING_AMOUNT.find(line) ?: return@mapNotNull null
+        val amount = toMinor(trailing.groupValues[1]) ?: return@mapNotNull null
+        val name = line.removeRange(trailing.range).trim().trimEnd(':', '-', '·').trim()
+        if (name.isEmpty() || name.none { it.isLetter() }) return@mapNotNull null
+        ReceiptLineItem(name = name.take(60), amountMinor = amount)
+    }
 
 private fun detectCurrency(lines: List<String>): String? {
     val text = lines.joinToString(" ").lowercase()

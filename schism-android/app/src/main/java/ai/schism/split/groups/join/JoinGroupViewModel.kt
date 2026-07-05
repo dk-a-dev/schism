@@ -47,6 +47,11 @@ class JoinGroupViewModel @Inject constructor(
         }
     }
 
+    /** Surface an error when a QR scan yields no usable group link (cancelled, failed, or unrelated). */
+    fun onScanError() {
+        _state.value = JoinState.Error("Couldn't read a group QR code")
+    }
+
     companion object {
         /** `schism://group/<id>`, any `.../group/<id>` URL, or a bare id all resolve to `<id>`. */
         fun parseGroupId(input: String): String {

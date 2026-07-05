@@ -3,6 +3,7 @@
 package ai.schism.split.expense.edit
 
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.expense.edit.voice.rememberVoiceInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -59,6 +61,7 @@ fun ExpenseEditScreen(
     viewModel: ExpenseEditViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val startVoice = rememberVoiceInput { transcript -> viewModel.applyVoice(transcript) }
 
     Scaffold(
         topBar = {
@@ -67,6 +70,11 @@ fun ExpenseEditScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = startVoice) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Add by voice")
                     }
                 },
             )

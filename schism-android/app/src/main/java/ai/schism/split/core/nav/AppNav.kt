@@ -2,14 +2,17 @@ package ai.schism.split.core.nav
 
 import ai.schism.split.dashboard.group.GroupDashboardScreen
 import ai.schism.split.dashboard.personal.PersonalDashboardScreen
+import ai.schism.split.finance.SpendingScreen
 import ai.schism.split.groups.create.CreateGroupScreen
 import ai.schism.split.expense.edit.ExpenseEditScreen
 import ai.schism.split.groups.detail.GroupDetailScreen
 import ai.schism.split.groups.join.JoinGroupScreen
 import ai.schism.split.groups.join.OpenGroupScreen
 import ai.schism.split.groups.list.GroupsListScreen
+import ai.schism.split.groups.qr.InviteQrScreen
 import ai.schism.split.settings.SettingsScreen
 import ai.schism.split.sms.inbox.InboxScreen
+import ai.schism.split.sms.itemized.ItemizedSplitScreen
 import ai.schism.split.sms.split.PushToSplitScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -42,6 +46,7 @@ private val destinations = listOf(
     Destination(Routes.GROUPS, "Groups", Icons.Filled.Groups),
     Destination(Routes.INBOX, "Inbox", Icons.Filled.Inbox),
     Destination(Routes.DASHBOARD, "Dashboard", Icons.AutoMirrored.Filled.ReceiptLong),
+    Destination(Routes.SPENDING, "Spending", Icons.Filled.PieChart),
     Destination(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
 )
 
@@ -133,6 +138,7 @@ fun AppNav() {
                     onAddExpense = { id -> navController.navigate(Routes.addExpense(id)) },
                     onEditExpense = { id, expenseId -> navController.navigate(Routes.editExpense(id, expenseId)) },
                     onOpenDashboard = { id -> navController.navigate(Routes.groupDashboard(id)) },
+                    onInvite = { id -> navController.navigate(Routes.invite(id)) },
                 )
             }
             composable(
@@ -140,6 +146,12 @@ fun AppNav() {
                 arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
             ) {
                 GroupDashboardScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                Routes.INVITE,
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+            ) {
+                InviteQrScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Routes.EXPENSE_EDIT,
@@ -160,6 +172,13 @@ fun AppNav() {
             composable(Routes.INBOX) {
                 InboxScreen(
                     onSplit = { txnId -> navController.navigate(Routes.pushSplit(txnId)) },
+                    onScanItemized = { navController.navigate(Routes.RECEIPT_ITEMIZED) },
+                )
+            }
+            composable(Routes.RECEIPT_ITEMIZED) {
+                ItemizedSplitScreen(
+                    onBack = { navController.popBackStack() },
+                    onDone = { navController.popBackStack() },
                 )
             }
             composable(
@@ -172,6 +191,7 @@ fun AppNav() {
                 )
             }
             composable(Routes.DASHBOARD) { PersonalDashboardScreen() }
+            composable(Routes.SPENDING) { SpendingScreen() }
             composable(Routes.SETTINGS) { SettingsScreen() }
         }
     }

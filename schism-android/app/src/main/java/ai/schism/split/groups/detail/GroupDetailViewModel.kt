@@ -8,6 +8,7 @@ import ai.schism.split.expense.data.Expense
 import ai.schism.split.expense.data.ExpenseRepository
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.GroupRepository
+import ai.schism.split.groups.detail.settle.buildSettlementRequest
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -96,5 +97,21 @@ class GroupDetailViewModel @Inject constructor(
 
     fun setActiveParticipant(participantId: String) {
         viewModelScope.launch { groupRepo.setActiveParticipant(groupId, participantId) }
+    }
+
+    /**
+     * Records a settle-up ([fromParticipantId] pays [toParticipantId] [amountMinor]) as a reimbursement
+     * expense so the pair's balance clears, then refreshes. [onDone] runs after a successful record.
+     */
+    fun settle(fromParticipantId: String, toParticipantId: String, amountMinor: Long, onDone: () -> Unit) {
+        viewModelScope.launch {
+            val currency = group.value?.currency ?: ""
+            val request = buildSettlementRequest(fromParticipantId, toParticipantId, amountMinor, currency)
+            expenseRepo.createExpense(groupId, request)
+                .onSuccess {
+                    refresh()
+                    onDone()
+                }
+        }
     }
 }

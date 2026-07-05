@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,6 +49,7 @@ fun GroupDetailScreen(
     onAddExpense: (groupId: String) -> Unit,
     onEditExpense: (groupId: String, expenseId: String) -> Unit,
     onOpenDashboard: (groupId: String) -> Unit,
+    onInvite: (groupId: String) -> Unit,
     viewModel: GroupDetailViewModel = hiltViewModel(),
 ) {
     val group by viewModel.group.collectAsState()
@@ -73,6 +75,9 @@ fun GroupDetailScreen(
                 actions = {
                     if (groupId != null) {
                         val context = LocalContext.current
+                        IconButton(onClick = { onInvite(groupId) }) {
+                            Icon(Icons.Filled.QrCode2, contentDescription = "Invite / QR")
+                        }
                         IconButton(onClick = { shareGroupInvite(context, groupId, g?.name ?: "group") }) {
                             Icon(Icons.Filled.Share, contentDescription = "Share invite")
                         }
@@ -112,6 +117,7 @@ fun GroupDetailScreen(
                     currency = currency,
                     participantNames = participantNames,
                     youParticipantId = g?.activeParticipantId,
+                    onSettle = { from, to, amount -> viewModel.settle(from, to, amount) {} },
                 )
                 DetailTab.Activity -> ActivityTab(state = activities, participantNames = participantNames)
             }

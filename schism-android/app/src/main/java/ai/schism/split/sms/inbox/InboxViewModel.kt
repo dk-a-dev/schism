@@ -4,6 +4,7 @@ import ai.schism.split.core.ui.UiState
 import ai.schism.split.sms.data.SmsRepository
 import ai.schism.split.sms.data.Transaction
 import ai.schism.split.sms.ingest.SmsScanWorker
+import ai.schism.split.sms.itemized.PendingReceipt
 import ai.schism.split.sms.receipt.ReceiptScanner
 import ai.schism.split.sms.receipt.parseReceipt
 import android.content.Context
@@ -28,12 +29,17 @@ import javax.inject.Inject
 class InboxViewModel @Inject constructor(
     private val repo: SmsRepository,
     private val receiptScanner: ReceiptScanner,
+    private val pendingReceipt: PendingReceipt,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     /** One-shot messages for a snackbar (receipt scan result / error). */
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
+
+    /** One-shot signal to navigate to the itemised split screen after a multi-item receipt scan. */
+    private val _navigateItemized = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val navigateItemized: SharedFlow<Unit> = _navigateItemized.asSharedFlow()
 
     /** True until the screen reports that SMS permission has been granted. Drives the empty state. */
     private val _permissionNeeded = MutableStateFlow(true)
@@ -68,6 +74,10 @@ class InboxViewModel @Inject constructor(
             }.onSuccess { draft ->
                 if (draft == null) {
                     _messages.tryEmit("Couldn't read a total from that receipt")
+                } else if (draft.lineItems.size >= 2) {
+                    // Multi-item receipt: hand it off to the itemised split flow to assign per person.
+                    pendingReceipt.draft = draft
+                    _navigateItemized.tryEmit(Unit)
                 } else {
                     repo.addReceipt(draft)
                     _messages.tryEmit("Added ${draft.merchant} — split it below")

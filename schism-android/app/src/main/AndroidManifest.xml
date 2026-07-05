@@ -6,6 +6,8 @@
     <!-- Bank transaction SMS are parsed on-device only; SMS content never leaves the device. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- Voice quick-add: speech is transcribed on-device; audio never leaves the device. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".SchismApp"

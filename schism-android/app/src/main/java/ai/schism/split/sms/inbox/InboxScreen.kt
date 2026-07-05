@@ -65,6 +65,7 @@ private val SMS_PERMISSIONS = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.
 @Composable
 fun InboxScreen(
     onSplit: (String) -> Unit,
+    onScanItemized: () -> Unit,
     viewModel: InboxViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -88,6 +89,9 @@ fun InboxScreen(
     }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.navigateItemized.collect { onScanItemized() }
     }
 
     LaunchedEffect(Unit) {

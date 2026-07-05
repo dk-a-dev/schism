@@ -11,6 +11,10 @@ interface TransactionDao {
     @Query("SELECT * FROM sms_transactions WHERE status = :status ORDER BY timestamp DESC")
     fun observeByStatus(status: String): Flow<List<TransactionEntity>>
 
+    /** Every transaction, regardless of status — the full ledger of what the user has spent. */
+    @Query("SELECT * FROM sms_transactions ORDER BY timestamp DESC")
+    fun observeAll(): Flow<List<TransactionEntity>>
+
     /** Dedup insert: a transaction with an existing [TransactionEntity.id] is ignored, not replaced. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun upsertIgnore(tx: TransactionEntity)

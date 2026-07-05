@@ -5,6 +5,7 @@ import ai.schism.split.core.net.CategoryDto
 import ai.schism.split.core.net.ExpenseRequest
 import ai.schism.split.core.net.PaidForDto
 import ai.schism.split.expense.data.ExpenseRepository
+import ai.schism.split.expense.edit.voice.parseSpokenExpense
 import ai.schism.split.groups.data.GroupRepository
 import ai.schism.split.groups.data.Participant
 import androidx.lifecycle.SavedStateHandle
@@ -226,6 +227,33 @@ class ExpenseEditViewModel @Inject constructor(
     fun onWeightChange(id: String, value: String) = updateRow(id) { it.copy(weightText = value) }
     fun onPercentChange(id: String, value: String) = updateRow(id) { it.copy(percentText = value) }
     fun onParticipantAmountChange(id: String, value: String) = updateRow(id) { it.copy(amountText = value) }
+
+    /**
+     * Apply a spoken sentence (e.g. "paid 800 for dinner split with Riya and Sam") to the form. The
+     * transcript is parsed on-device into a [ai.schism.split.expense.edit.voice.SpokenExpenseDraft]
+     * and only the non-null fields are written, so anything the parse couldn't infer is left as-is.
+     * Never submits: the user still reviews and taps Save.
+     */
+    fun applyVoice(text: String) {
+        val s = _state.value
+        val you = youParticipantId ?: s.paidById.ifBlank { null }
+        val draft = parseSpokenExpense(text, s.participants, you)
+        _state.update { cur ->
+            var next = cur
+            draft.title?.let { next = next.copy(title = it) }
+            draft.amountMinor?.let { next = next.copy(amountText = minorToPlain(it)) }
+            draft.payerParticipantId?.let { next = next.copy(paidById = it) }
+            val rows = when {
+                draft.isPersonal -> next.rows.map { it.copy(selected = it.participantId == you) }
+                draft.paidForParticipantIds != null -> {
+                    val ids = draft.paidForParticipantIds.toSet()
+                    next.rows.map { it.copy(selected = it.participantId in ids) }
+                }
+                else -> next.rows
+            }
+            next.copy(rows = rows, error = null)
+        }
+    }
 
     private fun updateRow(id: String, transform: (ParticipantRow) -> ParticipantRow) =
         _state.update { s ->

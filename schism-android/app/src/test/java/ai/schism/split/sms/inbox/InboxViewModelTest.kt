@@ -50,7 +50,12 @@ class InboxViewModelTest {
     fun inboxEmitsUnassignedThenDropsKeptPersonal() = runTest(dispatcher) {
         repo.ingest(SmsRepositoryFixtures.HDFC_SMS, "HDFCBK", 1_720_000_000_000L)
 
-        val vm = InboxViewModel(repo, ai.schism.split.sms.receipt.ReceiptScanner(), context)
+        val vm = InboxViewModel(
+            repo,
+            ai.schism.split.sms.receipt.ReceiptScanner(),
+            ai.schism.split.sms.itemized.PendingReceipt(),
+            context,
+        )
         // Room emits on its own executor, so await the Data emission rather than snapshotting.
         val txns = (vm.state.first { it is UiState.Data<*> } as UiState.Data<List<Transaction>>).value
         assertEquals(1, txns.size)
