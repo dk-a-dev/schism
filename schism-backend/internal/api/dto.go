@@ -38,7 +38,9 @@ type expenseFormDTO struct {
 	Title           string       `json:"title"`
 	Amount          int64        `json:"amount"`
 	CategoryID      int          `json:"categoryId"`
-	ExpenseDate     time.Time    `json:"expenseDate"`
+	// Accepts a date-only "2006-01-02" (what the clients send) or a full RFC3339 timestamp;
+	// parsed leniently in toInput so a plain date never fails JSON decoding.
+	ExpenseDate     string       `json:"expenseDate"`
 	PaidByID        string       `json:"paidById"`
 	SplitMode       string       `json:"splitMode"`
 	IsReimbursement bool         `json:"isReimbursement"`
@@ -52,9 +54,13 @@ func (d expenseFormDTO) toInput() store.ExpenseInput {
 	for i, p := range d.PaidFor {
 		pf[i] = store.PaidForInput{ParticipantID: p.ParticipantID, Shares: p.Shares}
 	}
-	date := d.ExpenseDate
-	if date.IsZero() {
-		date = time.Now()
+	date := time.Now()
+	if d.ExpenseDate != "" {
+		if t, err := time.Parse("2006-01-02", d.ExpenseDate); err == nil {
+			date = t
+		} else if t, err := time.Parse(time.RFC3339, d.ExpenseDate); err == nil {
+			date = t
+		}
 	}
 	mode := d.SplitMode
 	if mode == "" {
