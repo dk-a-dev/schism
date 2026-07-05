@@ -17,6 +17,15 @@ object ApiClient {
 
     fun create(baseUrl: String, debugLogging: Boolean = false): ApiService {
         val clientBuilder = OkHttpClient.Builder()
+        // Bypass ngrok's free-tier browser interstitial so API calls tunnel straight through
+        // (harmless header for any other backend).
+        clientBuilder.addInterceptor { chain ->
+            chain.proceed(
+                chain.request().newBuilder()
+                    .header("ngrok-skip-browser-warning", "true")
+                    .build(),
+            )
+        }
         if (debugLogging) {
             clientBuilder.addInterceptor(
                 HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY },
