@@ -42,6 +42,7 @@ type expenseFormDTO struct {
 	SplitMode       string       `json:"splitMode"`
 	IsReimbursement bool         `json:"isReimbursement"`
 	Notes           string       `json:"notes"`
+	AddedBy         string       `json:"addedBy"`
 	PaidFor         []paidForDTO `json:"paidFor"`
 }
 
@@ -61,6 +62,6 @@ func (d expenseFormDTO) toInput() store.ExpenseInput {
 	return store.ExpenseInput{
 		Title: d.Title, Amount: d.Amount, CategoryID: d.CategoryID, ExpenseDate: date,
 		PaidByID: d.PaidByID, SplitMode: mode, IsReimbursement: d.IsReimbursement,
-		Notes: d.Notes, PaidFor: pf,
+		Notes: d.Notes, AddedBy: d.AddedBy, PaidFor: pf,
 	}
 }

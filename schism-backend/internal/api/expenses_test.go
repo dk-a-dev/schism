@@ -86,6 +86,43 @@ func TestExpenseActivityData(t *testing.T) {
 	require.Contains(t, byType["DELETE_EXPENSE"].Data, "Museum tickets")
 }
 
+func TestCreateExpenseAddedBy(t *testing.T) {
+	srv := newTestServer(t)
+	g := createGroupFixture(t, srv.URL)
+	a, b := g.Participants[0].ID, g.Participants[1].ID
+
+	body := fmt.Sprintf(`{"title":"Dinner","amount":1000,"paidById":%q,"splitMode":"EVENLY","addedBy":%q,
+	  "paidFor":[{"participantId":%q,"shares":100},{"participantId":%q,"shares":100}]}`, a, a, a, b)
+	resp, err := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var created store.Expense
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	require.Equal(t, a, created.AddedBy)
+
+	getResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/expenses/" + created.ID)
+	require.Equal(t, http.StatusOK, getResp.StatusCode)
+	var fetched store.Expense
+	require.NoError(t, json.NewDecoder(getResp.Body).Decode(&fetched))
+	require.Equal(t, a, fetched.AddedBy)
+
+	// The CREATE_EXPENSE activity's actor is the addedBy participant.
+	actResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	require.Equal(t, http.StatusOK, actResp.StatusCode)
+	var activities []store.Activity
+	require.NoError(t, json.NewDecoder(actResp.Body).Decode(&activities))
+	var create *store.Activity
+	for i := range activities {
+		if activities[i].ActivityType == "CREATE_EXPENSE" && activities[i].ExpenseID != nil && *activities[i].ExpenseID == created.ID {
+			create = &activities[i]
+			break
+		}
+	}
+	require.NotNil(t, create)
+	require.NotNil(t, create.ParticipantID)
+	require.Equal(t, a, *create.ParticipantID)
+}
+
 func TestCreateExpenseValidation(t *testing.T) {
 	srv := newTestServer(t)
 	g := createGroupFixture(t, srv.URL)

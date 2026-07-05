@@ -9,6 +9,15 @@ import (
 	"github.com/schism/schism-backend/internal/store"
 )
 
+// actor returns a pointer to the participant id for activity logging, or nil when empty
+// (e.g. legacy expenses without an addedBy).
+func actor(participantID string) *string {
+	if participantID == "" {
+		return nil
+	}
+	return &participantID
+}
+
 func toSplitExpense(in store.ExpenseInput) split.Expense {
 	pf := make([]split.PaidFor, len(in.PaidFor))
 	for i, p := range in.PaidFor {
@@ -44,7 +53,7 @@ func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eid := e.ID
-	_ = h.store.LogActivity(r.Context(), groupID, "CREATE_EXPENSE", nil, &eid, e.Title)
+	_ = h.store.LogActivity(r.Context(), groupID, "CREATE_EXPENSE", actor(e.AddedBy), &eid, e.Title)
 	writeJSON(w, http.StatusCreated, e)
 }
 
@@ -93,7 +102,7 @@ func (h *Handler) updateExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eid := e.ID
-	_ = h.store.LogActivity(r.Context(), groupID, "UPDATE_EXPENSE", nil, &eid, e.Title)
+	_ = h.store.LogActivity(r.Context(), groupID, "UPDATE_EXPENSE", actor(e.AddedBy), &eid, e.Title)
 	writeJSON(w, http.StatusOK, e)
 }
 
@@ -119,6 +128,6 @@ func (h *Handler) deleteExpense(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "expense not found")
 		return
 	}
-	_ = h.store.LogActivity(r.Context(), groupID, "DELETE_EXPENSE", nil, &expenseID, e.Title)
+	_ = h.store.LogActivity(r.Context(), groupID, "DELETE_EXPENSE", actor(e.AddedBy), &expenseID, e.Title)
 	w.WriteHeader(http.StatusNoContent)
 }

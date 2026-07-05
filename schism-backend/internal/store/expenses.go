@@ -23,6 +23,7 @@ type ExpenseInput struct {
 	SplitMode       string
 	IsReimbursement bool
 	Notes           string
+	AddedBy         string
 	PaidFor         []PaidForInput
 }
 type PaidForRow struct {
@@ -40,6 +41,7 @@ type Expense struct {
 	SplitMode       string       `json:"splitMode"`
 	IsReimbursement bool         `json:"isReimbursement"`
 	Notes           string       `json:"notes"`
+	AddedBy         string       `json:"addedBy"`
 	CreatedAt       time.Time    `json:"createdAt"`
 	PaidFor         []PaidForRow `json:"paidFor"`
 }
@@ -69,9 +71,9 @@ func (s *Store) CreateExpense(ctx context.Context, groupID string, in ExpenseInp
 	defer tx.Rollback(ctx)
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO expenses (id, group_id, expense_date, title, category_id, amount, paid_by_id, is_reimbursement, split_mode, notes)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		eid, groupID, in.ExpenseDate, in.Title, in.CategoryID, in.Amount, in.PaidByID, in.IsReimbursement, in.SplitMode, nullify(in.Notes)); err != nil {
+		`INSERT INTO expenses (id, group_id, expense_date, title, category_id, amount, paid_by_id, is_reimbursement, split_mode, notes, added_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		eid, groupID, in.ExpenseDate, in.Title, in.CategoryID, in.Amount, in.PaidByID, in.IsReimbursement, in.SplitMode, nullify(in.Notes), in.AddedBy); err != nil {
 		return Expense{}, err
 	}
 	for _, pf := range in.PaidFor {
@@ -101,10 +103,10 @@ func (s *Store) GetExpense(ctx context.Context, groupID, expenseID string) (*Exp
 	var e Expense
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, group_id, title, amount, category_id, expense_date, paid_by_id,
-		        is_reimbursement, split_mode, COALESCE(notes,''), created_at
+		        is_reimbursement, split_mode, COALESCE(notes,''), added_by, created_at
 		 FROM expenses WHERE id=$1 AND group_id=$2`, expenseID, groupID).
 		Scan(&e.ID, &e.GroupID, &e.Title, &e.Amount, &e.CategoryID, &e.ExpenseDate, &e.PaidByID,
-			&e.IsReimbursement, &e.SplitMode, &e.Notes, &e.CreatedAt)
+			&e.IsReimbursement, &e.SplitMode, &e.Notes, &e.AddedBy, &e.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
