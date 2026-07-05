@@ -9,6 +9,8 @@ import ai.schism.split.sms.data.Transaction
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,16 +25,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -40,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -75,6 +82,14 @@ fun InboxScreen(
         if (granted) viewModel.scan()
     }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val pickImage = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
+        if (uri != null) viewModel.scanReceipt(uri)
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
+    }
+
     LaunchedEffect(Unit) {
         val granted = hasSmsPermission()
         viewModel.setPermissionGranted(granted)
@@ -87,6 +102,14 @@ fun InboxScreen(
             LargeTopAppBar(
                 title = { Text("Inbox") },
                 scrollBehavior = scrollBehavior,
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                text = { Text("Scan receipt") },
+                icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                onClick = { pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
             )
         },
     ) { padding ->

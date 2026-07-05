@@ -1,8 +1,12 @@
 package ai.schism.split.sms.data
 
+import ai.schism.split.sms.receipt.ReceiptDraft
 import com.pennywiseai.parser.core.bank.BankParserFactory
+import com.pennywiseai.parser.core.md5Hex
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,6 +32,31 @@ class SmsRepository @Inject constructor(
         val parsed = BankParserFactory.parse(smsBody, sender, timestamp) ?: return
         if (!parsed.type.isExpenseLike()) return
         dao.upsertIgnore(parsed.toEntity())
+    }
+
+    /**
+     * Records a receipt scanned on-device (via ML Kit OCR + [ai.schism.split.sms.receipt.parseReceipt])
+     * as an unassigned transaction, so it flows through the same keep-personal / split-to-group triage.
+     * Deduped by a stable hash of its fields. Returns the transaction id.
+     */
+    suspend fun addReceipt(draft: ReceiptDraft): String {
+        val id = md5Hex("receipt|${draft.merchant}|${draft.totalMinor}|${draft.date}")
+        val timestamp = draft.date
+            ?.let { runCatching { LocalDate.parse(it).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull() }
+            ?: System.currentTimeMillis()
+        dao.upsertIgnore(
+            TransactionEntity(
+                id = id,
+                amountMinor = draft.totalMinor,
+                currency = draft.currency,
+                merchant = draft.merchant,
+                bankName = "Receipt",
+                timestamp = timestamp,
+                rawSender = "receipt",
+                status = TransactionStatus.UNASSIGNED,
+            ),
+        )
+        return id
     }
 
     suspend fun keepPersonal(id: String) = dao.setStatus(id, TransactionStatus.PERSONAL)
