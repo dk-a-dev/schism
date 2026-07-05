@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
@@ -247,24 +248,42 @@ private fun SettingsSection(title: String, content: @Composable () -> Unit) {
     }
 }
 
+private const val DEFAULT_MODEL_URL =
+    "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task"
+private const val GEMMA_LICENSE_URL = "https://huggingface.co/litert-community/Gemma3-1B-IT"
+private const val HF_TOKENS_URL = "https://huggingface.co/settings/tokens"
+
 @Composable
 private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
     val state by viewModel.modelState.collectAsState()
     val url by viewModel.modelUrl.collectAsState()
     val token by viewModel.modelToken.collectAsState()
-    var urlDraft by remember { mutableStateOf(url) }
+    var urlDraft by remember { mutableStateOf(url.ifBlank { DEFAULT_MODEL_URL }) }
     var tokenDraft by remember { mutableStateOf(token) }
-    LaunchedEffect(url) { urlDraft = url }
+    LaunchedEffect(url) { if (url.isNotBlank()) urlDraft = url }
     LaunchedEffect(token) { tokenDraft = token }
+    val uriHandler = LocalUriHandler.current
 
     SettingsSection("On-device AI") {
         Text(
-            "Optionally download a small on-device model (a MediaPipe .task file) so voice and " +
-                "receipt parsing use an LLM instead of keyword rules. It runs fully offline once " +
-                "downloaded; leave it empty to keep the lightweight parser.",
+            "Optionally use a small on-device LLM for smarter voice & receipt parsing (instead of " +
+                "keyword rules). Recommended: Gemma 3 1B, int4 (~550 MB), prefilled below. It runs " +
+                "fully offline once downloaded; clear the field to keep the lightweight parser.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Text(
+            "Gemma is license-gated, so a token is needed:\n" +
+                "1. Accept the license (opens Hugging Face)\n" +
+                "2. Create a Read access token\n" +
+                "3. Paste it below, then Download.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { uriHandler.openUri(GEMMA_LICENSE_URL) }) { Text("Accept license") }
+            TextButton(onClick = { uriHandler.openUri(HF_TOKENS_URL) }) { Text("Get token") }
+        }
         OutlinedTextField(
             value = urlDraft,
             onValueChange = { urlDraft = it },
