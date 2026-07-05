@@ -47,6 +47,15 @@ class SettingsRepository @Inject constructor(
         ds.edit { it[KEY_NAME] = name.trim() }
     }
 
+    /** Update the full editable profile (name, email, phone) from the Settings screen. */
+    suspend fun setProfile(name: String, email: String, phone: String) {
+        ds.edit {
+            it[KEY_NAME] = name.trim()
+            it[KEY_EMAIL] = email.trim()
+            it[KEY_PHONE] = phone.trim()
+        }
+    }
+
     /** Persist the device identity and mark onboarding complete. */
     suspend fun completeOnboarding(name: String, email: String, phone: String) {
         ds.edit {
