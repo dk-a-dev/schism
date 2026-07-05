@@ -1,0 +1,25 @@
+# ─── external upstream repos (separate git projects, referenced not vendored) ───
+/pennywiseai-tracker/
+/spliit/
+
+# ─── local planning/brainstorming docs — not part of the product source ───
+/docs/
+
+# ─── OS / editor ───
+.DS_Store
+.idea/
+*.swp
+*.swo
+
+# ─── Go (schism-backend) ───
+/schism-backend/server
+/schism-backend/out/
+*.log
+
+# ─── Android (future client) ───
+*.iml
+.gradle/
+**/build/
+local.properties
+.cxx/
+captures/
