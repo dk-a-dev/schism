@@ -12,12 +12,17 @@ data class ReceiptDraft(
     val currency: String,
     val date: String?, // ISO yyyy-MM-dd when found
     val lineItems: List<ReceiptLineItem> = emptyList(),
+    /** Taxes/charges (GST etc.) to distribute across diners in proportion to what they ordered. */
+    val taxMinor: Long = 0,
+    /** Sum of the line items before tax (0 = derive from items). */
+    val subtotalMinor: Long = 0,
 )
 
-/** A single purchased line item on a receipt: a name and its amount in minor units. */
+/** A single purchased line item on a receipt: name, quantity, and its line amount in minor units. */
 data class ReceiptLineItem(
     val name: String,
     val amountMinor: Long,
+    val qty: Int = 1,
 )
 
 /** Currency symbol/code hints → the symbol we store for display. */

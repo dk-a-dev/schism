@@ -41,6 +41,7 @@ class InboxViewModel @Inject constructor(
     private val repo: SmsRepository,
     private val receiptScanner: ReceiptScanner,
     private val pendingReceipt: PendingReceipt,
+    private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -99,7 +100,7 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 val lines = receiptScanner.recognizeLines(appContext, uri)
-                parseReceipt(lines)
+                llmParser.parseReceipt(lines) ?: parseReceipt(lines)
             }.onSuccess { draft ->
                 if (draft == null) {
                     _messages.tryEmit("Couldn't read a total from that receipt")

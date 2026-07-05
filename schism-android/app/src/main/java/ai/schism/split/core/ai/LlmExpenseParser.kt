@@ -90,6 +90,67 @@ class LlmExpenseParser @Inject constructor(
         )
     }
 
+    /**
+     * Parse OCR text from a restaurant/shop receipt into a [ai.schism.split.sms.receipt.ReceiptDraft]
+     * with per-item quantities and the tax, using the on-device model. Returns null when no model is
+     * loaded or the output can't be understood — the caller falls back to the regex receipt parser.
+     */
+    suspend fun parseReceipt(
+        ocrLines: List<String>,
+    ): ai.schism.split.sms.receipt.ReceiptDraft? = withContext(Dispatchers.Default) {
+        if (!settings.aiEnabled.first()) return@withContext null
+        val llm = engine() ?: return@withContext null
+        val prompt = buildReceiptPrompt(ocrLines.joinToString("\n"))
+        val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return@withContext null
+        val json = extractJson(raw) ?: return@withContext null
+        val obj = runCatching { JSONObject(json) }.getOrNull() ?: return@withContext null
+
+        fun money(v: Double): Long = (v * 100).roundToLong()
+
+        val itemsArr = obj.optJSONArray("items") ?: return@withContext null
+        val items = (0 until itemsArr.length()).mapNotNull { i ->
+            val it = itemsArr.optJSONObject(i) ?: return@mapNotNull null
+            val name = it.optString("name").trim().ifBlank { return@mapNotNull null }
+            val amount = it.optDouble("amount", Double.NaN)
+            if (amount.isNaN() || amount <= 0) return@mapNotNull null
+            ai.schism.split.sms.receipt.ReceiptLineItem(
+                name = name.take(60),
+                amountMinor = money(amount),
+                qty = it.optInt("qty", 1).coerceAtLeast(1),
+            )
+        }
+        if (items.isEmpty()) return@withContext null
+
+        val subtotal = obj.optDouble("subtotal", Double.NaN).takeIf { !it.isNaN() }?.let(::money)
+            ?: items.sumOf { it.amountMinor }
+        val tax = obj.optDouble("tax", Double.NaN).takeIf { !it.isNaN() && it >= 0 }?.let(::money) ?: 0L
+        val total = obj.optDouble("total", Double.NaN).takeIf { !it.isNaN() }?.let(::money) ?: (subtotal + tax)
+        val date = obj.optString("date").trim().takeIf { it.length == 10 && it[4] == '-' }
+
+        ai.schism.split.sms.receipt.ReceiptDraft(
+            merchant = obj.optString("merchant").trim().ifBlank { "Receipt" }.take(60),
+            totalMinor = total,
+            currency = "₹",
+            date = date,
+            lineItems = items,
+            taxMinor = tax,
+            subtotalMinor = subtotal,
+        )
+    }
+
+    private fun buildReceiptPrompt(ocr: String): String = """
+        You are a precise restaurant-receipt parser. From the OCR text below, extract structured JSON.
+        Rules:
+        - Item names often wrap across two lines (e.g. "Buff Oklahoma" then "Smash") — join them into one name.
+        - "qty" is the quantity column for that item; "amount" is that line's total price in currency units.
+        - Include every ordered dish, skip header/total/tax rows from the items list.
+        - "tax" = the sum of all taxes and charges (GST/CGST/SGST/service), "total" = the final payable.
+        Reply with ONLY minified JSON, no prose, exactly:
+        {"merchant": string, "date": "YYYY-MM-DD" or null, "items": [{"name": string, "qty": number, "amount": number}], "subtotal": number, "tax": number, "total": number}
+        OCR:
+        ${ocr.replace("\"", "'")}
+    """.trimIndent()
+
     private fun buildPrompt(text: String, names: List<String>): String = """
         You extract a shared expense from a sentence. Known participants: ${names.joinToString(", ").ifBlank { "(none)" }}.
         Reply with ONLY minified JSON, no prose, in exactly this shape:

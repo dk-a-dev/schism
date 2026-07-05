@@ -83,13 +83,18 @@ fun ItemizedSplitScreen(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    state.draft?.let { draft ->
-                        Text(
-                            draft.merchant,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+                    OutlinedTextField(
+                        value = state.title,
+                        onValueChange = viewModel::onTitleChange,
+                        label = { Text("Merchant / title") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "You paid — tick who had each dish. Tax is split by what everyone ordered.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     if (state.groups.isEmpty()) {
                         Text(
@@ -105,11 +110,6 @@ fun ItemizedSplitScreen(
                             onSelect = viewModel::onGroupChange,
                         )
                         if (group != null) {
-                            PaidByPicker(
-                                group = group,
-                                paidById = state.paidById,
-                                onSelect = viewModel::onPaidByChange,
-                            )
                             state.items.forEachIndexed { index, item ->
                                 ItemCard(
                                     item = item,
@@ -122,6 +122,7 @@ fun ItemizedSplitScreen(
                             PerPersonTotals(
                                 group = group,
                                 perPerson = state.perPersonMinor,
+                                taxMinor = state.taxMinor,
                                 currency = state.draft?.currency ?: "₹",
                             )
                         }
@@ -133,7 +134,7 @@ fun ItemizedSplitScreen(
 
                     Button(
                         onClick = { viewModel.submit(onDone) },
-                        enabled = !state.submitting && state.selectedGroupId != null && state.paidById.isNotBlank(),
+                        enabled = !state.submitting && state.selectedGroupId != null,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (state.submitting) {
@@ -164,7 +165,7 @@ private fun ItemCard(
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    item.name,
+                    if (item.qty > 1) "${item.name}  ×${item.qty}" else item.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -189,7 +190,9 @@ private fun ItemCard(
 }
 
 @Composable
-private fun PerPersonTotals(group: Group, perPerson: Map<String, Long>, currency: String) {
+private fun PerPersonTotals(group: Group, perPerson: Map<String, Long>, taxMinor: Long, currency: String) {
+    val grand = perPerson.values.sum()
+    val subtotal = grand - taxMinor
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Each person owes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -203,7 +206,24 @@ private fun PerPersonTotals(group: Group, perPerson: Map<String, Long>, currency
                     }
                 }
             }
+            HorizontalDivider()
+            SummaryRow("Items", formatMinor(subtotal, currency), false)
+            if (taxMinor > 0) SummaryRow("Tax & charges", formatMinor(taxMinor, currency), false)
+            SummaryRow("Total", formatMinor(grand, currency), true)
         }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String, bold: Boolean) {
+    Row(Modifier.fillMaxWidth()) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+        )
+        Text(value, fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 
@@ -233,29 +253,3 @@ private fun GroupPicker(groups: List<Group>, selected: Group?, onSelect: (String
     }
 }
 
-@Composable
-private fun PaidByPicker(group: Group, paidById: String, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedName = group.participants.firstOrNull { it.id == paidById }?.name ?: ""
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = selectedName,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Paid by") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            group.participants.forEach { p ->
-                DropdownMenuItem(
-                    text = { Text(p.name) },
-                    onClick = {
-                        onSelect(p.id)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
-}

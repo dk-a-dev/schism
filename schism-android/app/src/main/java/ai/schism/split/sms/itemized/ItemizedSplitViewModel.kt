@@ -22,6 +22,7 @@ import javax.inject.Inject
 data class ItemizedSplitUiState(
     val loading: Boolean = true,
     val draft: ReceiptDraft? = null,
+    val title: String = "",
     val items: List<ReceiptLineItem> = emptyList(),
     val groups: List<Group> = emptyList(),
     val selectedGroupId: String? = null,
@@ -32,8 +33,9 @@ data class ItemizedSplitUiState(
     val error: String? = null,
 ) {
     val selectedGroup: Group? get() = groups.firstOrNull { it.id == selectedGroupId }
+    val taxMinor: Long get() = draft?.taxMinor ?: 0L
 
-    /** Live per-participant owed totals in minor units, mirroring the builder's split maths. */
+    /** Live per-participant owed totals in minor units (item shares + proportional tax). */
     val perPersonMinor: Map<String, Long>
         get() {
             val owed = LinkedHashMap<String, Long>()
@@ -46,6 +48,16 @@ data class ItemizedSplitUiState(
                     val extra = if (remainder > 0) 1L else 0L
                     if (remainder > 0) remainder--
                     owed[id] = (owed[id] ?: 0L) + base + extra
+                }
+            }
+            val subtotal = owed.values.sum()
+            if (taxMinor > 0 && subtotal > 0) {
+                var remaining = taxMinor
+                val entries = owed.toMap().entries.toList()
+                entries.forEachIndexed { i, (pid, sub) ->
+                    val share = if (i == entries.lastIndex) remaining else taxMinor * sub / subtotal
+                    remaining -= share
+                    owed[pid] = (owed[pid] ?: 0L) + share
                 }
             }
             return owed
@@ -65,7 +77,9 @@ class ItemizedSplitViewModel @Inject constructor(
 
     init {
         val draft = pending.draft
-        _state.update { it.copy(draft = draft, items = draft?.lineItems.orEmpty()) }
+        _state.update {
+            it.copy(draft = draft, items = draft?.lineItems.orEmpty(), title = draft?.merchant ?: "Receipt")
+        }
 
         viewModelScope.launch {
             // Only groups this device has joined/created are eligible targets.
@@ -111,8 +125,8 @@ class ItemizedSplitViewModel @Inject constructor(
         }
     }
 
-    fun onPaidByChange(participantId: String) {
-        _state.update { it.copy(paidById = participantId, error = null) }
+    fun onTitleChange(value: String) {
+        _state.update { it.copy(title = value, error = null) }
     }
 
     /** Toggle whether [participantId] shares the item at [itemIndex]. */
@@ -131,10 +145,8 @@ class ItemizedSplitViewModel @Inject constructor(
             _state.update { it.copy(error = "Pick a group to split into") }
             return
         }
-        if (s.paidById.isBlank()) {
-            _state.update { it.copy(error = "Pick who paid") }
-            return
-        }
+        // You're adding it, so you paid: default to your participant, else the first one.
+        val payerId = s.paidById.ifBlank { group.activeParticipantId ?: group.participants.firstOrNull()?.id.orEmpty() }
         val assigned = s.items.mapIndexed { index, item ->
             AssignedItem(amountMinor = item.amountMinor, participantIds = s.assignments[index].orEmpty().toList())
         }
@@ -149,11 +161,12 @@ class ItemizedSplitViewModel @Inject constructor(
             val request = buildItemizedExpenseRequest(
                 items = assigned,
                 group = group,
-                paidById = s.paidById,
+                paidById = payerId,
                 addedBy = addedBy,
-                title = s.draft?.merchant ?: "Receipt",
+                title = s.title.trim().ifBlank { s.draft?.merchant ?: "Receipt" },
                 currency = s.draft?.currency ?: "₹",
                 dateIso = s.draft?.date,
+                taxMinor = s.taxMinor,
             )
             if (request == null) {
                 _state.update { it.copy(submitting = false, error = "Assign at least one item to someone") }

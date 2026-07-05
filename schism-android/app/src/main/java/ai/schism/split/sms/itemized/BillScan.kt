@@ -26,12 +26,15 @@ import javax.inject.Inject
 class BillScanViewModel @Inject constructor(
     private val receiptScanner: ReceiptScanner,
     private val pending: PendingReceipt,
+    private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
     fun scan(uri: Uri, onItemized: () -> Unit) {
         viewModelScope.launch {
             runCatching {
-                parseReceipt(receiptScanner.recognizeLines(appContext, uri))
+                val lines = receiptScanner.recognizeLines(appContext, uri)
+                // Prefer the on-device LLM (handles wrapped names, qty, tax); fall back to regex.
+                llmParser.parseReceipt(lines) ?: parseReceipt(lines)
             }.onSuccess { draft ->
                 if (draft == null || draft.lineItems.isEmpty()) {
                     Toast.makeText(appContext, "Couldn't read items off that bill", Toast.LENGTH_SHORT).show()

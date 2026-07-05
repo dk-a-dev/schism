@@ -40,7 +40,7 @@ class ModelManager @Inject constructor(
     fun sizeBytes(): Long? = modelFile.takeIf { it.exists() }?.length()
 
     /** Live download state: Ready when the file exists, else derived from the worker's WorkInfo. */
-    val state: Flow<State> =
+    val state: Flow<State> by lazy {
         WorkManager.getInstance(context)
             .getWorkInfosForUniqueWorkFlow(ModelDownloadWorker.UNIQUE)
             .map { infos ->
@@ -55,6 +55,7 @@ class ModelManager @Inject constructor(
                     else -> State.Absent
                 }
             }
+    }
 
     /** Kick off (or restart) the foreground download of the model. */
     fun download() {

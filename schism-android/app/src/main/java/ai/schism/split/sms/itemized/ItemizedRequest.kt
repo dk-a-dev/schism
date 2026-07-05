@@ -29,6 +29,7 @@ fun buildItemizedExpenseRequest(
     title: String,
     currency: String,
     dateIso: String?,
+    taxMinor: Long = 0,
 ): ExpenseRequest? {
     if (items.none { it.participantIds.isNotEmpty() }) return null
 
@@ -47,13 +48,26 @@ fun buildItemizedExpenseRequest(
         }
     }
 
+    // Distribute tax/charges in proportion to what each person ordered (last one gets the remainder).
+    val assignedSubtotal = owed.values.sum()
+    if (taxMinor > 0 && assignedSubtotal > 0) {
+        val subtotalShares = owed.toMap()
+        var remaining = taxMinor
+        val entries = subtotalShares.entries.toList()
+        entries.forEachIndexed { i, (pid, sub) ->
+            val share = if (i == entries.lastIndex) remaining else taxMinor * sub / assignedSubtotal
+            remaining -= share
+            owed[pid] = (owed[pid] ?: 0L) + share
+        }
+    }
+
     val paidFor = owed.filterValues { it > 0L }
         .map { (participantId, amount) -> PaidForDto(participantId = participantId, shares = amount) }
     if (paidFor.isEmpty()) return null
 
     return ExpenseRequest(
         title = title,
-        amount = items.sumOf { it.amountMinor },
+        amount = assignedSubtotal + (if (assignedSubtotal > 0) taxMinor else 0L),
         expenseDate = dateIso,
         paidById = paidById,
         splitMode = "BY_AMOUNT",

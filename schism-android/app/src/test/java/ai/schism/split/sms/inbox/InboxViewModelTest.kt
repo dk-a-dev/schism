@@ -54,6 +54,11 @@ class InboxViewModelTest {
             repo,
             ai.schism.split.sms.receipt.ReceiptScanner(),
             ai.schism.split.sms.itemized.PendingReceipt(),
+            ai.schism.split.core.ai.LlmExpenseParser(
+                context,
+                ai.schism.split.core.ai.ModelManager(context),
+                ai.schism.split.core.settings.SettingsRepository(context),
+            ),
             context,
         )
         // Room emits on its own executor, so await the Data emission rather than snapshotting.
