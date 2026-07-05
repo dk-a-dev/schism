@@ -24,6 +24,17 @@ class SmsRepository @Inject constructor(
     fun observeInbox(): Flow<List<Transaction>> =
         dao.observeByStatus(TransactionStatus.UNASSIGNED).map { list -> list.map { it.toDomain() } }
 
+    /** Transactions in a given lifecycle status (UNASSIGNED / PERSONAL / PUSHED), newest first. */
+    fun observeByStatus(status: String): Flow<List<Transaction>> =
+        dao.observeByStatus(status).map { list -> list.map { it.toDomain() } }
+
+    /** Inline-edit a transaction's merchant and amount. */
+    suspend fun edit(id: String, merchant: String, amountMinor: Long) =
+        dao.editTransaction(id, merchant.trim(), amountMinor)
+
+    /** Move a kept-personal transaction back to the inbox for splitting. */
+    suspend fun restoreToInbox(id: String) = dao.setStatus(id, TransactionStatus.UNASSIGNED)
+
     /**
      * Parses one SMS on-device and, if it's a recognized expense-like bank transaction, records it.
      * Dedup is by the parser's stable transaction id, so ingesting the same message twice is a no-op.

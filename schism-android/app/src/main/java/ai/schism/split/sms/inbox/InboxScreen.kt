@@ -26,10 +26,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -69,6 +77,7 @@ fun InboxScreen(
     viewModel: InboxViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val filter by viewModel.filter.collectAsState()
     val permissionNeeded by viewModel.permissionNeeded.collectAsState()
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -117,18 +126,37 @@ fun InboxScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when {
-                permissionNeeded -> PermissionRequest(onAllow = { launcher.launch(SMS_PERMISSIONS) })
-                else -> when (val s = state) {
-                    is UiState.Loading -> Centered { WavyProgress() }
-                    is UiState.Empty -> EmptyInbox()
-                    is UiState.Error -> Centered { Text(s.message) }
-                    is UiState.Data -> TransactionList(
-                        transactions = s.value,
-                        onKeepPersonal = viewModel::keepPersonal,
-                        onSplit = onSplit,
-                    )
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (!permissionNeeded) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    InboxFilter.entries.forEach { f ->
+                        FilterChip(
+                            selected = filter == f,
+                            onClick = { viewModel.setFilter(f) },
+                            label = { Text(f.label) },
+                        )
+                    }
+                }
+            }
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    permissionNeeded -> PermissionRequest(onAllow = { launcher.launch(SMS_PERMISSIONS) })
+                    else -> when (val s = state) {
+                        is UiState.Loading -> Centered { WavyProgress() }
+                        is UiState.Empty -> EmptyInbox(filter)
+                        is UiState.Error -> Centered { Text(s.message) }
+                        is UiState.Data -> TransactionList(
+                            transactions = s.value,
+                            filter = filter,
+                            onKeepPersonal = viewModel::keepPersonal,
+                            onSplit = onSplit,
+                            onRestore = viewModel::restoreToInbox,
+                            onEdit = viewModel::edit,
+                        )
+                    }
                 }
             }
         }
@@ -138,8 +166,11 @@ fun InboxScreen(
 @Composable
 private fun TransactionList(
     transactions: List<Transaction>,
+    filter: InboxFilter,
     onKeepPersonal: (String) -> Unit,
     onSplit: (String) -> Unit,
+    onRestore: (String) -> Unit,
+    onEdit: (String, String, Long) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -147,7 +178,7 @@ private fun TransactionList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(transactions, key = { it.id }) { txn ->
-            TransactionCard(txn, onKeepPersonal, onSplit)
+            TransactionCard(txn, filter, onKeepPersonal, onSplit, onRestore, onEdit)
         }
     }
 }
@@ -155,9 +186,13 @@ private fun TransactionList(
 @Composable
 private fun TransactionCard(
     txn: Transaction,
+    filter: InboxFilter,
     onKeepPersonal: (String) -> Unit,
     onSplit: (String) -> Unit,
+    onRestore: (String) -> Unit,
+    onEdit: (String, String, Long) -> Unit,
 ) {
+    var editing by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         modifier = Modifier.fillMaxWidth(),
@@ -165,7 +200,7 @@ private fun TransactionCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 InitialAvatar(name = txn.merchant, key = txn.id, size = 48.dp)
                 Column(Modifier.weight(1f)) {
@@ -186,19 +221,83 @@ private fun TransactionCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
+                IconButton(onClick = { editing = true }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit")
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = { onKeepPersonal(txn.id) },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Keep personal") }
-                Button(
-                    onClick = { onSplit(txn.id) },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Split to group") }
+            when (filter) {
+                InboxFilter.ToSplit -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = { onKeepPersonal(txn.id) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Keep personal") }
+                    Button(
+                        onClick = { onSplit(txn.id) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Split to group") }
+                }
+                InboxFilter.Personal -> OutlinedButton(
+                    onClick = { onRestore(txn.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Move to split") }
+                InboxFilter.Added -> Text(
+                    "Added to a group",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }
+
+    if (editing) {
+        EditTransactionDialog(
+            txn = txn,
+            onDismiss = { editing = false },
+            onSave = { merchant, amountMinor ->
+                onEdit(txn.id, merchant, amountMinor)
+                editing = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun EditTransactionDialog(
+    txn: Transaction,
+    onDismiss: () -> Unit,
+    onSave: (String, Long) -> Unit,
+) {
+    var merchant by remember { mutableStateOf(txn.merchant) }
+    var amount by remember { mutableStateOf(String.format("%.2f", txn.amountMinor / 100.0)) }
+    val amountMinor = amount.trim().toDoubleOrNull()?.let { (it * 100).toLong() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit transaction") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = merchant,
+                    onValueChange = { merchant = it },
+                    label = { Text("Merchant / title") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text("Amount") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (merchant.isNotBlank() && amountMinor != null) onSave(merchant, amountMinor) },
+                enabled = merchant.isNotBlank() && amountMinor != null && amountMinor > 0,
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -240,16 +339,24 @@ private fun android.content.Context.openAppSettings() {
 }
 
 @Composable
-private fun EmptyInbox() {
+private fun EmptyInbox(filter: InboxFilter) {
+    val (title, body) = when (filter) {
+        InboxFilter.ToSplit -> "Inbox zero" to
+            "New bank transactions show up here to keep personal or split with a group."
+        InboxFilter.Personal -> "Nothing personal yet" to
+            "Transactions you keep personal will collect here."
+        InboxFilter.Added -> "Nothing added yet" to
+            "Transactions you split into a group will appear here."
+    }
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             IconBubble()
-            Text("Inbox zero", style = MaterialTheme.typography.headlineSmall)
+            Text(title, style = MaterialTheme.typography.headlineSmall)
             Text(
-                "New bank transactions will show up here for you to keep personal or split with a group.",
+                body,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

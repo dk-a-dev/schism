@@ -22,6 +22,10 @@ interface TransactionDao {
     @Query("UPDATE sms_transactions SET status = :status WHERE id = :id")
     suspend fun setStatus(id: String, status: String)
 
+    /** Inline-edit a transaction's merchant/title and amount (SMS parsing isn't always right). */
+    @Query("UPDATE sms_transactions SET merchant = :merchant, amountMinor = :amountMinor WHERE id = :id")
+    suspend fun editTransaction(id: String, merchant: String, amountMinor: Long)
+
     @Query(
         "UPDATE sms_transactions SET status = '${TransactionStatus.PUSHED}', " +
             "remoteGroupId = :groupId, remoteExpenseId = :expenseId WHERE id = :id",

@@ -3,6 +3,7 @@ package ai.schism.split.sms.inbox
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.sms.data.SmsRepository
 import ai.schism.split.sms.data.Transaction
+import ai.schism.split.sms.data.TransactionStatus
 import ai.schism.split.sms.ingest.SmsScanWorker
 import ai.schism.split.sms.itemized.PendingReceipt
 import ai.schism.split.sms.receipt.ReceiptScanner
@@ -18,13 +19,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Which slice of the inbox is shown. */
+enum class InboxFilter(val label: String, val status: String) {
+    ToSplit("To split", TransactionStatus.UNASSIGNED),
+    Personal("Personal", TransactionStatus.PERSONAL),
+    Added("Added", TransactionStatus.PUSHED),
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class InboxViewModel @Inject constructor(
     private val repo: SmsRepository,
@@ -45,10 +56,28 @@ class InboxViewModel @Inject constructor(
     private val _permissionNeeded = MutableStateFlow(true)
     val permissionNeeded: StateFlow<Boolean> = _permissionNeeded.asStateFlow()
 
+    private val _filter = MutableStateFlow(InboxFilter.ToSplit)
+    val filter: StateFlow<InboxFilter> = _filter.asStateFlow()
+
     val state: StateFlow<UiState<List<Transaction>>> =
-        repo.observeInbox()
+        _filter
+            .flatMapLatest { f -> repo.observeByStatus(f.status) }
             .map { txns -> if (txns.isEmpty()) UiState.Empty else UiState.Data(txns) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)
+
+    fun setFilter(f: InboxFilter) {
+        _filter.value = f
+    }
+
+    /** Inline-edit a transaction's merchant/title and amount. */
+    fun edit(id: String, merchant: String, amountMinor: Long) {
+        viewModelScope.launch { repo.edit(id, merchant, amountMinor) }
+    }
+
+    /** Move a kept-personal transaction back to "To split". */
+    fun restoreToInbox(id: String) {
+        viewModelScope.launch { repo.restoreToInbox(id) }
+    }
 
     /** Called by the screen once it knows whether SMS permission is held. */
     fun setPermissionGranted(granted: Boolean) {
