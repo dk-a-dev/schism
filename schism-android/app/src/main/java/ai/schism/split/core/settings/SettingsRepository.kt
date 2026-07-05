@@ -58,6 +58,13 @@ class SettingsRepository @Inject constructor(
         ds.edit { it[KEY_AI_MODEL_TOKEN] = token.trim() }
     }
 
+    /** Whether on-device AI parsing is used (off by default; needs a downloaded model). */
+    val aiEnabled: Flow<Boolean> = ds.data.map { it[KEY_AI_ENABLED] ?: false }
+
+    suspend fun setAiEnabled(enabled: Boolean) {
+        ds.edit { it[KEY_AI_ENABLED] = enabled }
+    }
+
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
     }
@@ -154,5 +161,6 @@ class SettingsRepository @Inject constructor(
         private val KEY_MERCHANT_ALIASES = stringSetPreferencesKey("merchant_aliases")
         private val KEY_AI_MODEL_URL = stringPreferencesKey("ai_model_url")
         private val KEY_AI_MODEL_TOKEN = stringPreferencesKey("ai_model_token")
+        private val KEY_AI_ENABLED = booleanPreferencesKey("ai_enabled")
     }
 }

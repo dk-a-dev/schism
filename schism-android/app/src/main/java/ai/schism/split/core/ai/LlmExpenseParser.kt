@@ -6,6 +6,7 @@ import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import javax.inject.Inject
@@ -22,6 +23,7 @@ import kotlin.math.roundToLong
 class LlmExpenseParser @Inject constructor(
     @ApplicationContext private val context: Context,
     private val modelManager: ModelManager,
+    private val settings: ai.schism.split.core.settings.SettingsRepository,
 ) {
     @Volatile private var engine: LlmInference? = null
 
@@ -49,6 +51,7 @@ class LlmExpenseParser @Inject constructor(
         participants: List<Participant>,
         youParticipantId: String?,
     ): SpokenExpenseDraft? = withContext(Dispatchers.Default) {
+        if (!settings.aiEnabled.first()) return@withContext null
         val llm = engine() ?: return@withContext null
         val prompt = buildPrompt(text, participants.map { it.name })
         val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return@withContext null

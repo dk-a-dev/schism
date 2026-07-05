@@ -325,61 +325,48 @@ private fun AccountSection(viewModel: AccountSettingsViewModel = hiltViewModel()
 @Composable
 private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
     val state by viewModel.modelState.collectAsState()
-    val url by viewModel.modelUrl.collectAsState()
-    val token by viewModel.modelToken.collectAsState()
-    val defaultModelUrl = remember { ai.schism.split.BuildConfig.BACKEND_URL.trimEnd('/') + "/model" }
-    var urlDraft by remember { mutableStateOf(url.ifBlank { defaultModelUrl }) }
-    var tokenDraft by remember { mutableStateOf(token) }
-    LaunchedEffect(url) { if (url.isNotBlank()) urlDraft = url }
-    LaunchedEffect(token) { tokenDraft = token }
+    val enabled by viewModel.aiEnabled.collectAsState()
 
     SettingsSection("On-device AI") {
         Text(
-            "Optionally use a small on-device LLM for smarter voice & receipt parsing (instead of " +
-                "keyword rules). Tap Download to fetch it from your server (no account or token " +
-                "needed) — Qwen2.5 1.5B by default. It runs fully offline once downloaded; clear the " +
-                "URL to keep the lightweight parser.",
+            "Use a small on-device LLM (Qwen 2.5) for smarter voice & receipt parsing instead of " +
+                "keyword rules. It's optional and runs fully offline once downloaded (~1.5 GB). The " +
+                "download continues in the background even if you close the app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
-            value = urlDraft,
-            onValueChange = { urlDraft = it },
-            label = { Text("Model URL (.task)") },
-            singleLine = true,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = tokenDraft,
-            onValueChange = { tokenDraft = it },
-            label = { Text("Access token (only for custom gated URLs)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Use on-device AI", style = MaterialTheme.typography.bodyLarge)
+            androidx.compose.material3.Switch(checked = enabled, onCheckedChange = viewModel::setEnabled)
+        }
+
+        val downloading = state is ai.schism.split.core.ai.ModelManager.State.Downloading
+        val ready = state is ai.schism.split.core.ai.ModelManager.State.Ready
         when (val s = state) {
-            is ai.schism.split.core.ai.ModelManager.State.Absent ->
-                InfoRow("Model", "Not downloaded")
+            is ai.schism.split.core.ai.ModelManager.State.Absent -> InfoRow("Model", "Not downloaded")
             is ai.schism.split.core.ai.ModelManager.State.Downloading -> {
-                LinearProgressIndicator(
-                    progress = { s.percent / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                InfoRow("Downloading", "${s.percent}%")
+                LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth())
+                InfoRow("Downloading", "${s.percent}%  ·  keeps going if you leave")
             }
             is ai.schism.split.core.ai.ModelManager.State.Ready ->
                 InfoRow("Model", "Ready" + (viewModel.sizeMb()?.let { " · $it MB" } ?: ""))
             is ai.schism.split.core.ai.ModelManager.State.Failed ->
                 Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        val downloading = state is ai.schism.split.core.ai.ModelManager.State.Downloading
-        val ready = state is ai.schism.split.core.ai.ModelManager.State.Ready
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = { viewModel.setUrl(urlDraft); viewModel.setToken(tokenDraft); viewModel.download() },
-                enabled = urlDraft.isNotBlank() && !downloading,
-                modifier = Modifier.weight(1f),
-            ) { Text(if (ready) "Re-download" else "Download") }
-            if (ready) {
+            when {
+                downloading -> OutlinedButton(onClick = viewModel::cancel, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                else -> Button(onClick = viewModel::download, modifier = Modifier.weight(1f)) {
+                    Text(if (ready) "Re-download" else "Download model")
+                }
+            }
+            if (ready && !downloading) {
                 OutlinedButton(onClick = viewModel::delete, modifier = Modifier.weight(1f)) { Text("Delete") }
             }
         }

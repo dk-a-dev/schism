@@ -7,12 +7,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Backs the "On-device AI" settings: the downloadable LLM used to parse voice/receipts. */
+/** Backs the "On-device AI" settings: an enable toggle + the downloadable LLM (background download). */
 @HiltViewModel
 class AiSettingsViewModel @Inject constructor(
     private val modelManager: ModelManager,
@@ -20,30 +19,18 @@ class AiSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val modelState: StateFlow<ModelManager.State> = modelManager.state
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ModelManager.State.Absent)
 
-    val modelUrl: StateFlow<String> = settings.aiModelUrl
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
-
-    val modelToken: StateFlow<String> = settings.aiModelToken
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+    val aiEnabled: StateFlow<Boolean> = settings.aiEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun sizeMb(): Long? = modelManager.sizeBytes()?.let { it / (1024 * 1024) }
 
-    fun setUrl(url: String) {
-        viewModelScope.launch { settings.setAiModelUrl(url) }
+    fun setEnabled(enabled: Boolean) {
+        viewModelScope.launch { settings.setAiEnabled(enabled) }
     }
 
-    fun setToken(token: String) {
-        viewModelScope.launch { settings.setAiModelToken(token) }
-    }
-
-    fun download() {
-        viewModelScope.launch {
-            modelManager.download(settings.aiModelUrl.first(), settings.aiModelToken.first())
-        }
-    }
-
-    fun delete() {
-        modelManager.delete()
-    }
+    fun download() = modelManager.download()
+    fun cancel() = modelManager.cancel()
+    fun delete() = modelManager.delete()
 }
