@@ -1,0 +1,241 @@
+package ai.schism.split.expense.edit
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpenseEditScreen(
+    onBack: () -> Unit,
+    onSaved: () -> Unit,
+    viewModel: ExpenseEditViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (state.isEdit) "Edit expense" else "Add expense") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(
+                value = state.title,
+                onValueChange = viewModel::onTitleChange,
+                label = { Text("Title") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = state.amountText,
+                onValueChange = viewModel::onAmountChange,
+                label = { Text("Amount") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            CategoryDropdown(state, viewModel)
+            PaidBySelector(state, viewModel)
+
+            Text("Split", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SplitMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = state.splitMode == mode,
+                        onClick = { viewModel.onSplitModeChange(mode) },
+                        label = { Text(mode.label()) },
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
+            state.rows.forEach { row -> ParticipantRowItem(row, state.splitMode, viewModel) }
+
+            HorizontalDivider()
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Reimbursement", modifier = Modifier.weight(1f))
+                Switch(checked = state.isReimbursement, onCheckedChange = viewModel::onReimbursementChange)
+            }
+
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = viewModel::onNotesChange,
+                label = { Text("Notes (optional)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
+            Button(
+                onClick = { viewModel.submit(onSaved) },
+                enabled = !state.submitting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.submitting) CircularProgressIndicator(modifier = Modifier.width(20.dp)) else Text("Save")
+            }
+        }
+    }
+}
+
+private fun SplitMode.label(): String = when (this) {
+    SplitMode.EVENLY -> "Evenly"
+    SplitMode.BY_SHARES -> "Shares"
+    SplitMode.BY_PERCENTAGE -> "Percentage"
+    SplitMode.BY_AMOUNT -> "Amount"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CategoryDropdown(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = state.categories.firstOrNull { it.id == state.categoryId }?.name ?: "None"
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selectedName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Category") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            state.categories.forEach { category ->
+                DropdownMenuItem(
+                    text = { Text("${category.grouping} · ${category.name}") },
+                    onClick = {
+                        viewModel.onCategoryChange(category.id)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PaidBySelector(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = state.participants.firstOrNull { it.id == state.paidById }?.name ?: "Select"
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selectedName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Paid by") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            state.participants.forEach { participant ->
+                DropdownMenuItem(
+                    text = { Text(participant.name) },
+                    onClick = {
+                        viewModel.onPaidByChange(participant.id)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParticipantRowItem(row: ParticipantRow, mode: SplitMode, viewModel: ExpenseEditViewModel) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Checkbox(checked = row.selected, onCheckedChange = { viewModel.onToggleParticipant(row.participantId) })
+        Text(row.name, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        when (mode) {
+            SplitMode.EVENLY -> Unit
+            SplitMode.BY_SHARES -> OutlinedTextField(
+                value = row.weightText,
+                onValueChange = { viewModel.onWeightChange(row.participantId, it) },
+                label = { Text("Shares") },
+                enabled = row.selected,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.width(120.dp),
+            )
+            SplitMode.BY_PERCENTAGE -> OutlinedTextField(
+                value = row.percentText,
+                onValueChange = { viewModel.onPercentChange(row.participantId, it) },
+                label = { Text("%") },
+                enabled = row.selected,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.width(120.dp),
+            )
+            SplitMode.BY_AMOUNT -> OutlinedTextField(
+                value = row.amountText,
+                onValueChange = { viewModel.onParticipantAmountChange(row.participantId, it) },
+                label = { Text("Amount") },
+                enabled = row.selected,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.width(120.dp),
+            )
+        }
+    }
+}
