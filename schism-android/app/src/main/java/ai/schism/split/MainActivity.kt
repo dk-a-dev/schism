@@ -4,6 +4,7 @@ import ai.schism.split.core.nav.AppNav
 import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.core.theme.SchismTheme
 import ai.schism.split.core.theme.ThemeMode
+import ai.schism.split.onboarding.OnboardingScreen
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,7 +31,13 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             SchismTheme(darkTheme = dark) {
-                AppNav()
+                // Gate the app on first-run onboarding; null = not yet loaded (avoid flashing either UI).
+                val onboarded by settings.onboarded.collectAsState(initial = null)
+                when (onboarded) {
+                    null -> Unit
+                    false -> OnboardingScreen(onDone = {})
+                    true -> AppNav()
+                }
             }
         }
     }

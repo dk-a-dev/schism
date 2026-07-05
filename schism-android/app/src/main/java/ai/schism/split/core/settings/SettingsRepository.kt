@@ -1,6 +1,7 @@
 package ai.schism.split.core.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -25,6 +26,10 @@ class SettingsRepository @Inject constructor(
     private val ds = context.dataStore
 
     val profileName: Flow<String> = ds.data.map { it[KEY_NAME] ?: "" }
+    val email: Flow<String> = ds.data.map { it[KEY_EMAIL] ?: "" }
+    val phone: Flow<String> = ds.data.map { it[KEY_PHONE] ?: "" }
+    /** Whether the one-time onboarding (identity capture) has been completed on this device. */
+    val onboarded: Flow<Boolean> = ds.data.map { it[KEY_ONBOARDED] ?: false }
     val knownGroupIds: Flow<Set<String>> = ds.data.map { it[KEY_GROUPS] ?: emptySet() }
 
     /** App-wide default currency for new groups (symbol + ISO code). Defaults to Indian Rupee. */
@@ -36,6 +41,16 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
+    }
+
+    /** Persist the device identity and mark onboarding complete. */
+    suspend fun completeOnboarding(name: String, email: String, phone: String) {
+        ds.edit {
+            it[KEY_NAME] = name.trim()
+            it[KEY_EMAIL] = email.trim()
+            it[KEY_PHONE] = phone.trim()
+            it[KEY_ONBOARDED] = true
+        }
     }
 
     suspend fun addKnownGroup(id: String) {
@@ -71,6 +86,9 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_CURRENCY_CODE = "INR"
         const val DEFAULT_THEME_MODE = "SYSTEM"
         private val KEY_NAME = stringPreferencesKey("profile_name")
+        private val KEY_EMAIL = stringPreferencesKey("profile_email")
+        private val KEY_PHONE = stringPreferencesKey("profile_phone")
+        private val KEY_ONBOARDED = booleanPreferencesKey("onboarded")
         private val KEY_GROUPS = stringSetPreferencesKey("known_group_ids")
         private val KEY_CUR_SYMBOL = stringPreferencesKey("currency_symbol")
         private val KEY_CUR_CODE = stringPreferencesKey("currency_code")
