@@ -16,8 +16,10 @@ expense. Native Android client, self-hosted Go backend.
 | **`schism-backend/`** | Go REST API (chi + pgx + Postgres). Groups, participants, expenses (all split modes), balances/reimbursements, activity, dashboards, categories, and token-based user identity. Migrations in `internal/store/migrations`. |
 | **`schism-android/`** | The Android app (`:app`) + **`:parser-core`** — a vendored pure-Kotlin module of on-device bank-SMS parsers. MVVM + Compose (Material 3, expressive), Hilt, Retrofit + kotlinx.serialization, Room, WorkManager, ML Kit (OCR). |
 | **`docs/superpowers/`** | Design **`specs/`** and implementation **`plans/`** (the source of truth for what's being built and why). |
-| **`pennywiseai-tracker/`** | Reference app whose `parser-core` (55+ bank SMS parsers) is vendored into `schism-android/parser-core`. Not built as part of Schism. |
-| **`spliit/`** | Reference web splitter (design/behaviour inspiration only). |
+
+**Credits / inspiration** (external projects, not included in this repo): **pennywiseai-tracker** — its
+bank-SMS parsers (~148 issuers) are vendored into `schism-android/parser-core`; **spliit** — reference
+web splitter for design/behaviour.
 
 ---
 
@@ -66,26 +68,33 @@ The debug build permits cleartext HTTP to the dev backend (release is loopback-o
 
 ---
 
-## Feature status
+## Feature list
 
-**Groups & expenses** — create/join groups, participants (incl. from contacts), expenses in all four
-split modes (evenly / shares / percentage / amount) with local validation mirroring the backend,
-balances + suggested reimbursements, activity feed (who did what), group & cross-group dashboards.
-Editing is gated to whoever *added* an expense. ✅
+**Onboarding** — an animated first-run **walkthrough** (illustrated pages + a feature-discovery grid)
+then identity capture (name / email / phone). ✅
+
+**Groups & expenses** — create / join / **edit** / delete groups, participants (incl. from contacts),
+expenses in all four split modes (evenly / shares / percentage / amount) with local validation
+mirroring the backend, balances + suggested reimbursements, activity feed (who did what), group &
+cross-group dashboards. Editing is gated to whoever *added* an expense. ✅
 
 **Invites** — share/open `schism://group/<id>` deep links; QR generate + scan. ✅
 
-**On-device SMS → split** — bank SMS parsed on-device into an **Inbox**; keep personal or **push to a
-group** as a shared expense. ✅
+**On-device SMS → split** — bank SMS parsed on-device (`:parser-core`, ~148 issuers) into an
+**Inbox**; keep personal or **push to a group** as a shared expense. ✅
 
-**On-device AI / capture** — receipt **OCR → expense draft** (ML Kit) and **voice quick-add** ("paid
-800 for dinner, split with Riya and Sam"). A grounded LLM chat assistant is specced but deferred
-(it needs an on-device model download). ✅ (chat assistant pending)
+**On-device capture / AI** — receipt **OCR → itemised AI split** (ML Kit; reachable from the Groups
+home and the Inbox) and **voice quick-add** ("paid 800 for dinner, split with Riya and Sam") parsed
+offline. ✅
 
 **Personal finance** — a **Spending** tab with monthly totals, by-merchant, and trend, computed
 locally from the transaction ledger. ✅
 
 **Settle up** — record a settlement (reimbursement) and/or open a UPI app prefilled. ✅
+
+**Design system** — Material 3 **Expressive** in the Schism palette (cream / deep-green / mint /
+terracotta), full light/dark parity, split-coin logo + adaptive icon, wavy "squiggle" loaders. See
+[`schism-android/docs/design.md`](schism-android/docs/design.md). ✅
 
 See `docs/superpowers/plans` and `docs/superpowers/specs` for the full designs (SP1 backend, SP2
 Android client, SP3 SMS bridge, SP4 on-device AI).
