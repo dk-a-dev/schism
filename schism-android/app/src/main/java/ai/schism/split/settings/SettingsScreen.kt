@@ -22,6 +22,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -202,6 +203,9 @@ fun SettingsScreen(
                 }
             }
 
+            // ── On-device AI ───────────────────────────────────────────────
+            AiSection()
+
             // ── Data ───────────────────────────────────────────────────────
             SettingsSection("Data") {
                 OutlinedButton(
@@ -240,6 +244,58 @@ private fun SettingsSection(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         content()
+    }
+}
+
+@Composable
+private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
+    val state by viewModel.modelState.collectAsState()
+    val url by viewModel.modelUrl.collectAsState()
+    var urlDraft by remember { mutableStateOf(url) }
+    LaunchedEffect(url) { urlDraft = url }
+
+    SettingsSection("On-device AI") {
+        Text(
+            "Optionally download a small on-device model (a MediaPipe .task file) so voice and " +
+                "receipt parsing use an LLM instead of keyword rules. It runs fully offline once " +
+                "downloaded; leave it empty to keep the lightweight parser.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = urlDraft,
+            onValueChange = { urlDraft = it },
+            label = { Text("Model URL (.task)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        when (val s = state) {
+            is ai.schism.split.core.ai.ModelManager.State.Absent ->
+                InfoRow("Model", "Not downloaded")
+            is ai.schism.split.core.ai.ModelManager.State.Downloading -> {
+                LinearProgressIndicator(
+                    progress = { s.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                InfoRow("Downloading", "${s.percent}%")
+            }
+            is ai.schism.split.core.ai.ModelManager.State.Ready ->
+                InfoRow("Model", "Ready" + (viewModel.sizeMb()?.let { " · $it MB" } ?: ""))
+            is ai.schism.split.core.ai.ModelManager.State.Failed ->
+                Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        val downloading = state is ai.schism.split.core.ai.ModelManager.State.Downloading
+        val ready = state is ai.schism.split.core.ai.ModelManager.State.Ready
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = { viewModel.setUrl(urlDraft); viewModel.download() },
+                enabled = urlDraft.isNotBlank() && !downloading,
+                modifier = Modifier.weight(1f),
+            ) { Text(if (ready) "Re-download" else "Download") }
+            if (ready) {
+                OutlinedButton(onClick = viewModel::delete, modifier = Modifier.weight(1f)) { Text("Delete") }
+            }
+        }
     }
 }
 

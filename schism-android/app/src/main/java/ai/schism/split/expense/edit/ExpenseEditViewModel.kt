@@ -158,6 +158,7 @@ class ExpenseEditViewModel @Inject constructor(
     private val groupRepo: GroupRepository,
     private val expenseRepo: ExpenseRepository,
     private val api: ApiService,
+    private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -235,9 +236,17 @@ class ExpenseEditViewModel @Inject constructor(
      * Never submits: the user still reviews and taps Save.
      */
     fun applyVoice(text: String) {
-        val s = _state.value
-        val you = youParticipantId ?: s.paidById.ifBlank { null }
-        val draft = parseSpokenExpense(text, s.participants, you)
+        viewModelScope.launch {
+            val s = _state.value
+            val you = youParticipantId ?: s.paidById.ifBlank { null }
+            // Prefer the on-device LLM when a model is loaded; fall back to the regex parser.
+            val draft = llmParser.parseSpoken(text, s.participants, you)
+                ?: parseSpokenExpense(text, s.participants, you)
+            applyDraft(draft, you)
+        }
+    }
+
+    private fun applyDraft(draft: ai.schism.split.expense.edit.voice.SpokenExpenseDraft, you: String?) {
         _state.update { cur ->
             var next = cur
             draft.title?.let { next = next.copy(title = it) }

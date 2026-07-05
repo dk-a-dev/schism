@@ -44,6 +44,13 @@ class SettingsRepository @Inject constructor(
     /** Preferred UI theme: "SYSTEM" (default), "LIGHT", or "DARK". */
     val themeMode: Flow<String> = ds.data.map { it[KEY_THEME] ?: DEFAULT_THEME_MODE }
 
+    /** URL of the on-device LLM (.task) used to parse voice/receipts; empty until the user sets one. */
+    val aiModelUrl: Flow<String> = ds.data.map { it[KEY_AI_MODEL_URL] ?: "" }
+
+    suspend fun setAiModelUrl(url: String) {
+        ds.edit { it[KEY_AI_MODEL_URL] = url.trim() }
+    }
+
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
     }
@@ -138,5 +145,6 @@ class SettingsRepository @Inject constructor(
         private val KEY_CUR_CODE = stringPreferencesKey("currency_code")
         private val KEY_THEME = stringPreferencesKey("theme_mode")
         private val KEY_MERCHANT_ALIASES = stringSetPreferencesKey("merchant_aliases")
+        private val KEY_AI_MODEL_URL = stringPreferencesKey("ai_model_url")
     }
 }

@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.mediapipe.tasks.genai)
     implementation(libs.play.services.code.scanner)
     implementation(libs.zxing.core)
     implementation(libs.retrofit)
