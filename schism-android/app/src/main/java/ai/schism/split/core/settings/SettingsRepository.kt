@@ -51,6 +51,13 @@ class SettingsRepository @Inject constructor(
         ds.edit { it[KEY_AI_MODEL_URL] = url.trim() }
     }
 
+    /** Optional bearer token for the model download (e.g. a Hugging Face token for gated models). */
+    val aiModelToken: Flow<String> = ds.data.map { it[KEY_AI_MODEL_TOKEN] ?: "" }
+
+    suspend fun setAiModelToken(token: String) {
+        ds.edit { it[KEY_AI_MODEL_TOKEN] = token.trim() }
+    }
+
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
     }
@@ -146,5 +153,6 @@ class SettingsRepository @Inject constructor(
         private val KEY_THEME = stringPreferencesKey("theme_mode")
         private val KEY_MERCHANT_ALIASES = stringSetPreferencesKey("merchant_aliases")
         private val KEY_AI_MODEL_URL = stringPreferencesKey("ai_model_url")
+        private val KEY_AI_MODEL_TOKEN = stringPreferencesKey("ai_model_token")
     }
 }

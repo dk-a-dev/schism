@@ -251,8 +251,11 @@ private fun SettingsSection(title: String, content: @Composable () -> Unit) {
 private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
     val state by viewModel.modelState.collectAsState()
     val url by viewModel.modelUrl.collectAsState()
+    val token by viewModel.modelToken.collectAsState()
     var urlDraft by remember { mutableStateOf(url) }
+    var tokenDraft by remember { mutableStateOf(token) }
     LaunchedEffect(url) { urlDraft = url }
+    LaunchedEffect(token) { tokenDraft = token }
 
     SettingsSection("On-device AI") {
         Text(
@@ -266,6 +269,13 @@ private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
             value = urlDraft,
             onValueChange = { urlDraft = it },
             label = { Text("Model URL (.task)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = tokenDraft,
+            onValueChange = { tokenDraft = it },
+            label = { Text("Access token (optional, e.g. Hugging Face)") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -288,7 +298,7 @@ private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
         val ready = state is ai.schism.split.core.ai.ModelManager.State.Ready
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
-                onClick = { viewModel.setUrl(urlDraft); viewModel.download() },
+                onClick = { viewModel.setUrl(urlDraft); viewModel.setToken(tokenDraft); viewModel.download() },
                 enabled = urlDraft.isNotBlank() && !downloading,
                 modifier = Modifier.weight(1f),
             ) { Text(if (ready) "Re-download" else "Download") }

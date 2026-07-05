@@ -144,7 +144,11 @@ fun GroupDetailScreen(
                     youParticipantId = g?.activeParticipantId,
                     onSettle = { from, to, amount -> viewModel.settle(from, to, amount) {} },
                 )
-                DetailTab.Activity -> ActivityTab(state = activities, participantNames = participantNames)
+                DetailTab.Activity -> ActivityTab(
+                    state = activities,
+                    participantNames = participantNames,
+                    currency = currency,
+                )
             }
         }
     }

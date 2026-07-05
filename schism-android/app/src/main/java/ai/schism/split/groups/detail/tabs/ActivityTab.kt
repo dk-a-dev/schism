@@ -1,5 +1,6 @@
 package ai.schism.split.groups.detail.tabs
 
+import ai.schism.split.core.money.formatMinor
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.expense.data.Activity
 import ai.schism.split.groups.detail.StateSlice
@@ -40,6 +41,7 @@ private enum class Tone { Positive, Neutral, Warn, Negative }
 fun ActivityTab(
     state: UiState<List<Activity>>,
     participantNames: Map<String, String>,
+    currency: String,
 ) {
     val today = remember { LocalDate.now() }
     StateSlice(state, emptyMessage = "No activity yet.") { activities ->
@@ -53,11 +55,23 @@ fun ActivityTab(
                     append(style.verb)
                     if (detail != null) append(" “$detail”")
                 }
+                val amount = activity.amountMinor?.let { formatMinor(it, currency) }
                 ListItem(
                     leadingContent = { ActionAvatar(style.icon, style.tone) },
                     headlineContent = { Text(headline, fontWeight = FontWeight.Medium) },
                     supportingContent = prettyWhen(activity.time, today)?.let {
                         { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    },
+                    trailingContent = amount?.let {
+                        {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (style.tone == Tone.Negative) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 )

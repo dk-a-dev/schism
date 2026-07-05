@@ -32,6 +32,7 @@ data class Activity(
     val participantId: String?,
     val expenseId: String?,
     val data: String,
+    val amountMinor: Long? = null,
 )
 
 // ---- DTO -> domain (pure, no Room; balances/activities are not entities) ----
@@ -53,4 +54,5 @@ fun ActivityDto.toDomain(): Activity = Activity(
     participantId = participantId,
     expenseId = expenseId,
     data = data,
+    amountMinor = amount,
 )

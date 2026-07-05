@@ -100,6 +100,7 @@ data class ActivityDto(
     val participantId: String? = null,
     val expenseId: String? = null,
     val data: String = "",
+    val amount: Long? = null,
 )
 
 // ---- requests ----

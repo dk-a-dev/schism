@@ -24,14 +24,23 @@ class AiSettingsViewModel @Inject constructor(
     val modelUrl: StateFlow<String> = settings.aiModelUrl
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
+    val modelToken: StateFlow<String> = settings.aiModelToken
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
     fun sizeMb(): Long? = modelManager.sizeBytes()?.let { it / (1024 * 1024) }
 
     fun setUrl(url: String) {
         viewModelScope.launch { settings.setAiModelUrl(url) }
     }
 
+    fun setToken(token: String) {
+        viewModelScope.launch { settings.setAiModelToken(token) }
+    }
+
     fun download() {
-        viewModelScope.launch { modelManager.download(settings.aiModelUrl.first()) }
+        viewModelScope.launch {
+            modelManager.download(settings.aiModelUrl.first(), settings.aiModelToken.first())
+        }
     }
 
     fun delete() {

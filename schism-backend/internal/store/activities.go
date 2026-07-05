@@ -15,6 +15,8 @@ type Activity struct {
 	ParticipantID *string   `json:"participantId"`
 	ExpenseID     *string   `json:"expenseId"`
 	Data          string    `json:"data"`
+	// Amount of the linked expense in minor units (nil for non-expense activity or a deleted expense).
+	Amount *int64 `json:"amount,omitempty"`
 }
 
 func (s *Store) LogActivity(ctx context.Context, groupID, activityType string, participantID, expenseID *string, data string) error {
@@ -27,8 +29,11 @@ func (s *Store) LogActivity(ctx context.Context, groupID, activityType string, p
 
 func (s *Store) ListActivities(ctx context.Context, groupID string) ([]Activity, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, group_id, time, activity_type, participant_id, expense_id, COALESCE(data,'')
-		 FROM activities WHERE group_id=$1 ORDER BY time DESC`, groupID)
+		`SELECT a.id, a.group_id, a.time, a.activity_type, a.participant_id, a.expense_id,
+		        COALESCE(a.data,''), e.amount
+		 FROM activities a
+		 LEFT JOIN expenses e ON e.id = a.expense_id
+		 WHERE a.group_id=$1 ORDER BY a.time DESC`, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +41,7 @@ func (s *Store) ListActivities(ctx context.Context, groupID string) ([]Activity,
 	out := []Activity{}
 	for rows.Next() {
 		var a Activity
-		if err := rows.Scan(&a.ID, &a.GroupID, &a.Time, &a.ActivityType, &a.ParticipantID, &a.ExpenseID, &a.Data); err != nil {
+		if err := rows.Scan(&a.ID, &a.GroupID, &a.Time, &a.ActivityType, &a.ParticipantID, &a.ExpenseID, &a.Data, &a.Amount); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

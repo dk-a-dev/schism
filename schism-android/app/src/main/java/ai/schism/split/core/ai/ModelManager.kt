@@ -44,8 +44,12 @@ class ModelManager @Inject constructor(
     /** Human-readable size of the downloaded model, or null if absent. */
     fun sizeBytes(): Long? = modelFile.takeIf { it.exists() }?.length()
 
-    /** Stream [url] to the model file, publishing progress. Safe to call repeatedly (re-download). */
-    suspend fun download(url: String) = withContext(Dispatchers.IO) {
+    /**
+     * Stream [url] to the model file, publishing progress. Safe to call repeatedly (re-download).
+     * [authToken], when set, is sent as `Authorization: Bearer …` — e.g. a Hugging Face token so
+     * license-gated models (Gemma) download without a browser.
+     */
+    suspend fun download(url: String, authToken: String = "") = withContext(Dispatchers.IO) {
         if (url.isBlank()) {
             _state.value = State.Failed("Set a model URL first")
             return@withContext
@@ -53,7 +57,10 @@ class ModelManager @Inject constructor(
         _state.value = State.Downloading(0)
         val part = File(dir, "expense-llm.task.part")
         try {
-            client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+            val request = Request.Builder().url(url).apply {
+                if (authToken.isNotBlank()) header("Authorization", "Bearer $authToken")
+            }.build()
+            client.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     _state.value = State.Failed("Download failed (HTTP ${resp.code})")
                     return@withContext
