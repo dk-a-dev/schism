@@ -1,5 +1,6 @@
 package ai.schism.split.core.nav
 
+import ai.schism.split.groups.list.GroupsListScreen
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,7 +67,13 @@ fun AppNav() {
             startDestination = Routes.GROUPS,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Routes.GROUPS) { PlaceholderScreen("Groups") }
+            composable(Routes.GROUPS) {
+                GroupsListScreen(
+                    onOpenGroup = { /* Task 10: group detail */ },
+                    onCreateGroup = { /* Task 7: create group */ },
+                    onJoinGroup = { /* Task 8: join group */ },
+                )
+            }
             composable(Routes.DASHBOARD) { PlaceholderScreen("Dashboard") }
             composable(Routes.SETTINGS) { PlaceholderScreen("Settings") }
         }
