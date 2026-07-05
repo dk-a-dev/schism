@@ -3,6 +3,8 @@ package ai.schism.split.core.di
 import ai.schism.split.BuildConfig
 import ai.schism.split.core.net.ApiClient
 import ai.schism.split.core.net.ApiService
+import ai.schism.split.core.net.AuthInterceptor
+import ai.schism.split.core.net.AuthTokenProvider
 import ai.schism.split.core.net.BackendUrlInterceptor
 import ai.schism.split.core.net.BackendUrlProvider
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -22,9 +24,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttp(urlProvider: BackendUrlProvider): OkHttpClient {
+    fun provideOkHttp(urlProvider: BackendUrlProvider, authProvider: AuthTokenProvider): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .addInterceptor(BackendUrlInterceptor(urlProvider))
+            .addInterceptor(AuthInterceptor(authProvider))
         if (BuildConfig.DEBUG) {
             builder.addInterceptor(
                 HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY },

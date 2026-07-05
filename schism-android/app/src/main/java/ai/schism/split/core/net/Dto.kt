@@ -19,6 +19,8 @@ data class UserDto(
     val email: String = "",
     val phone: String = "",
     val createdAt: String = "",
+    /** Bearer token, present only in the register response; stored and sent on later requests. */
+    val token: String? = null,
 )
 
 @Serializable

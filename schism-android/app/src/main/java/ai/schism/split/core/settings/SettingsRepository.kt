@@ -28,6 +28,8 @@ class SettingsRepository @Inject constructor(
     val profileName: Flow<String> = ds.data.map { it[KEY_NAME] ?: "" }
     /** The backend user id for this device's identity (empty until registered). */
     val userId: Flow<String> = ds.data.map { it[KEY_USER_ID] ?: "" }
+    /** Bearer auth token issued at registration (empty until registered). */
+    val authToken: Flow<String> = ds.data.map { it[KEY_TOKEN] ?: "" }
     val email: Flow<String> = ds.data.map { it[KEY_EMAIL] ?: "" }
     val phone: Flow<String> = ds.data.map { it[KEY_PHONE] ?: "" }
     /** Whether the one-time onboarding (identity capture) has been completed on this device. */
@@ -55,8 +57,11 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun setUserId(id: String) {
-        ds.edit { it[KEY_USER_ID] = id }
+    suspend fun setIdentity(id: String, token: String) {
+        ds.edit {
+            it[KEY_USER_ID] = id
+            if (token.isNotBlank()) it[KEY_TOKEN] = token
+        }
     }
 
     suspend fun addKnownGroup(id: String) {
@@ -93,6 +98,7 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_THEME_MODE = "SYSTEM"
         private val KEY_NAME = stringPreferencesKey("profile_name")
         private val KEY_USER_ID = stringPreferencesKey("user_id")
+        private val KEY_TOKEN = stringPreferencesKey("auth_token")
         private val KEY_EMAIL = stringPreferencesKey("profile_email")
         private val KEY_PHONE = stringPreferencesKey("profile_phone")
         private val KEY_ONBOARDED = booleanPreferencesKey("onboarded")

@@ -23,7 +23,7 @@ class OnboardingViewModel @Inject constructor(
         viewModelScope.launch {
             settings.completeOnboarding(name, email, phone)
             runCatching { api.registerUser(UserRequest(name.trim(), email.trim(), phone.trim())) }
-                .onSuccess { settings.setUserId(it.id) }
+                .onSuccess { settings.setIdentity(it.id, it.token.orEmpty()) }
         }
     }
 }
