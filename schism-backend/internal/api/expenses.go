@@ -44,7 +44,7 @@ func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eid := e.ID
-	_ = h.store.LogActivity(r.Context(), groupID, "CREATE_EXPENSE", nil, &eid, "")
+	_ = h.store.LogActivity(r.Context(), groupID, "CREATE_EXPENSE", nil, &eid, e.Title)
 	writeJSON(w, http.StatusCreated, e)
 }
 
@@ -93,13 +93,23 @@ func (h *Handler) updateExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eid := e.ID
-	_ = h.store.LogActivity(r.Context(), groupID, "UPDATE_EXPENSE", nil, &eid, "")
+	_ = h.store.LogActivity(r.Context(), groupID, "UPDATE_EXPENSE", nil, &eid, e.Title)
 	writeJSON(w, http.StatusOK, e)
 }
 
 func (h *Handler) deleteExpense(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	expenseID := chi.URLParam(r, "expenseID")
+	// Capture the title before deletion so the activity log can describe what was removed.
+	e, err := h.store.GetExpense(r.Context(), groupID, expenseID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if e == nil {
+		writeErr(w, http.StatusNotFound, "expense not found")
+		return
+	}
 	ok, err := h.store.DeleteExpense(r.Context(), groupID, expenseID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -109,6 +119,6 @@ func (h *Handler) deleteExpense(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "expense not found")
 		return
 	}
-	_ = h.store.LogActivity(r.Context(), groupID, "DELETE_EXPENSE", nil, &expenseID, "")
+	_ = h.store.LogActivity(r.Context(), groupID, "DELETE_EXPENSE", nil, &expenseID, e.Title)
 	w.WriteHeader(http.StatusNoContent)
 }

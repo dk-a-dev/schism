@@ -55,6 +55,37 @@ func TestExpenseAndBalancesHTTP(t *testing.T) {
 	require.Equal(t, int64(500), out.Reimbursements[0].Amount)
 }
 
+func TestExpenseActivityData(t *testing.T) {
+	srv := newTestServer(t)
+	g := createGroupFixture(t, srv.URL)
+	a, b := g.Participants[0].ID, g.Participants[1].ID
+
+	body := fmt.Sprintf(`{"title":"Museum tickets","amount":1000,"paidById":%q,"splitMode":"EVENLY",
+	  "paidFor":[{"participantId":%q,"shares":100},{"participantId":%q,"shares":100}]}`, a, a, b)
+	resp, err := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var created store.Expense
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1/groups/"+g.ID+"/expenses/"+created.ID, nil)
+	delResp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, delResp.StatusCode)
+
+	actResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	require.Equal(t, http.StatusOK, actResp.StatusCode)
+	var acts []store.Activity
+	require.NoError(t, json.NewDecoder(actResp.Body).Decode(&acts))
+
+	byType := map[string]store.Activity{}
+	for _, act := range acts {
+		byType[act.ActivityType] = act
+	}
+	require.Contains(t, byType["CREATE_EXPENSE"].Data, "Museum tickets")
+	require.Contains(t, byType["DELETE_EXPENSE"].Data, "Museum tickets")
+}
+
 func TestCreateExpenseValidation(t *testing.T) {
 	srv := newTestServer(t)
 	g := createGroupFixture(t, srv.URL)
