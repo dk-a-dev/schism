@@ -16,6 +16,7 @@ data class SettingsUi(
     val profileName: String,
     val currencySymbol: String,
     val currencyCode: String,
+    val themeMode: String,
 )
 
 @HiltViewModel
@@ -27,12 +28,23 @@ class SettingsViewModel @Inject constructor(
         settings.profileName,
         settings.currencySymbol,
         settings.currencyCode,
-    ) { profileName, currencySymbol, currencyCode ->
-        SettingsUi(profileName = profileName, currencySymbol = currencySymbol, currencyCode = currencyCode)
+        settings.themeMode,
+    ) { profileName, currencySymbol, currencyCode, themeMode ->
+        SettingsUi(
+            profileName = profileName,
+            currencySymbol = currencySymbol,
+            currencyCode = currencyCode,
+            themeMode = themeMode,
+        )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
-        SettingsUi("", SettingsRepository.DEFAULT_CURRENCY_SYMBOL, SettingsRepository.DEFAULT_CURRENCY_CODE),
+        SettingsUi(
+            "",
+            SettingsRepository.DEFAULT_CURRENCY_SYMBOL,
+            SettingsRepository.DEFAULT_CURRENCY_CODE,
+            SettingsRepository.DEFAULT_THEME_MODE,
+        ),
     )
 
     fun saveProfileName(name: String) {
@@ -41,5 +53,9 @@ class SettingsViewModel @Inject constructor(
 
     fun saveDefaultCurrency(symbol: String, code: String) {
         viewModelScope.launch { settings.setDefaultCurrency(symbol, code) }
+    }
+
+    fun saveThemeMode(mode: String) {
+        viewModelScope.launch { settings.setThemeMode(mode) }
     }
 }

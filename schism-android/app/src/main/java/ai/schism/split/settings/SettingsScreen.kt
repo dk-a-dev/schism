@@ -16,6 +16,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -25,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import ai.schism.split.core.theme.ThemeMode
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -59,6 +63,23 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            // Appearance / theme.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Appearance", style = MaterialTheme.typography.titleMedium)
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val modes = ThemeMode.entries
+                    modes.forEachIndexed { index, mode ->
+                        SegmentedButton(
+                            selected = state.themeMode == mode.name,
+                            onClick = { viewModel.saveThemeMode(mode.name) },
+                            shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                        ) {
+                            Text(mode.label)
+                        }
+                    }
+                }
+            }
+
             // Headline: the current app-wide default currency.
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

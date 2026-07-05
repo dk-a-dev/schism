@@ -31,6 +31,9 @@ class SettingsRepository @Inject constructor(
     val currencySymbol: Flow<String> = ds.data.map { it[KEY_CUR_SYMBOL] ?: DEFAULT_CURRENCY_SYMBOL }
     val currencyCode: Flow<String> = ds.data.map { it[KEY_CUR_CODE] ?: DEFAULT_CURRENCY_CODE }
 
+    /** Preferred UI theme: "SYSTEM" (default), "LIGHT", or "DARK". */
+    val themeMode: Flow<String> = ds.data.map { it[KEY_THEME] ?: DEFAULT_THEME_MODE }
+
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
     }
@@ -54,6 +57,10 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setThemeMode(mode: String) {
+        ds.edit { it[KEY_THEME] = mode }
+    }
+
     /** Wipe all device-local settings (used by "reset" and to isolate tests). */
     suspend fun clear() {
         ds.edit { it.clear() }
@@ -62,9 +69,11 @@ class SettingsRepository @Inject constructor(
     companion object {
         const val DEFAULT_CURRENCY_SYMBOL = "₹"
         const val DEFAULT_CURRENCY_CODE = "INR"
+        const val DEFAULT_THEME_MODE = "SYSTEM"
         private val KEY_NAME = stringPreferencesKey("profile_name")
         private val KEY_GROUPS = stringSetPreferencesKey("known_group_ids")
         private val KEY_CUR_SYMBOL = stringPreferencesKey("currency_symbol")
         private val KEY_CUR_CODE = stringPreferencesKey("currency_code")
+        private val KEY_THEME = stringPreferencesKey("theme_mode")
     }
 }

@@ -10,6 +10,7 @@ import ai.schism.split.groups.list.GroupsListScreen
 import ai.schism.split.settings.SettingsScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -43,25 +44,32 @@ fun AppNav() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    // The bottom bar belongs to the three top-level tabs only, not detail/create/edit screens.
+    val showBottomBar = currentRoute in destinations.map { it.route }
 
     Scaffold(
+        // Each screen owns its own Scaffold + top bar, which consumes the status-bar inset. Zero the
+        // outer insets so the top spacing isn't counted twice; the returned padding is just the nav bar.
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            NavigationBar {
-                destinations.forEach { dest ->
-                    NavigationBarItem(
-                        selected = currentRoute == dest.route,
-                        onClick = {
-                            navController.navigate(dest.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            if (showBottomBar) {
+                NavigationBar {
+                    destinations.forEach { dest ->
+                        NavigationBarItem(
+                            selected = currentRoute == dest.route,
+                            onClick = {
+                                navController.navigate(dest.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(dest.icon, contentDescription = dest.label) },
-                        label = { Text(dest.label) },
-                    )
+                            },
+                            icon = { Icon(dest.icon, contentDescription = dest.label) },
+                            label = { Text(dest.label) },
+                        )
+                    }
                 }
             }
         },
