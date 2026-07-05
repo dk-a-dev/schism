@@ -38,7 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.ListSkeleton
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TopAppBar
@@ -145,7 +145,7 @@ fun InboxScreen(
                 when {
                     permissionNeeded -> PermissionRequest(onAllow = { launcher.launch(SMS_PERMISSIONS) })
                     else -> when (val s = state) {
-                        is UiState.Loading -> Centered { WavyProgress() }
+                        is UiState.Loading -> ListSkeleton()
                         is UiState.Empty -> EmptyInbox(filter)
                         is UiState.Error -> Centered { Text(s.message) }
                         is UiState.Data -> TransactionList(

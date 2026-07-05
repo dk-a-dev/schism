@@ -21,7 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.ContainedLoader
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TopAppBar
@@ -61,7 +61,7 @@ fun PersonalDashboardScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (val s = state) {
-                is UiState.Loading -> Centered { WavyProgress() }
+                is UiState.Loading -> Centered { ContainedLoader() }
                 is UiState.Empty -> EmptyState(
                     Icons.Filled.PieChart,
                     "Nothing to show yet",

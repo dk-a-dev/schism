@@ -29,7 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.DotsLoader
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -88,7 +88,7 @@ fun ExpenseEditScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                WavyProgress()
+                DotsLoader()
             }
             return@Scaffold
         }

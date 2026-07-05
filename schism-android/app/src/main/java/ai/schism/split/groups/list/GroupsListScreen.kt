@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.ListSkeleton
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -101,7 +101,7 @@ fun GroupsListScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when (val s = state) {
-                is UiState.Loading -> Centered { WavyProgress() }
+                is UiState.Loading -> ListSkeleton()
                 is UiState.Empty -> EmptyGroups()
                 is UiState.Error -> Centered { Message("Couldn't load groups", s.message) }
                 is UiState.Data -> GroupList(s.value, onOpenGroup)
