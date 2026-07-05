@@ -21,10 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -48,12 +48,12 @@ fun PersonalDashboardScreen(
     viewModel: PersonalDashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("Your dashboard") },
                 scrollBehavior = scrollBehavior,
             )
@@ -61,7 +61,7 @@ fun PersonalDashboardScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (val s = state) {
-                is UiState.Loading -> Centered { CircularProgressIndicator() }
+                is UiState.Loading -> Centered { WavyProgress() }
                 is UiState.Empty -> EmptyState(
                     Icons.Filled.PieChart,
                     "Nothing to show yet",

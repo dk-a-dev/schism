@@ -198,8 +198,6 @@ fun SettingsScreen(
                         InfoRow("Identity", if (state.registered) "Registered" else "Local")
                         HorizontalDivider()
                         InfoRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                        HorizontalDivider()
-                        InfoRow("Backend", BuildConfig.BACKEND_URL)
                     }
                 }
             }

@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- The Schism "split coin": two half-discs sheared apart, a green seam between them.
+         Left half = mint, right half = cream, offset for motion. -->
+    <path
+        android:fillColor="#B6ECCE"
+        android:pathData="M50,26 A26,26 0 0,0 50,78 Z" />
+    <path
+        android:fillColor="#FBFAF4"
+        android:pathData="M58,30 A26,26 0 0,1 58,82 Z" />
+</vector>

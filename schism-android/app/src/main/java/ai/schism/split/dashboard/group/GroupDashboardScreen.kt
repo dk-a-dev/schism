@@ -24,7 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,7 +70,7 @@ fun GroupDashboardScreen(
                 .padding(padding),
         ) {
             when (val s = state) {
-                is UiState.Loading -> Centered { CircularProgressIndicator() }
+                is UiState.Loading -> Centered { WavyProgress() }
                 is UiState.Empty -> EmptyState(
                     Icons.Filled.Insights,
                     "Nothing to show yet",

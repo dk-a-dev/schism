@@ -30,10 +30,10 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -71,7 +71,7 @@ fun InboxScreen(
     val state by viewModel.state.collectAsState()
     val permissionNeeded by viewModel.permissionNeeded.collectAsState()
     val context = LocalContext.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     fun hasSmsPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
@@ -103,7 +103,7 @@ fun InboxScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("Inbox") },
                 scrollBehavior = scrollBehavior,
             )
@@ -121,7 +121,7 @@ fun InboxScreen(
             when {
                 permissionNeeded -> PermissionRequest(onAllow = { launcher.launch(SMS_PERMISSIONS) })
                 else -> when (val s = state) {
-                    is UiState.Loading -> Centered { CircularProgressIndicator() }
+                    is UiState.Loading -> Centered { WavyProgress() }
                     is UiState.Empty -> EmptyInbox()
                     is UiState.Error -> Centered { Text(s.message) }
                     is UiState.Data -> TransactionList(

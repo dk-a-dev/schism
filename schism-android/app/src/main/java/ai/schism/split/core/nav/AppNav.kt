@@ -6,6 +6,7 @@ import ai.schism.split.finance.SpendingScreen
 import ai.schism.split.groups.create.CreateGroupScreen
 import ai.schism.split.expense.edit.ExpenseEditScreen
 import ai.schism.split.groups.detail.GroupDetailScreen
+import ai.schism.split.groups.edit.EditGroupScreen
 import ai.schism.split.groups.join.JoinGroupScreen
 import ai.schism.split.groups.join.OpenGroupScreen
 import ai.schism.split.groups.list.GroupsListScreen
@@ -95,6 +96,7 @@ fun AppNav() {
                     onOpenGroup = { id -> navController.navigate(Routes.groupDetail(id)) },
                     onCreateGroup = { navController.navigate(Routes.CREATE_GROUP) },
                     onJoinGroup = { navController.navigate(Routes.JOIN_GROUP) },
+                    onScanBill = { navController.navigate(Routes.RECEIPT_ITEMIZED) },
                 )
             }
             composable(Routes.CREATE_GROUP) {
@@ -139,6 +141,7 @@ fun AppNav() {
                     onEditExpense = { id, expenseId -> navController.navigate(Routes.editExpense(id, expenseId)) },
                     onOpenDashboard = { id -> navController.navigate(Routes.groupDashboard(id)) },
                     onInvite = { id -> navController.navigate(Routes.invite(id)) },
+                    onEditGroup = { id -> navController.navigate(Routes.editGroup(id)) },
                 )
             }
             composable(
@@ -152,6 +155,15 @@ fun AppNav() {
                 arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
             ) {
                 InviteQrScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                Routes.EDIT_GROUP,
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+            ) {
+                EditGroupScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaved = { navController.popBackStack() },
+                )
             }
             composable(
                 Routes.EXPENSE_EDIT,

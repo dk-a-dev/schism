@@ -19,10 +19,12 @@ object Routes {
     const val GROUP_DASHBOARD = "groups/detail/{groupId}/dashboard"
     const val EXPENSE_EDIT = "groups/detail/{groupId}/expense?expenseId={expenseId}"
     const val INVITE = "groups/detail/{groupId}/invite"
+    const val EDIT_GROUP = "groups/detail/{groupId}/edit"
 
     fun groupDetail(groupId: String) = "groups/detail/$groupId"
     fun groupDashboard(groupId: String) = "groups/detail/$groupId/dashboard"
     fun addExpense(groupId: String) = "groups/detail/$groupId/expense"
     fun editExpense(groupId: String, expenseId: String) = "groups/detail/$groupId/expense?expenseId=$expenseId"
     fun invite(groupId: String) = "groups/detail/$groupId/invite"
+    fun editGroup(groupId: String) = "groups/detail/$groupId/edit"
 }

@@ -14,9 +14,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.CircularProgressIndicator
+import ai.schism.split.core.ui.WavyProgress
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -31,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,8 +55,10 @@ fun GroupDetailScreen(
     onEditExpense: (groupId: String, expenseId: String) -> Unit,
     onOpenDashboard: (groupId: String) -> Unit,
     onInvite: (groupId: String) -> Unit,
+    onEditGroup: (groupId: String) -> Unit,
     viewModel: GroupDetailViewModel = hiltViewModel(),
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     val group by viewModel.group.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val balances by viewModel.balances.collectAsState()
@@ -81,8 +88,20 @@ fun GroupDetailScreen(
                         IconButton(onClick = { shareGroupInvite(context, groupId, g?.name ?: "group") }) {
                             Icon(Icons.Filled.Share, contentDescription = "Share invite")
                         }
-                        IconButton(onClick = { onOpenDashboard(groupId) }) {
-                            Icon(Icons.Filled.BarChart, contentDescription = "Insights")
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Edit group") },
+                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                onClick = { menuOpen = false; onEditGroup(groupId) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Insights") },
+                                leadingIcon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
+                                onClick = { menuOpen = false; onOpenDashboard(groupId) },
+                            )
                         }
                     }
                 },
@@ -133,7 +152,7 @@ fun <T> StateSlice(
     content: @Composable (T) -> Unit,
 ) {
     when (state) {
-        is UiState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+        is UiState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { WavyProgress() }
         is UiState.Empty -> CenteredMessage(emptyMessage)
         is UiState.Error -> CenteredMessage(state.message)
         is UiState.Data -> content(state.value)

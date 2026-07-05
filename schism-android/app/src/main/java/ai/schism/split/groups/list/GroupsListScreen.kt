@@ -18,16 +18,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -56,12 +57,14 @@ fun GroupsListScreen(
     onOpenGroup: (String) -> Unit,
     onCreateGroup: () -> Unit,
     onJoinGroup: () -> Unit,
+    onScanBill: () -> Unit,
     viewModel: GroupsListViewModel = hiltViewModel(),
 ) {
+    val scanBill = ai.schism.split.sms.itemized.rememberBillScan(onItemized = onScanBill)
     val state by viewModel.state.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     LaunchedEffect(viewModel) {
         viewModel.errors.collectLatest { snackbarHostState.showSnackbar(it) }
@@ -70,9 +73,12 @@ fun GroupsListScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("Groups") },
                 actions = {
+                    IconButton(onClick = scanBill) {
+                        Icon(Icons.Filled.DocumentScanner, contentDescription = "Scan a bill")
+                    }
                     IconButton(onClick = onJoinGroup) {
                         Icon(Icons.Filled.GroupAdd, contentDescription = "Join a group")
                     }
@@ -95,7 +101,7 @@ fun GroupsListScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when (val s = state) {
-                is UiState.Loading -> Centered { CircularProgressIndicator() }
+                is UiState.Loading -> Centered { WavyProgress() }
                 is UiState.Empty -> EmptyGroups()
                 is UiState.Error -> Centered { Message("Couldn't load groups", s.message) }
                 is UiState.Data -> GroupList(s.value, onOpenGroup)
