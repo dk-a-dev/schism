@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -23,28 +24,40 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+
+private data class ActionStyle(val verb: String, val icon: ImageVector, val tone: Tone)
+private enum class Tone { Positive, Neutral, Warn, Negative }
 
 @Composable
 fun ActivityTab(
     state: UiState<List<Activity>>,
     participantNames: Map<String, String>,
 ) {
+    val today = remember { LocalDate.now() }
     StateSlice(state, emptyMessage = "No activity yet.") { activities ->
         LazyColumn(Modifier.fillMaxSize()) {
             items(activities, key = { it.id }) { activity ->
                 val who = activity.participantId?.let { participantNames[it] ?: it }
-                val (verb, icon) = action(activity.activityType)
+                val style = action(activity.activityType)
                 val detail = activity.data.takeIf { it.isNotBlank() }
+                val headline = buildString {
+                    if (who != null) append("$who ")
+                    append(style.verb)
+                    if (detail != null) append(" “$detail”")
+                }
                 ListItem(
-                    leadingContent = { ActionAvatar(icon) },
-                    headlineContent = { Text(if (detail != null) "$verb “$detail”" else verb) },
-                    supportingContent = who?.let { { Text("by $it") } },
-                    trailingContent = activity.time.let { t ->
-                        prettyDate(t)?.let { { Text(it, style = MaterialTheme.typography.labelMedium) } }
+                    leadingContent = { ActionAvatar(style.icon, style.tone) },
+                    headlineContent = { Text(headline, fontWeight = FontWeight.Medium) },
+                    supportingContent = prettyWhen(activity.time, today)?.let {
+                        { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 )
@@ -54,41 +67,52 @@ fun ActivityTab(
 }
 
 @Composable
-private fun ActionAvatar(icon: ImageVector) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.size(40.dp),
-    ) {
+private fun ActionAvatar(icon: ImageVector, tone: Tone) {
+    val (bg, fg) = toneColors(tone)
+    Surface(shape = CircleShape, color = bg, modifier = Modifier.size(40.dp)) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(20.dp).padding(0.dp),
-            )
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp).padding(0.dp))
         }
     }
 }
 
-private fun action(type: String): Pair<String, ImageVector> = when (type) {
-    "CREATE_EXPENSE", "EXPENSE_CREATED" -> "Added" to Icons.Filled.Add
-    "UPDATE_EXPENSE", "EXPENSE_UPDATED" -> "Updated" to Icons.Filled.Edit
-    "DELETE_EXPENSE", "EXPENSE_DELETED" -> "Removed" to Icons.Filled.Delete
-    "UPDATE_GROUP", "GROUP_UPDATED" -> "Updated the group" to Icons.Filled.Group
-    else -> type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() } to
-        Icons.AutoMirrored.Filled.ReceiptLong
+@Composable
+private fun toneColors(tone: Tone): Pair<Color, Color> = with(MaterialTheme.colorScheme) {
+    when (tone) {
+        Tone.Positive -> primaryContainer to onPrimaryContainer
+        Tone.Neutral -> secondaryContainer to onSecondaryContainer
+        Tone.Warn -> tertiaryContainer to onTertiaryContainer
+        Tone.Negative -> errorContainer to onErrorContainer
+    }
+}
+
+private fun action(type: String): ActionStyle = when (type) {
+    "CREATE_EXPENSE", "EXPENSE_CREATED" -> ActionStyle("added", Icons.Filled.Add, Tone.Positive)
+    "UPDATE_EXPENSE", "EXPENSE_UPDATED" -> ActionStyle("updated", Icons.Filled.Edit, Tone.Warn)
+    "DELETE_EXPENSE", "EXPENSE_DELETED" -> ActionStyle("removed", Icons.Filled.Delete, Tone.Negative)
+    "SETTLE", "REIMBURSEMENT" -> ActionStyle("settled up", Icons.Filled.SwapHoriz, Tone.Positive)
+    "UPDATE_GROUP", "GROUP_UPDATED" -> ActionStyle("updated the group", Icons.Filled.Group, Tone.Neutral)
+    else -> ActionStyle(
+        type.lowercase().replace('_', ' '),
+        Icons.AutoMirrored.Filled.ReceiptLong,
+        Tone.Neutral,
+    )
 }
 
 private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
-/** "2026-07-05T00:00:00Z" -> "Jul 5". Returns null if the string isn't a recognizable date. */
-private fun prettyDate(time: String): String? {
-    val date = time.take(10) // yyyy-MM-dd
-    val parts = date.split("-")
+/** Relative day label: "Today" / "Yesterday" / "Jul 5", from an ISO timestamp. */
+private fun prettyWhen(time: String, today: LocalDate): String? {
+    val parts = time.take(10).split("-")
     if (parts.size != 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
     val month = parts[1].toIntOrNull() ?: return null
     val day = parts[2].toIntOrNull() ?: return null
     if (month !in 1..12) return null
-    return "${MONTHS[month - 1]} $day"
+    val d = runCatching { LocalDate.of(year, month, day) }.getOrNull() ?: return null
+    return when (today.toEpochDay() - d.toEpochDay()) {
+        0L -> "Today"
+        1L -> "Yesterday"
+        else -> "${MONTHS[month - 1]} $day"
+    }
 }

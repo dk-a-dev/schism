@@ -53,17 +53,27 @@ class JoinGroupViewModel @Inject constructor(
     }
 
     companion object {
-        /** `schism://group/<id>`, any `.../group/<id>` URL, or a bare id all resolve to `<id>`. */
+        /**
+         * Resolve a group id from any invite form: the https link `<backend>/g/<id>`, the
+         * `schism://group/<id>` deep link, any `.../group/<id>` URL, or a bare id.
+         */
         fun parseGroupId(input: String): String {
             val trimmed = input.trim()
             val afterGroup = when {
                 trimmed.contains("/group/") -> trimmed.substringAfterLast("/group/")
+                trimmed.contains("/g/") -> trimmed.substringAfterLast("/g/")
                 else -> trimmed
             }
-            return afterGroup.substringBefore('?').substringBefore('/').trim()
+            return afterGroup.substringBefore('?').substringBefore('#').substringBefore('/').trim()
         }
 
-        /** The canonical deep link shared to invite others to a group. */
-        fun shareLink(id: String): String = "schism://group/$id"
+        /**
+         * The invite link shared to others. Uses the backend's https base so it renders as a
+         * tappable link in messengers (WhatsApp etc.); the backend page bounces into the app.
+         */
+        fun shareLink(id: String): String {
+            val base = ai.schism.split.BuildConfig.BACKEND_URL.trimEnd('/')
+            return "$base/g/$id"
+        }
     }
 }

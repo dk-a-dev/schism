@@ -21,6 +21,9 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 		r.Use(middleware.Logger)
 	}
 
+	// Public invite landing (https so messengers linkify it) → bounces into the app.
+	r.Get("/g/{groupID}", h.inviteLanding)
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(h.withUser)
 		r.Get("/categories", h.listCategories)
