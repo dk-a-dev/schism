@@ -21,6 +21,9 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 		r.Use(middleware.Logger)
 	}
 
+	// Friendly root health check.
+	r.Get("/ping", h.ping)
+
 	// Public invite landing (https so messengers linkify it) → bounces into the app.
 	r.Get("/g/{groupID}", h.inviteLanding)
 
