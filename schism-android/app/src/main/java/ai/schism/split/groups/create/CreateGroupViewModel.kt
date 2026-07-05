@@ -1,0 +1,110 @@
+package ai.schism.split.groups.create
+
+import ai.schism.split.core.net.CreateGroupRequest
+import ai.schism.split.core.net.ParticipantRequest
+import ai.schism.split.core.settings.SettingsRepository
+import ai.schism.split.groups.data.GroupRepository
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class CreateGroupForm(
+    val name: String = "",
+    val currency: String = "₹",
+    val currencyCode: String = "INR",
+    val information: String = "",
+    val participants: List<String> = listOf(""),
+)
+
+data class CreateGroupUiState(
+    val form: CreateGroupForm = CreateGroupForm(),
+    val nameError: String? = null,
+    val participantsError: String? = null,
+    val submitting: Boolean = false,
+    val submitError: String? = null,
+)
+
+@HiltViewModel
+class CreateGroupViewModel @Inject constructor(
+    private val repo: GroupRepository,
+    private val settings: SettingsRepository,
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(CreateGroupUiState())
+    val state: StateFlow<CreateGroupUiState> = _state.asStateFlow()
+
+    init {
+        // Seed the form with the app's default currency (₹/INR unless the user changed it).
+        viewModelScope.launch {
+            val symbol = settings.currencySymbol.first()
+            val code = settings.currencyCode.first()
+            _state.update { it.copy(form = it.form.copy(currency = symbol, currencyCode = code)) }
+        }
+    }
+
+    fun onNameChange(value: String) =
+        _state.update { it.copy(form = it.form.copy(name = value), nameError = null) }
+
+    fun onInformationChange(value: String) =
+        _state.update { it.copy(form = it.form.copy(information = value)) }
+
+    fun onCurrencyChange(symbol: String, code: String) =
+        _state.update { it.copy(form = it.form.copy(currency = symbol, currencyCode = code)) }
+
+    fun onParticipantChange(index: Int, value: String) = _state.update { s ->
+        val next = s.form.participants.toMutableList().also { it[index] = value }
+        s.copy(form = s.form.copy(participants = next), participantsError = null)
+    }
+
+    fun addParticipant() =
+        _state.update { it.copy(form = it.form.copy(participants = it.form.participants + "")) }
+
+    fun removeParticipant(index: Int) = _state.update { s ->
+        if (s.form.participants.size <= 1) return@update s
+        s.copy(form = s.form.copy(participants = s.form.participants.filterIndexed { i, _ -> i != index }))
+    }
+
+    /** Validates locally (mirrors the backend), then creates online. Calls [onSuccess] with the new id. */
+    fun submit(onSuccess: (String) -> Unit) {
+        val form = _state.value.form
+        val name = form.name.trim()
+        val names = form.participants.map { it.trim() }.filter { it.isNotEmpty() }
+        val hasDuplicates = names.map { it.lowercase() }.toSet().size != names.size
+
+        val nameError = if (name.length < 2) "Name must be at least 2 characters" else null
+        val participantsError = when {
+            names.isEmpty() -> "Add at least one participant"
+            hasDuplicates -> "Participant names must be unique"
+            else -> null
+        }
+        if (nameError != null || participantsError != null) {
+            _state.update { it.copy(nameError = nameError, participantsError = participantsError) }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(submitting = true, submitError = null) }
+            repo.createGroup(
+                CreateGroupRequest(
+                    name = name,
+                    information = form.information.trim(),
+                    currency = form.currency,
+                    currencyCode = form.currencyCode,
+                    participants = names.map { ParticipantRequest(name = it) },
+                ),
+            ).onSuccess { id ->
+                _state.update { it.copy(submitting = false) }
+                onSuccess(id)
+            }.onFailure { e ->
+                _state.update { it.copy(submitting = false, submitError = e.message ?: "Couldn't create group") }
+            }
+        }
+    }
+}

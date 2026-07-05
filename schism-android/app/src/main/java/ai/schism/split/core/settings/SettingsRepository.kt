@@ -27,6 +27,10 @@ class SettingsRepository @Inject constructor(
     val profileName: Flow<String> = ds.data.map { it[KEY_NAME] ?: "" }
     val knownGroupIds: Flow<Set<String>> = ds.data.map { it[KEY_GROUPS] ?: emptySet() }
 
+    /** App-wide default currency for new groups (symbol + ISO code). Defaults to Indian Rupee. */
+    val currencySymbol: Flow<String> = ds.data.map { it[KEY_CUR_SYMBOL] ?: DEFAULT_CURRENCY_SYMBOL }
+    val currencyCode: Flow<String> = ds.data.map { it[KEY_CUR_CODE] ?: DEFAULT_CURRENCY_CODE }
+
     suspend fun setBackendUrl(url: String) {
         ds.edit { it[KEY_URL] = url.trim() }
     }
@@ -47,10 +51,26 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setDefaultCurrency(symbol: String, code: String) {
+        ds.edit {
+            it[KEY_CUR_SYMBOL] = symbol.trim()
+            it[KEY_CUR_CODE] = code.trim()
+        }
+    }
+
+    /** Wipe all device-local settings (used by "reset" and to isolate tests). */
+    suspend fun clear() {
+        ds.edit { it.clear() }
+    }
+
     companion object {
         const val DEFAULT_BACKEND_URL = "http://10.0.2.2:8080"
+        const val DEFAULT_CURRENCY_SYMBOL = "₹"
+        const val DEFAULT_CURRENCY_CODE = "INR"
         private val KEY_URL = stringPreferencesKey("backend_url")
         private val KEY_NAME = stringPreferencesKey("profile_name")
         private val KEY_GROUPS = stringSetPreferencesKey("known_group_ids")
+        private val KEY_CUR_SYMBOL = stringPreferencesKey("currency_symbol")
+        private val KEY_CUR_CODE = stringPreferencesKey("currency_code")
     }
 }

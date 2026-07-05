@@ -2,9 +2,11 @@ package ai.schism.split.core.settings
 
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -14,6 +16,9 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 class SettingsRepositoryTest {
     private val repo = SettingsRepository(ApplicationProvider.getApplicationContext())
+
+    @Before
+    fun setUp() = runBlocking { repo.clear() } // DataStore is a JVM singleton; isolate from other tests
 
     @Test
     fun defaultsThenPersists() = runTest {

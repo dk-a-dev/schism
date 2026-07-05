@@ -1,20 +1,16 @@
-package ai.schism.split.groups.list
+package ai.schism.split.groups.create
 
 import ai.schism.split.core.db.GroupDao
-import ai.schism.split.core.db.GroupEntity
-import ai.schism.split.core.db.ParticipantEntity
 import ai.schism.split.core.db.SchismDb
 import ai.schism.split.core.net.ApiClient
 import ai.schism.split.core.net.ApiService
 import ai.schism.split.core.settings.SettingsRepository
-import ai.schism.split.core.ui.UiState
 import ai.schism.split.groups.data.GroupRepository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -25,6 +21,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -35,7 +32,7 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
-class GroupsListViewModelTest {
+class CreateGroupViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var server: MockWebServer
     private lateinit var db: SchismDb
@@ -43,6 +40,7 @@ class GroupsListViewModelTest {
     private lateinit var api: ApiService
     private lateinit var settings: SettingsRepository
     private lateinit var repo: GroupRepository
+    private lateinit var vm: CreateGroupViewModel
 
     @Before
     fun setUp() {
@@ -58,6 +56,7 @@ class GroupsListViewModelTest {
         settings = SettingsRepository(ApplicationProvider.getApplicationContext())
         runBlocking { settings.clear() } // DataStore is a JVM singleton; isolate from other tests
         repo = GroupRepository(api, dao, settings)
+        vm = CreateGroupViewModel(repo, settings)
     }
 
     @After
@@ -67,45 +66,51 @@ class GroupsListViewModelTest {
         db.close()
     }
 
-    private fun group(id: String, name: String) =
-        GroupEntity(id, name, "", "₹", "INRINR", "2026-07-05T00:00:00Z")
-
-    private suspend fun data(vm: GroupsListViewModel) =
-        vm.state.filterIsInstance<UiState.Data<List<GroupSummary>>>().first().value
-
     @Test
-    fun favoritesPinnedFirstAndMembersCounted() = runTest(dispatcher) {
-        dao.upsertGroupWithParticipants(group("g1", "Alpha"), listOf(ParticipantEntity("p1", "g1", "A")))
-        dao.upsertGroupWithParticipants(
-            group("g2", "Beta"),
-            listOf(ParticipantEntity("p2", "g2", "B"), ParticipantEntity("p3", "g2", "C")),
-        )
-        dao.setFavorite("g2", true) // favorite must sort ahead of the alphabetically-earlier "Alpha"
+    fun shortNameFailsValidationWithoutCallingApi() = runTest(dispatcher) {
+        vm.onNameChange("A")
+        vm.onParticipantChange(0, "Dev")
 
-        val vm = GroupsListViewModel(repo, settings)
+        var called = false
+        vm.submit { called = true }
 
-        val summaries = data(vm)
-        assertEquals(listOf("g2", "g1"), summaries.map { it.id })
-        assertEquals(2, summaries[0].memberCount)
-        assertEquals(1, summaries[1].memberCount)
+        assertNotNull("short name should set a field error", vm.state.value.nameError)
+        assertTrue("valid submit must not be reached", !called)
+        assertEquals("no API call on invalid form", 0, server.requestCount)
     }
 
     @Test
-    fun refreshFailureRetainsCachedDataAndEmitsError() = runTest(dispatcher) {
-        dao.upsertGroupWithParticipants(group("g1", "Alpha"), listOf(ParticipantEntity("p1", "g1", "A")))
+    fun duplicateParticipantsFailValidationWithoutCallingApi() = runTest(dispatcher) {
+        vm.onNameChange("Goa Trip")
+        vm.onParticipantChange(0, "Dev")
+        vm.addParticipant()
+        vm.onParticipantChange(1, "  dev ") // same name, different case/spacing
 
-        val vm = GroupsListViewModel(repo, settings) // init refresh is a no-op (no known groups yet)
-        // Subscribe before triggering; DataStore/OkHttp run on real dispatchers, so await the
-        // emission rather than polling virtual time.
-        val firstError = async { vm.errors.first() }
+        vm.submit { }
 
-        settings.addKnownGroup("g1") // so refresh() actually calls the API
-        server.enqueue(MockResponse().setResponseCode(500))
-        vm.refresh()
+        assertNotNull(vm.state.value.participantsError)
+        assertEquals(0, server.requestCount)
+    }
 
-        val message = firstError.await()
-        assertTrue("a refresh error should be surfaced", message.isNotEmpty())
-        // cache (and therefore state) is untouched by the failed refresh
-        assertEquals(listOf("g1"), data(vm).map { it.id })
+    @Test
+    fun validFormCreatesGroupAndRegistersKnownId() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"groupId":"g1"}"""))
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":"g1","name":"Goa Trip","currency":"₹","currencyCode":"INR",
+                    "participants":[{"id":"p1","groupId":"g1","name":"Dev"}]}""",
+            ),
+        )
+
+        vm.onNameChange("Goa Trip")
+        vm.onParticipantChange(0, "Dev")
+
+        val created = CompletableDeferred<String>()
+        vm.submit { created.complete(it) }
+        val id = created.await()
+
+        assertEquals("g1", id)
+        assertEquals("/v1/groups", server.takeRequest().path)
+        assertTrue(settings.knownGroupIds.first().contains("g1"))
     }
 }

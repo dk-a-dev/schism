@@ -10,6 +10,7 @@ import ai.schism.split.core.settings.SettingsRepository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -44,6 +45,7 @@ class GroupRepositoryTest {
         dao = db.groupDao()
         api = ApiClient.create(server.url("/").toString())
         settings = SettingsRepository(ApplicationProvider.getApplicationContext())
+        runBlocking { settings.clear() } // DataStore is a JVM singleton; isolate from other tests
         repo = GroupRepository(api, dao, settings)
     }
 
@@ -54,7 +56,7 @@ class GroupRepositoryTest {
     }
 
     private fun groupJson(id: String, name: String) =
-        """{"id":"$id","name":"$name","information":"","currency":"$","currencyCode":"USD",
+        """{"id":"$id","name":"$name","information":"","currency":"₹","currencyCode":"INR",
             "createdAt":"2026-07-05T00:00:00Z",
             "participants":[{"id":"p1","groupId":"$id","name":"A"},
                             {"id":"p2","groupId":"$id","name":"B"}]}"""
