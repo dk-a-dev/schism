@@ -24,6 +24,9 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 	// Public invite landing (https so messengers linkify it) → bounces into the app.
 	r.Get("/g/{groupID}", h.inviteLanding)
 
+	// On-device model download (redirects to the ungated model, or proxies a gated one with HF_TOKEN).
+	r.Get("/model", h.modelDownload)
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(h.withUser)
 		r.Get("/categories", h.listCategories)
