@@ -51,6 +51,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- The model download runs as a dataSync foreground service (WorkManager). -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <!-- On-demand WorkManager init (see SchismApp): remove the default initializer. -->
         <provider
             android:name="androidx.startup.InitializationProvider"

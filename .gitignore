@@ -23,3 +23,8 @@ local.properties
 .cxx/
 captures/
 /schism-backend/seed
+
+# ─── release signing secrets (never commit) ───
+keystore.properties
+*.jks
+*.keystore

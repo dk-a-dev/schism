@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -13,6 +15,18 @@ val backendUrl: String = System.getenv("SCHISM_BACKEND_URL")
     ?: (project.findProperty("schism.backendUrl") as String?)
     ?: "https://api.schism.182116111.xyz"
 
+// Release signing is read from keystore.properties (gitignored) so secrets never enter git.
+// Format:
+//   storeFile=/absolute/path/to/keystore.jks
+//   storePassword=...
+//   keyAlias=...
+//   keyPassword=...
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+val hasReleaseSigning = keystoreProps.getProperty("storeFile") != null
+
 android {
     namespace = "ai.schism.split"
     compileSdk = 35
@@ -27,13 +41,31 @@ android {
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // R8 off: the app relies on reflection (serialization/Retrofit/Room/Hilt/MediaPipe); keep
+            // the release build unshrunk so 1.0.0 is reliable. Signed with the release key if present.
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
