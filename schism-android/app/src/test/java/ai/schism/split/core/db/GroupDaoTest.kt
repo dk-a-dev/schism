@@ -32,7 +32,7 @@ class GroupDaoTest {
     fun tearDown() = db.close()
 
     private fun group(id: String, name: String) =
-        GroupEntity(id, name, "", "$", "USD", "2026-07-05T00:00:00Z")
+        GroupEntity(id, name, "", "₹", "INR", "2026-07-05T00:00:00Z")
 
     @Test
     fun upsertAndObserveGroupWithParticipants() = runTest {
