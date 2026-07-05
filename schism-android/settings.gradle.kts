@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "schism-android"
 include(":app")
+include(":parser-core")

@@ -76,6 +76,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.work.runtime)
+    implementation(project(":parser-core"))
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
