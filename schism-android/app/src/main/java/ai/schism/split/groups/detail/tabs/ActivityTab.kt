@@ -4,10 +4,19 @@ import ai.schism.split.core.money.formatMinor
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.expense.data.Activity
 import ai.schism.split.groups.detail.StateSlice
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -37,6 +46,13 @@ import java.time.LocalDate
 private data class ActionStyle(val verb: String, val icon: ImageVector, val tone: Tone)
 private enum class Tone { Positive, Neutral, Warn, Negative }
 
+private enum class ActivityFilter(val label: String, val matches: (String) -> Boolean) {
+    All("All", { true }),
+    Added("Added", { it == "CREATE_EXPENSE" || it == "EXPENSE_CREATED" }),
+    Updated("Updated", { it == "UPDATE_EXPENSE" || it == "EXPENSE_UPDATED" || it.contains("GROUP") }),
+    Removed("Removed", { it == "DELETE_EXPENSE" || it == "EXPENSE_DELETED" }),
+}
+
 @Composable
 fun ActivityTab(
     state: UiState<List<Activity>>,
@@ -44,9 +60,24 @@ fun ActivityTab(
     currency: String,
 ) {
     val today = remember { LocalDate.now() }
+    var filter by remember { mutableStateOf(ActivityFilter.All) }
     StateSlice(state, emptyMessage = "No activity yet.") { activities ->
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(activities, key = { it.id }) { activity ->
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ActivityFilter.entries.forEach { f ->
+                    FilterChip(
+                        selected = filter == f,
+                        onClick = { filter = f },
+                        label = { Text(f.label) },
+                    )
+                }
+            }
+            val shown = activities.filter { filter.matches(it.activityType) }
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(shown, key = { it.id }) { activity ->
                 val who = activity.participantId?.let { participantNames[it] ?: it }
                 val style = action(activity.activityType)
                 val detail = activity.data.takeIf { it.isNotBlank() }
@@ -75,6 +106,7 @@ fun ActivityTab(
                     },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 )
+                }
             }
         }
     }
