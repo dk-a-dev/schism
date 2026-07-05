@@ -26,6 +26,8 @@ class SettingsRepository @Inject constructor(
     private val ds = context.dataStore
 
     val profileName: Flow<String> = ds.data.map { it[KEY_NAME] ?: "" }
+    /** The backend user id for this device's identity (empty until registered). */
+    val userId: Flow<String> = ds.data.map { it[KEY_USER_ID] ?: "" }
     val email: Flow<String> = ds.data.map { it[KEY_EMAIL] ?: "" }
     val phone: Flow<String> = ds.data.map { it[KEY_PHONE] ?: "" }
     /** Whether the one-time onboarding (identity capture) has been completed on this device. */
@@ -51,6 +53,10 @@ class SettingsRepository @Inject constructor(
             it[KEY_PHONE] = phone.trim()
             it[KEY_ONBOARDED] = true
         }
+    }
+
+    suspend fun setUserId(id: String) {
+        ds.edit { it[KEY_USER_ID] = id }
     }
 
     suspend fun addKnownGroup(id: String) {
@@ -86,6 +92,7 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_CURRENCY_CODE = "INR"
         const val DEFAULT_THEME_MODE = "SYSTEM"
         private val KEY_NAME = stringPreferencesKey("profile_name")
+        private val KEY_USER_ID = stringPreferencesKey("user_id")
         private val KEY_EMAIL = stringPreferencesKey("profile_email")
         private val KEY_PHONE = stringPreferencesKey("profile_phone")
         private val KEY_ONBOARDED = booleanPreferencesKey("onboarded")

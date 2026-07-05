@@ -57,7 +57,11 @@ class SettingsViewModelTest {
         vm.saveProfileName("  Dev  ") // setProfileName trims
         vm.saveDefaultCurrency("€", "EUR")
 
-        val ui = vm.state.first { it.profileName == "Dev" && it.currencyCode == "EUR" }
+        // Wait for the fully-consistent state (combine of separate DataStore flows can briefly
+        // surface a mixed tuple where the code has updated but the symbol hasn't yet).
+        val ui = vm.state.first {
+            it.profileName == "Dev" && it.currencyCode == "EUR" && it.currencySymbol == "€"
+        }
         assertEquals("Dev", ui.profileName)
         assertEquals("€", ui.currencySymbol)
         assertEquals("EUR", ui.currencyCode)

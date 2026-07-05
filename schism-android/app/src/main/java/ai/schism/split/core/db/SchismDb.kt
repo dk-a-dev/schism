@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase
         PaidForEntity::class,
         CategoryEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class SchismDb : RoomDatabase() {

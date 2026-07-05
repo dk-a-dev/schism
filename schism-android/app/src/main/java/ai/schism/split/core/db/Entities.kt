@@ -26,6 +26,7 @@ data class ParticipantEntity(
     @PrimaryKey val id: String,
     val groupId: String,
     val name: String,
+    val userId: String? = null,
 )
 
 @Entity(

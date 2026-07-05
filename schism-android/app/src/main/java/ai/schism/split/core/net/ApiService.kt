@@ -12,6 +12,9 @@ import retrofit2.http.Query
 
 interface ApiService {
 
+    @POST("v1/users")
+    suspend fun registerUser(@Body body: UserRequest): UserDto
+
     @GET("v1/categories")
     suspend fun listCategories(): List<CategoryDto>
 

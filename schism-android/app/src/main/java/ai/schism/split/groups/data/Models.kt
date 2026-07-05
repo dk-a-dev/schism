@@ -6,6 +6,7 @@ data class Participant(
     val id: String,
     val groupId: String,
     val name: String,
+    val userId: String? = null,
 )
 
 data class Group(

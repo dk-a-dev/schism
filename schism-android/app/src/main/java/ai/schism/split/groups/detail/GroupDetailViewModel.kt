@@ -78,12 +78,19 @@ class GroupDetailViewModel @Inject constructor(
             .onFailure { _activities.value = UiState.Error(it.message ?: "Couldn't load activity") }
     }
 
-    /** If no participant is chosen yet, auto-select the one whose name matches the device profile. */
+    /**
+     * If no participant is chosen yet, auto-select "you": prefer the participant linked to this
+     * device's backend user id (robust across groups), falling back to a profile-name match.
+     */
     private suspend fun resolveYou(g: Group?) {
         if (g == null || g.activeParticipantId != null) return
+        val userId = settings.userId.first()
+        val byUser = userId.takeIf { it.isNotBlank() }
+            ?.let { uid -> g.participants.firstOrNull { it.userId == uid } }
         val profile = settings.profileName.first().trim()
-        if (profile.isEmpty()) return
-        val match = g.participants.firstOrNull { it.name.trim().equals(profile, ignoreCase = true) }
+        val byName = profile.takeIf { it.isNotEmpty() }
+            ?.let { p -> g.participants.firstOrNull { it.name.trim().equals(p, ignoreCase = true) } }
+        val match = byUser ?: byName
         if (match != null) groupRepo.setActiveParticipant(groupId, match.id)
     }
 

@@ -9,6 +9,23 @@ data class ParticipantDto(
     val id: String = "",
     val groupId: String = "",
     val name: String = "",
+    val userId: String? = null,
+)
+
+@Serializable
+data class UserDto(
+    val id: String,
+    val name: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val createdAt: String = "",
+)
+
+@Serializable
+data class UserRequest(
+    val name: String,
+    val email: String = "",
+    val phone: String = "",
 )
 
 @Serializable
@@ -89,6 +106,7 @@ data class ActivityDto(
 data class ParticipantRequest(
     val id: String? = null,
     val name: String,
+    val userId: String? = null,
 )
 
 @Serializable

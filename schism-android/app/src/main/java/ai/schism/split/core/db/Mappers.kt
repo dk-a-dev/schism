@@ -19,7 +19,7 @@ fun GroupDto.toEntity(): GroupEntity = GroupEntity(
 )
 
 fun GroupDto.participantEntities(): List<ParticipantEntity> =
-    participants.map { ParticipantEntity(id = it.id, groupId = id, name = it.name) }
+    participants.map { ParticipantEntity(id = it.id, groupId = id, name = it.name, userId = it.userId) }
 
 fun ExpenseDto.toEntity(): ExpenseEntity = ExpenseEntity(
     id = id,
@@ -50,7 +50,7 @@ fun GroupWithParticipants.toDomain(): Group = Group(
     information = group.information,
     currency = group.currency,
     currencyCode = group.currencyCode,
-    participants = participants.map { Participant(it.id, it.groupId, it.name) },
+    participants = participants.map { Participant(it.id, it.groupId, it.name, it.userId) },
     isFavorite = group.isFavorite,
     activeParticipantId = group.activeParticipantId,
 )

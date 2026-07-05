@@ -40,12 +40,25 @@ class CreateGroupViewModel @Inject constructor(
     private val _state = MutableStateFlow(CreateGroupUiState())
     val state: StateFlow<CreateGroupUiState> = _state.asStateFlow()
 
+    // The device owner, used to link their participant to their backend user across groups.
+    private var youName: String = ""
+    private var youUserId: String = ""
+
     init {
-        // Seed the form with the app's default currency (₹/INR unless the user changed it).
+        // Seed the form with the app's default currency and prefill "you" as the first participant.
         viewModelScope.launch {
             val symbol = settings.currencySymbol.first()
             val code = settings.currencyCode.first()
-            _state.update { it.copy(form = it.form.copy(currency = symbol, currencyCode = code)) }
+            youName = settings.profileName.first().trim()
+            youUserId = settings.userId.first()
+            _state.update { s ->
+                val participants = if (youName.isNotBlank() && s.form.participants.all { it.isBlank() }) {
+                    listOf(youName) + s.form.participants.drop(1)
+                } else {
+                    s.form.participants
+                }
+                s.copy(form = s.form.copy(currency = symbol, currencyCode = code, participants = participants))
+            }
         }
     }
 
@@ -111,7 +124,12 @@ class CreateGroupViewModel @Inject constructor(
                     information = form.information.trim(),
                     currency = form.currency,
                     currencyCode = form.currencyCode,
-                    participants = names.map { ParticipantRequest(name = it) },
+                    participants = names.map { participantName ->
+                        // Link the device owner's participant to their backend user.
+                        val linkedUserId = youUserId
+                            .takeIf { it.isNotBlank() && participantName.equals(youName, ignoreCase = true) }
+                        ParticipantRequest(name = participantName, userId = linkedUserId)
+                    },
                 ),
             ).onSuccess { id ->
                 _state.update { it.copy(submitting = false) }
