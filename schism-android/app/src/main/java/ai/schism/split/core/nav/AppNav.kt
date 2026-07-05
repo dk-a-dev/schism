@@ -174,6 +174,11 @@ fun AppNav() {
                         nullable = true
                         defaultValue = null
                     },
+                    navArgument("transactionId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
                 ),
             ) {
                 ExpenseEditScreen(
@@ -196,10 +201,15 @@ fun AppNav() {
             composable(
                 Routes.PUSH_SPLIT,
                 arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
-            ) {
+            ) { entry ->
+                val txnId = entry.arguments?.getString("transactionId").orEmpty()
                 PushToSplitScreen(
                     onBack = { navController.popBackStack() },
-                    onDone = { navController.popBackStack() },
+                    onContinue = { groupId ->
+                        navController.navigate(Routes.splitTransaction(groupId, txnId)) {
+                            popUpTo(Routes.PUSH_SPLIT) { inclusive = true }
+                        }
+                    },
                 )
             }
             composable(Routes.DASHBOARD) { PersonalDashboardScreen() }

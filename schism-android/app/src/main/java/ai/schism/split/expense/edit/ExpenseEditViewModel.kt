@@ -159,11 +159,15 @@ class ExpenseEditViewModel @Inject constructor(
     private val expenseRepo: ExpenseRepository,
     private val api: ApiService,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
+    private val smsRepo: ai.schism.split.sms.data.SmsRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     val groupId: String = checkNotNull(savedStateHandle["groupId"])
     val expenseId: String? = savedStateHandle["expenseId"]
+    // When set, this expense is being created from an SMS transaction: prefill from it, and mark the
+    // transaction pushed once saved.
+    private val transactionId: String? = savedStateHandle["transactionId"]
 
     // Who is acting: the device's active participant in this group. Stamped onto new expenses so the
     // group can attribute and gate edits; on an edit we keep the original creator instead.
@@ -196,6 +200,21 @@ class ExpenseEditViewModel @Inject constructor(
                 }
                 existingAddedBy = existing.addedBy
             }
+            // Create-from-transaction: prefill title/amount/date from the SMS transaction.
+            if (existing == null && transactionId != null) {
+                smsRepo.getById(transactionId)?.let { txn ->
+                    val iso = java.time.Instant.ofEpochMilli(txn.timestamp)
+                        .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                    _state.update {
+                        it.copy(
+                            title = it.title.ifBlank { txn.merchant },
+                            amountText = it.amountText.ifBlank { minorToPlain(txn.amountMinor) },
+                            expenseDate = it.expenseDate ?: iso,
+                        )
+                    }
+                }
+            }
+
             val paidForById = existing?.paidFor?.associateBy { it.participantId } ?: emptyMap()
 
             // Participants come from the group cache; reconcile rows without clobbering edits.
@@ -278,7 +297,12 @@ class ExpenseEditViewModel @Inject constructor(
                 viewModelScope.launch {
                     _state.update { it.copy(submitting = true, error = null) }
                     val result = if (expenseId == null) {
-                        expenseRepo.createExpense(groupId, request)
+                        expenseRepo.createExpense(groupId, request).onSuccess { expense ->
+                            // If this came from an SMS transaction, mark it pushed to the group.
+                            if (transactionId != null && expense != null) {
+                                smsRepo.markPushed(transactionId, groupId, expense.id)
+                            }
+                        }.map { }
                     } else {
                         expenseRepo.updateExpense(groupId, expenseId, request)
                     }

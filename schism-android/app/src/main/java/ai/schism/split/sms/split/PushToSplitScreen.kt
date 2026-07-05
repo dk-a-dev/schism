@@ -48,7 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun PushToSplitScreen(
     onBack: () -> Unit,
-    onDone: () -> Unit,
+    onContinue: (groupId: String) -> Unit,
     viewModel: PushToSplitViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -85,14 +85,6 @@ fun PushToSplitScreen(
                         key = txn.id,
                     )
 
-                    OutlinedTextField(
-                        value = state.title,
-                        onValueChange = viewModel::onTitleChange,
-                        label = { Text("Title") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
                     if (state.groups.isEmpty()) {
                         Text(
                             "Join or create a group first to split this transaction.",
@@ -100,57 +92,30 @@ fun PushToSplitScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
+                        Text(
+                            "Which group is this for?",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         val selectedGroup = state.groups.firstOrNull { it.id == state.selectedGroupId }
                         GroupPicker(
                             groups = state.groups,
                             selected = selectedGroup,
                             onSelect = viewModel::onGroupChange,
                         )
-                        if (selectedGroup != null) {
-                            PaidByPicker(
-                                group = selectedGroup,
-                                paidById = state.paidById,
-                                onSelect = viewModel::onPaidByChange,
-                            )
-                            Text(
-                                "Split between",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            selectedGroup.participants.forEach { p ->
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Checkbox(
-                                        checked = p.id in state.includedIds,
-                                        onCheckedChange = { viewModel.toggleIncluded(p.id) },
-                                    )
-                                    Text(p.name, style = MaterialTheme.typography.bodyLarge)
-                                }
-                            }
-                        }
-                    }
-
-                    state.error?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "You'll set the split, who paid, and participants on the next screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     Button(
-                        onClick = { viewModel.submit(onDone) },
-                        enabled = !state.submitting && state.selectedGroupId != null && state.paidById.isNotBlank(),
+                        onClick = { state.selectedGroupId?.let(onContinue) },
+                        enabled = state.selectedGroupId != null,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (state.submitting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        } else {
-                            Text("Add to group")
-                        }
+                        Text("Continue to split")
                     }
                 }
             }

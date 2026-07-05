@@ -17,7 +17,7 @@ object Routes {
     const val OPEN_GROUP = "open_group/{groupId}"
     const val GROUP_DETAIL = "groups/detail/{groupId}"
     const val GROUP_DASHBOARD = "groups/detail/{groupId}/dashboard"
-    const val EXPENSE_EDIT = "groups/detail/{groupId}/expense?expenseId={expenseId}"
+    const val EXPENSE_EDIT = "groups/detail/{groupId}/expense?expenseId={expenseId}&transactionId={transactionId}"
     const val INVITE = "groups/detail/{groupId}/invite"
     const val EDIT_GROUP = "groups/detail/{groupId}/edit"
 
@@ -25,6 +25,9 @@ object Routes {
     fun groupDashboard(groupId: String) = "groups/detail/$groupId/dashboard"
     fun addExpense(groupId: String) = "groups/detail/$groupId/expense"
     fun editExpense(groupId: String, expenseId: String) = "groups/detail/$groupId/expense?expenseId=$expenseId"
+    /** Open the full expense editor prefilled from an SMS transaction, to split it into [groupId]. */
+    fun splitTransaction(groupId: String, transactionId: String) =
+        "groups/detail/$groupId/expense?transactionId=$transactionId"
     fun invite(groupId: String) = "groups/detail/$groupId/invite"
     fun editGroup(groupId: String) = "groups/detail/$groupId/edit"
 }
