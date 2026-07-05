@@ -4,6 +4,7 @@ import ai.schism.split.core.db.CategoryDao
 import ai.schism.split.core.db.ExpenseDao
 import ai.schism.split.core.db.GroupDao
 import ai.schism.split.core.db.SchismDb
+import ai.schism.split.sms.data.TransactionDao
 import android.content.Context
 import androidx.room.Room
 import dagger.Module
@@ -32,4 +33,7 @@ object DbModule {
 
     @Provides
     fun provideCategoryDao(db: SchismDb): CategoryDao = db.categoryDao()
+
+    @Provides
+    fun provideTransactionDao(db: SchismDb): TransactionDao = db.transactionDao()
 }

@@ -3,9 +3,13 @@ package ai.schism.split.core.nav
 object Routes {
     const val GROUPS = "groups"
     const val DASHBOARD = "dashboard"
+    const val INBOX = "inbox"
     const val SETTINGS = "settings"
     const val CREATE_GROUP = "groups/create"
     const val JOIN_GROUP = "groups/join"
+
+    const val PUSH_SPLIT = "sms/split/{transactionId}"
+    fun pushSplit(transactionId: String) = "sms/split/$transactionId"
 
     const val OPEN_GROUP = "open_group/{groupId}"
     const val GROUP_DETAIL = "groups/detail/{groupId}"

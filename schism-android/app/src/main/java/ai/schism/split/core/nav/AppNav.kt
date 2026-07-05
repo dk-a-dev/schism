@@ -9,6 +9,8 @@ import ai.schism.split.groups.join.JoinGroupScreen
 import ai.schism.split.groups.join.OpenGroupScreen
 import ai.schism.split.groups.list.GroupsListScreen
 import ai.schism.split.settings.SettingsScreen
+import ai.schism.split.sms.inbox.InboxScreen
+import ai.schism.split.sms.split.PushToSplitScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -37,6 +40,7 @@ private data class Destination(val route: String, val label: String, val icon: I
 
 private val destinations = listOf(
     Destination(Routes.GROUPS, "Groups", Icons.Filled.Groups),
+    Destination(Routes.INBOX, "Inbox", Icons.Filled.Inbox),
     Destination(Routes.DASHBOARD, "Dashboard", Icons.AutoMirrored.Filled.ReceiptLong),
     Destination(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
 )
@@ -151,6 +155,20 @@ fun AppNav() {
                 ExpenseEditScreen(
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.INBOX) {
+                InboxScreen(
+                    onSplit = { txnId -> navController.navigate(Routes.pushSplit(txnId)) },
+                )
+            }
+            composable(
+                Routes.PUSH_SPLIT,
+                arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
+            ) {
+                PushToSplitScreen(
+                    onBack = { navController.popBackStack() },
+                    onDone = { navController.popBackStack() },
                 )
             }
             composable(Routes.DASHBOARD) { PersonalDashboardScreen() }
