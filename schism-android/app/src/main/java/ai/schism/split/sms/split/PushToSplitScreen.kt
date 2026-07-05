@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.DropdownMenuItem
@@ -84,6 +85,14 @@ fun PushToSplitScreen(
                         key = txn.id,
                     )
 
+                    OutlinedTextField(
+                        value = state.title,
+                        onValueChange = viewModel::onTitleChange,
+                        label = { Text("Title") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
                     if (state.groups.isEmpty()) {
                         Text(
                             "Join or create a group first to split this transaction.",
@@ -104,10 +113,23 @@ fun PushToSplitScreen(
                                 onSelect = viewModel::onPaidByChange,
                             )
                             Text(
-                                "Split evenly among ${selectedGroup.participants.size} participants.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "Split between",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
                             )
+                            selectedGroup.participants.forEach { p ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Checkbox(
+                                        checked = p.id in state.includedIds,
+                                        onCheckedChange = { viewModel.toggleIncluded(p.id) },
+                                    )
+                                    Text(p.name, style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
                         }
                     }
 

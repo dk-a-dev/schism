@@ -31,33 +31,37 @@ private fun isoDate(timestamp: Long): String =
     Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate().toString()
 
 /**
- * Builds a group expense from a parsed transaction: the merchant becomes the title, the amount is
- * carried in minor units, and the cost is split EVENLY (one share each) across every participant.
- * Pure and network-free so it can be unit-tested; the idempotency key (the transaction id) is
- * applied by the caller when creating the expense.
+ * Builds a group expense from a parsed transaction: the [title] (editable, defaults to the merchant)
+ * and amount in minor units, split EVENLY (one share each) across only the [participantIds] the user
+ * chose to include — never assumed to be everyone. Pure and network-free so it can be unit-tested;
+ * the idempotency key (the transaction id) is applied by the caller when creating the expense.
  */
 fun buildPushToSplitRequest(
     transaction: Transaction,
-    group: Group,
     paidById: String,
     addedBy: String?,
+    title: String,
+    participantIds: List<String>,
 ): ExpenseRequest = ExpenseRequest(
-    title = transaction.merchant,
+    title = title.trim().ifBlank { transaction.merchant },
     amount = transaction.amountMinor,
     expenseDate = isoDate(transaction.timestamp),
     paidById = paidById,
     splitMode = "EVENLY",
     isReimbursement = false,
     addedBy = addedBy,
-    paidFor = group.participants.map { PaidForDto(participantId = it.id, shares = 1L) },
+    paidFor = participantIds.map { PaidForDto(participantId = it, shares = 1L) },
 )
 
 data class PushToSplitUiState(
     val loading: Boolean = true,
     val transaction: Transaction? = null,
+    val title: String = "",
     val groups: List<Group> = emptyList(),
     val selectedGroupId: String? = null,
     val paidById: String = "",
+    /** Participants included in the split (defaults to everyone, but editable). */
+    val includedIds: Set<String> = emptySet(),
     val submitting: Boolean = false,
     val error: String? = null,
 )
@@ -79,7 +83,9 @@ class PushToSplitViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val txn = smsRepo.getById(transactionId)
-            _state.update { it.copy(transaction = txn) }
+            // Fold-style: if this merchant was renamed before, reuse that title next time.
+            val defaultTitle = txn?.let { settings.merchantAlias(it.merchant) ?: it.merchant }.orEmpty()
+            _state.update { it.copy(transaction = txn, title = defaultTitle) }
 
             // Only groups this device has joined/created are eligible targets.
             combine(groupRepo.observeGroups(), settings.knownGroupIds) { groups, known ->
@@ -88,11 +94,13 @@ class PushToSplitViewModel @Inject constructor(
                 _state.update { s ->
                     val selected = s.selectedGroupId?.takeIf { id -> known.any { it.id == id } }
                         ?: known.firstOrNull()?.id
+                    val group = known.firstOrNull { it.id == selected }
                     s.copy(
                         loading = false,
                         groups = known,
                         selectedGroupId = selected,
                         paidById = s.paidById.ifBlank { defaultPaidBy(known, selected) },
+                        includedIds = s.includedIds.ifEmpty { group?.participants?.map { it.id }?.toSet().orEmpty() },
                     )
                 }
             }
@@ -105,11 +113,17 @@ class PushToSplitViewModel @Inject constructor(
         return group.activeParticipantId ?: group.participants.firstOrNull()?.id ?: ""
     }
 
+    fun onTitleChange(value: String) {
+        _state.update { it.copy(title = value, error = null) }
+    }
+
     fun onGroupChange(groupId: String) {
         _state.update { s ->
+            val group = s.groups.firstOrNull { it.id == groupId }
             s.copy(
                 selectedGroupId = groupId,
                 paidById = defaultPaidBy(s.groups, groupId),
+                includedIds = group?.participants?.map { it.id }?.toSet().orEmpty(),
                 error = null,
             )
         }
@@ -117,6 +131,14 @@ class PushToSplitViewModel @Inject constructor(
 
     fun onPaidByChange(participantId: String) {
         _state.update { it.copy(paidById = participantId, error = null) }
+    }
+
+    /** Toggle whether a participant is included in the split. */
+    fun toggleIncluded(participantId: String) {
+        _state.update { s ->
+            val next = if (participantId in s.includedIds) s.includedIds - participantId else s.includedIds + participantId
+            s.copy(includedIds = next, error = null)
+        }
     }
 
     /** Build the request and create the expense; the transaction id is the idempotency key. */
@@ -128,6 +150,11 @@ class PushToSplitViewModel @Inject constructor(
             _state.update { it.copy(error = "Pick a group and who paid") }
             return
         }
+        val included = group.participants.map { it.id }.filter { it in s.includedIds }
+        if (included.isEmpty()) {
+            _state.update { it.copy(error = "Include at least one person in the split") }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(submitting = true, error = null) }
             // Stamp the creator as your user id when the active participant in this group is you.
@@ -135,9 +162,13 @@ class PushToSplitViewModel @Inject constructor(
             val youParticipant = group.participants.firstOrNull { it.id == group.activeParticipantId }
             val addedBy = userId.takeIf { it.isNotBlank() && youParticipant?.userId == it }
 
-            val request = buildPushToSplitRequest(txn, group, s.paidById, addedBy)
+            val request = buildPushToSplitRequest(txn, s.paidById, addedBy, s.title, included)
             expenseRepo.createExpense(group.id, request, idempotencyKey = txn.id).fold(
                 onSuccess = { expense ->
+                    // Remember a manual rename so the same merchant is tagged next time.
+                    if (s.title.trim().isNotBlank() && !s.title.trim().equals(txn.merchant, ignoreCase = true)) {
+                        settings.setMerchantAlias(txn.merchant, s.title.trim())
+                    }
                     smsRepo.markPushed(txn.id, group.id, expense.id)
                     _state.update { it.copy(submitting = false) }
                     onDone()

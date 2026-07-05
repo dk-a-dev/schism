@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -96,6 +97,27 @@ class SettingsRepository @Inject constructor(
         ds.edit { it[KEY_THEME] = mode }
     }
 
+    /**
+     * Merchant → preferred expense title. Set when the user renames a transaction while splitting it
+     * to a group, then reused for the same merchant next time (Fold-style tagging). Stored as
+     * "merchantLower\ttitle" entries.
+     */
+    suspend fun merchantAlias(merchant: String): String? {
+        val key = merchant.trim().lowercase()
+        return ds.data.first()[KEY_MERCHANT_ALIASES].orEmpty()
+            .firstOrNull { it.substringBefore('\t') == key }
+            ?.substringAfter('\t')
+    }
+
+    suspend fun setMerchantAlias(merchant: String, title: String) {
+        val key = merchant.trim().lowercase()
+        ds.edit { prefs ->
+            val others = (prefs[KEY_MERCHANT_ALIASES] ?: emptySet())
+                .filterNot { it.substringBefore('\t') == key }.toSet()
+            prefs[KEY_MERCHANT_ALIASES] = others + "$key\t${title.trim()}"
+        }
+    }
+
     /** Wipe all device-local settings (used by "reset" and to isolate tests). */
     suspend fun clear() {
         ds.edit { it.clear() }
@@ -115,5 +137,6 @@ class SettingsRepository @Inject constructor(
         private val KEY_CUR_SYMBOL = stringPreferencesKey("currency_symbol")
         private val KEY_CUR_CODE = stringPreferencesKey("currency_code")
         private val KEY_THEME = stringPreferencesKey("theme_mode")
+        private val KEY_MERCHANT_ALIASES = stringSetPreferencesKey("merchant_aliases")
     }
 }

@@ -36,8 +36,11 @@ class PushToSplitRequestTest {
     )
 
     @Test
-    fun buildsEvenSplitOverAllParticipantsFromTransaction() {
-        val request = buildPushToSplitRequest(txn, group, paidById = "p1", addedBy = "u1")
+    fun buildsEvenSplitOverChosenParticipantsFromTransaction() {
+        val request = buildPushToSplitRequest(
+            txn, paidById = "p1", addedBy = "u1",
+            title = "SWIGGY", participantIds = listOf("p1", "p2", "p3"),
+        )
 
         assertEquals("SWIGGY", request.title)
         assertEquals(45_000L, request.amount)
@@ -46,7 +49,7 @@ class PushToSplitRequestTest {
         assertEquals("u1", request.addedBy)
         assertEquals(false, request.isReimbursement)
 
-        // one share for each of the three participants
+        // one share for each chosen participant
         assertEquals(listOf("p1", "p2", "p3"), request.paidFor.map { it.participantId })
         assertEquals(listOf(1L, 1L, 1L), request.paidFor.map { it.shares })
 
@@ -56,8 +59,21 @@ class PushToSplitRequestTest {
     }
 
     @Test
+    fun splitsOnlyAmongIncludedParticipants() {
+        val request = buildPushToSplitRequest(
+            txn, paidById = "p1", addedBy = "u1",
+            title = "Dinner", participantIds = listOf("p1", "p2"),
+        )
+        assertEquals("Dinner", request.title)
+        assertEquals(listOf("p1", "p2"), request.paidFor.map { it.participantId })
+    }
+
+    @Test
     fun addedByIsNullWhenNotYou() {
-        val request = buildPushToSplitRequest(txn, group, paidById = "p2", addedBy = null)
+        val request = buildPushToSplitRequest(
+            txn, paidById = "p2", addedBy = null,
+            title = "SWIGGY", participantIds = listOf("p2", "p3"),
+        )
         assertNull(request.addedBy)
         assertEquals("p2", request.paidById)
     }
