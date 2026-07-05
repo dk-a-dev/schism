@@ -79,7 +79,7 @@ fun AppNav() {
                                 }
                             },
                             icon = { Icon(dest.icon, contentDescription = dest.label) },
-                            label = { Text(dest.label) },
+                            label = { Text(dest.label, maxLines = 1, softWrap = false) },
                         )
                     }
                 }

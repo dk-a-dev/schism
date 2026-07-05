@@ -19,3 +19,9 @@ test:
 
 run:
 	DATABASE_URL="$(DB_URL)" ADDR=":8080" go run ./cmd/server
+
+# Wipe group data and insert mock groups/people/expenses for a clean demo restart.
+seed:
+	DATABASE_URL="$(DB_URL)" go run ./cmd/seed
+
+.PHONY: db up down logs test run seed
