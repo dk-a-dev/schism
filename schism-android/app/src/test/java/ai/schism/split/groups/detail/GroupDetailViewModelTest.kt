@@ -89,7 +89,7 @@ class GroupDetailViewModelTest {
         settings = SettingsRepository(ApplicationProvider.getApplicationContext())
         runBlocking { settings.clear() } // DataStore is a JVM singleton; isolate from other tests
         groupRepo = GroupRepository(api, db.groupDao(), settings)
-        expenseRepo = ExpenseRepository(api, db.expenseDao())
+        expenseRepo = ExpenseRepository(api, db.expenseDao(), db.outboxDao(), ApplicationProvider.getApplicationContext())
     }
 
     @After

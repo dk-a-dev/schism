@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -67,6 +68,11 @@ fun AppNav() {
 
     val connectivity: ai.schism.split.core.net.ConnectivityViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val online by connectivity.isOnline.collectAsState()
+    val pending by connectivity.pendingSync.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(online, pending) {
+        if (online && pending > 0) ai.schism.split.expense.data.OutboxSyncWorker.enqueue(ctx)
+    }
 
     Scaffold(
         // Each screen owns its own Scaffold + top bar, which consumes the status-bar inset. Zero the
@@ -96,7 +102,7 @@ fun AppNav() {
         },
     ) { padding ->
         androidx.compose.foundation.layout.Column(modifier = Modifier.padding(padding)) {
-            OfflineBanner(visible = !online)
+            CloudStatusBanner(online = online, pending = pending)
             NavHost(
                 navController = navController,
                 startDestination = Routes.GROUPS,
@@ -231,28 +237,35 @@ fun AppNav() {
     }
 }
 
+/**
+ * A slim cloud connection status strip: cloud-off when offline, a syncing cloud when there are
+ * queued writes to push, hidden when everything is up to date and online.
+ */
 @Composable
-private fun OfflineBanner(visible: Boolean) {
-    androidx.compose.animation.AnimatedVisibility(visible = visible) {
+private fun CloudStatusBanner(online: Boolean, pending: Int) {
+    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val offline = !online
+    val syncing = online && pending > 0
+    androidx.compose.animation.AnimatedVisibility(visible = offline || syncing) {
+        val bg = if (offline) scheme.tertiaryContainer else scheme.secondaryContainer
+        val fg = if (offline) scheme.onTertiaryContainer else scheme.onSecondaryContainer
+        val icon = if (offline) androidx.compose.material.icons.Icons.Filled.CloudOff
+        else androidx.compose.material.icons.Icons.Filled.CloudUpload
+        val text = when {
+            offline && pending > 0 -> "Offline — $pending change(s) saved, will sync when you're back."
+            offline -> "You're offline — changes are saved and will sync when you're back."
+            else -> "Syncing $pending change(s)…"
+        }
         androidx.compose.foundation.layout.Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer)
+                .background(bg)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                androidx.compose.material.icons.Icons.Filled.CloudOff,
-                contentDescription = null,
-                tint = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(18.dp),
-            )
-            Text(
-                "You're offline — changes will sync when you're back.",
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
-            )
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+            Text(text, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = fg)
         }
     }
 }

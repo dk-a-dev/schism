@@ -40,7 +40,7 @@ class ExpenseRepositoryTest {
         ).allowMainThreadQueries().build()
         dao = db.expenseDao()
         api = ApiClient.create(server.url("/").toString())
-        repo = ExpenseRepository(api, dao)
+        repo = ExpenseRepository(api, dao, db.outboxDao(), ApplicationProvider.getApplicationContext())
     }
 
     @After

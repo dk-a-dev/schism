@@ -36,4 +36,7 @@ object DbModule {
 
     @Provides
     fun provideTransactionDao(db: SchismDb): TransactionDao = db.transactionDao()
+
+    @Provides
+    fun provideOutboxDao(db: SchismDb): ai.schism.split.core.db.OutboxDao = db.outboxDao()
 }

@@ -13,8 +13,9 @@ import androidx.room.RoomDatabase
         PaidForEntity::class,
         CategoryEntity::class,
         TransactionEntity::class,
+        OutboxEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class SchismDb : RoomDatabase() {
@@ -22,4 +23,5 @@ abstract class SchismDb : RoomDatabase() {
     abstract fun expenseDao(): ExpenseDao
     abstract fun categoryDao(): CategoryDao
     abstract fun transactionDao(): TransactionDao
+    abstract fun outboxDao(): OutboxDao
 }
