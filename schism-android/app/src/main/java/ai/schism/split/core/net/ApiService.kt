@@ -18,6 +18,12 @@ interface ApiService {
     @retrofit2.http.DELETE("v1/users/me")
     suspend fun deleteAccount(): retrofit2.Response<Unit>
 
+    @POST("v1/auth/register")
+    suspend fun authRegister(@Body body: AuthRequest): AuthResponse
+
+    @POST("v1/auth/login")
+    suspend fun authLogin(@Body body: AuthRequest): AuthResponse
+
     @GET("v1/categories")
     suspend fun listCategories(): List<CategoryDto>
 

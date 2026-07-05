@@ -106,6 +106,21 @@ data class ActivityDto(
 // ---- requests ----
 
 @Serializable
+data class AuthRequest(
+    val email: String,
+    val password: String,
+    val name: String = "",
+)
+
+@Serializable
+data class AuthResponse(
+    val id: String,
+    val name: String = "",
+    val email: String = "",
+    val token: String = "",
+)
+
+@Serializable
 data class ParticipantRequest(
     val id: String? = null,
     val name: String,

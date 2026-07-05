@@ -2,8 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/schism/schism-backend/internal/store"
 )
 
 // registerUser creates an unverified identity, mints its secret bearer token, and returns both. The
@@ -37,6 +41,65 @@ func (h *Handler) registerUser(w http.ResponseWriter, r *http.Request) {
 
 // me returns the authenticated caller (resolved from the bearer token by withUser). It answers 401
 // when unauthenticated — this is how a client verifies "who am I" without exposing PII to id holders.
+// authResponse is the shape returned by register/login: the user plus a fresh bearer token.
+type authResponse struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Token string `json:"token"`
+}
+
+func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
+	var d struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if !strings.Contains(d.Email, "@") {
+		writeErr(w, http.StatusBadRequest, "enter a valid email")
+		return
+	}
+	if len(d.Password) < 6 {
+		writeErr(w, http.StatusBadRequest, "password must be at least 6 characters")
+		return
+	}
+	u, token, err := h.store.RegisterUser(r.Context(), strings.TrimSpace(d.Name), d.Email, d.Password)
+	if errors.Is(err, store.ErrEmailTaken) {
+		writeErr(w, http.StatusConflict, "that email is already registered")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, authResponse{u.ID, u.Name, u.Email, token})
+}
+
+func (h *Handler) authLogin(w http.ResponseWriter, r *http.Request) {
+	var d struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	u, token, err := h.store.LoginUser(r.Context(), d.Email, d.Password)
+	if errors.Is(err, store.ErrInvalidLogin) {
+		writeErr(w, http.StatusUnauthorized, "invalid email or password")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, authResponse{u.ID, u.Name, u.Email, token})
+}
+
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	u := userFromContext(r.Context())
 	if u == nil {
