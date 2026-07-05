@@ -1,11 +1,19 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package ai.schism.split.expense.edit
 
+import ai.schism.split.core.ui.InitialAvatar
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,10 +21,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
@@ -42,7 +52,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseEditScreen(
     onBack: () -> Unit,
@@ -63,71 +72,107 @@ fun ExpenseEditScreen(
             )
         },
     ) { padding ->
+        if (state.loading) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            OutlinedTextField(
-                value = state.title,
-                onValueChange = viewModel::onTitleChange,
-                label = { Text("Title") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            SectionCard(title = "Details") {
+                OutlinedTextField(
+                    value = state.title,
+                    onValueChange = viewModel::onTitleChange,
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            OutlinedTextField(
-                value = state.amountText,
-                onValueChange = viewModel::onAmountChange,
-                label = { Text("Amount") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
-            )
+                OutlinedTextField(
+                    value = state.amountText,
+                    onValueChange = viewModel::onAmountChange,
+                    label = { Text("Amount") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            CategoryDropdown(state, viewModel)
-            PaidBySelector(state, viewModel)
+                CategoryDropdown(state, viewModel)
+                PaidBySelector(state, viewModel)
+            }
 
-            Text("Split", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SplitMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = state.splitMode == mode,
-                        onClick = { viewModel.onSplitModeChange(mode) },
-                        label = { Text(mode.label()) },
-                    )
+            SectionCard(title = "How to split") {
+                SplitModeChips(state, viewModel)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                state.rows.forEach { row ->
+                    ParticipantRowItem(row, state.splitMode, viewModel)
                 }
             }
 
-            HorizontalDivider()
+            SectionCard(title = "More") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Reimbursement",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            "Settle up rather than add a shared cost",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.isReimbursement,
+                        onCheckedChange = viewModel::onReimbursementChange,
+                    )
+                }
 
-            state.rows.forEach { row -> ParticipantRowItem(row, state.splitMode, viewModel) }
-
-            HorizontalDivider()
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Reimbursement", modifier = Modifier.weight(1f))
-                Switch(checked = state.isReimbursement, onCheckedChange = viewModel::onReimbursementChange)
+                OutlinedTextField(
+                    value = state.notes,
+                    onValueChange = viewModel::onNotesChange,
+                    label = { Text("Notes (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
-            OutlinedTextField(
-                value = state.notes,
-                onValueChange = viewModel::onNotesChange,
-                label = { Text("Notes (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            state.error?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
 
             Button(
                 onClick = { viewModel.submit(onSaved) },
                 enabled = !state.submitting,
-                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                contentPadding = ButtonDefaults.ContentPadding,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
             ) {
-                if (state.submitting) CircularProgressIndicator(modifier = Modifier.width(20.dp)) else Text("Save")
+                if (state.submitting) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                } else {
+                    Text("Save", fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -140,7 +185,20 @@ private fun SplitMode.label(): String = when (this) {
     SplitMode.BY_AMOUNT -> "Amount"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SplitModeChips(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SplitMode.entries.forEach { mode ->
+            FilterChip(
+                selected = state.splitMode == mode,
+                onClick = { viewModel.onSplitModeChange(mode) },
+                label = { Text(mode.label()) },
+            )
+        }
+    }
+}
+
 @Composable
 private fun CategoryDropdown(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
     var expanded by remember { mutableStateOf(false) }
@@ -169,7 +227,6 @@ private fun CategoryDropdown(state: ExpenseEditUiState, viewModel: ExpenseEditVi
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PaidBySelector(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
     var expanded by remember { mutableStateOf(false) }
@@ -202,11 +259,25 @@ private fun PaidBySelector(state: ExpenseEditUiState, viewModel: ExpenseEditView
 private fun ParticipantRowItem(row: ParticipantRow, mode: SplitMode, viewModel: ExpenseEditViewModel) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Checkbox(checked = row.selected, onCheckedChange = { viewModel.onToggleParticipant(row.participantId) })
-        Text(row.name, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        InitialAvatar(name = row.name, key = row.participantId, size = 36.dp)
+        Checkbox(
+            checked = row.selected,
+            onCheckedChange = { viewModel.onToggleParticipant(row.participantId) },
+        )
+        Text(
+            row.name,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = if (row.selected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.weight(1f),
+        )
         when (mode) {
             SplitMode.EVENLY -> Unit
             SplitMode.BY_SHARES -> OutlinedTextField(
@@ -236,6 +307,35 @@ private fun ParticipantRowItem(row: ParticipantRow, mode: SplitMode, viewModel: 
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.width(120.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun SectionCard(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                content()
+            }
         }
     }
 }

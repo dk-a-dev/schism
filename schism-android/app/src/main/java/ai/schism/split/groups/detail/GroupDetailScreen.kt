@@ -15,7 +15,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -78,9 +78,11 @@ fun GroupDetailScreen(
         },
         floatingActionButton = {
             if (groupId != null && selected == DetailTab.Expenses.ordinal) {
-                FloatingActionButton(onClick = { onAddExpense(groupId) }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add expense")
-                }
+                ExtendedFloatingActionButton(
+                    text = { Text("Add expense") },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    onClick = { onAddExpense(groupId) },
+                )
             }
         },
     ) { padding ->
@@ -95,6 +97,7 @@ fun GroupDetailScreen(
                     state = expenses,
                     currency = currency,
                     participantNames = participantNames,
+                    youParticipantId = g?.activeParticipantId,
                     onEditExpense = { expenseId -> groupId?.let { onEditExpense(it, expenseId) } },
                 )
                 DetailTab.Balances -> BalancesTab(
