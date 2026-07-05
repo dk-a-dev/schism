@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Edit
@@ -101,6 +102,11 @@ fun GroupDetailScreen(
                                 text = { Text("Insights") },
                                 leadingIcon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
                                 onClick = { menuOpen = false; onOpenDashboard(groupId) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Leave group") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                                onClick = { menuOpen = false; viewModel.leave(onBack) },
                             )
                         }
                     }

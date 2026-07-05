@@ -3,6 +3,7 @@
 package ai.schism.split.expense.edit
 
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.expense.edit.voice.VoiceListeningDialog
 import ai.schism.split.expense.edit.voice.rememberVoiceInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,7 +63,8 @@ fun ExpenseEditScreen(
     viewModel: ExpenseEditViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val startVoice = rememberVoiceInput { transcript -> viewModel.applyVoice(transcript) }
+    val voice = rememberVoiceInput { transcript -> viewModel.applyVoice(transcript) }
+    VoiceListeningDialog(voice)
 
     Scaffold(
         topBar = {
@@ -74,7 +76,7 @@ fun ExpenseEditScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = startVoice) {
+                    IconButton(onClick = voice.start) {
                         Icon(Icons.Filled.Mic, contentDescription = "Add by voice")
                     }
                 },

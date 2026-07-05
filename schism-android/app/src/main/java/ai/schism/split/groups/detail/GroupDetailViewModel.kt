@@ -114,4 +114,12 @@ class GroupDetailViewModel @Inject constructor(
                 }
         }
     }
+
+    /** Leave the group on this device: drop it from the known set (the group itself is untouched). */
+    fun leave(onDone: () -> Unit) {
+        viewModelScope.launch {
+            settings.removeKnownGroup(groupId)
+            onDone()
+        }
+    }
 }

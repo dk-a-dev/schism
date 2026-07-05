@@ -11,24 +11,59 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
+/** What the voice recogniser is doing right now, so the UI can show clear feedback. */
+enum class VoicePhase { Idle, Listening, Working }
+
+/** Controls voice capture and exposes its live [phase] for UI feedback. */
+class VoiceController(
+    val phase: State<VoicePhase>,
+    val start: () -> Unit,
+    val cancel: () -> Unit,
+)
+
 /**
- * On-device speech-to-text for the expense form. Returns a callback that, when invoked, starts
- * listening and delivers the final transcript to [onResult]. Everything stays on the device: on
- * API 33+ it prefers the offline on-device recognizer, otherwise it falls back to the platform
- * recognizer with EXTRA_PREFER_OFFLINE. RECORD_AUDIO is requested at first use; no-match/errors are
- * swallowed so a failed attempt is a no-op. The caller still confirms the parsed form before saving.
+ * On-device speech-to-text for the expense form. Returns a [VoiceController] whose [start] begins
+ * listening and delivers the final transcript to [onResult]; its [phase] drives visible feedback
+ * (Listening / Working) so the user always knows whether the mic is live. Everything stays on the
+ * device — API 33+ prefers the offline on-device recogniser. RECORD_AUDIO is requested at first use.
  */
 @Composable
-fun rememberVoiceInput(onResult: (String) -> Unit): () -> Unit {
+fun rememberVoiceInput(onResult: (String) -> Unit): VoiceController {
     val context = LocalContext.current
     val latestOnResult = rememberUpdatedState(onResult)
+    val phase = remember { mutableStateOf(VoicePhase.Idle) }
 
     val recognizer = remember {
         if (SpeechRecognizer.isRecognitionAvailable(context)) createRecognizer(context) else null
@@ -40,26 +75,29 @@ fun rememberVoiceInput(onResult: (String) -> Unit): () -> Unit {
 
     val startListening = remember(recognizer) {
         {
-            recognizer?.apply {
-                setRecognitionListener(object : RecognitionListener {
+            if (recognizer == null) {
+                phase.value = VoicePhase.Idle
+            } else {
+                phase.value = VoicePhase.Listening
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) { phase.value = VoicePhase.Listening }
+                    override fun onBeginningOfSpeech() { phase.value = VoicePhase.Listening }
+                    override fun onEndOfSpeech() { phase.value = VoicePhase.Working }
                     override fun onResults(results: Bundle?) {
+                        phase.value = VoicePhase.Idle
                         results
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.firstOrNull()
                             ?.takeIf { it.isNotBlank() }
                             ?.let { latestOnResult.value(it) }
                     }
-
-                    override fun onError(error: Int) = Unit
-                    override fun onReadyForSpeech(params: Bundle?) = Unit
-                    override fun onBeginningOfSpeech() = Unit
+                    override fun onError(error: Int) { phase.value = VoicePhase.Idle }
                     override fun onRmsChanged(rmsdB: Float) = Unit
                     override fun onBufferReceived(buffer: ByteArray?) = Unit
-                    override fun onEndOfSpeech() = Unit
                     override fun onPartialResults(partialResults: Bundle?) = Unit
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
                 })
-                startListening(recognitionIntent())
+                recognizer.startListening(recognitionIntent())
             }
             Unit
         }
@@ -69,13 +107,69 @@ fun rememberVoiceInput(onResult: (String) -> Unit): () -> Unit {
         if (granted) startListening()
     }
 
-    return {
-        if (hasRecordAudioPermission(context)) {
-            startListening()
-        } else {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
+    return remember(recognizer) {
+        VoiceController(
+            phase = phase,
+            start = {
+                if (hasRecordAudioPermission(context)) startListening()
+                else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            cancel = {
+                recognizer?.cancel()
+                phase.value = VoicePhase.Idle
+            },
+        )
     }
+}
+
+/** Modal shown while the mic is live so the user knows it's listening / processing. */
+@Composable
+fun VoiceListeningDialog(controller: VoiceController) {
+    val phase by controller.phase
+    if (phase == VoicePhase.Idle) return
+
+    AlertDialog(
+        onDismissRequest = controller.cancel,
+        confirmButton = {
+            TextButton(onClick = controller.cancel) {
+                Text(if (phase == VoicePhase.Listening) "Stop" else "Cancel")
+            }
+        },
+        icon = {
+            val pulse = rememberInfiniteTransition(label = "mic")
+            val scale by pulse.animateFloat(
+                initialValue = 1f, targetValue = 1.25f,
+                animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse), label = "s",
+            )
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(64.dp).scale(if (phase == VoicePhase.Listening) scale else 1f),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.Mic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+            }
+        },
+        title = { Text(if (phase == VoicePhase.Listening) "Listening…" else "Working…") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    if (phase == VoicePhase.Listening) {
+                        "Say something like \"paid 800 for dinner, split with Riya and Sam\"."
+                    } else {
+                        "Turning your words into an expense…"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        },
+    )
 }
 
 private fun createRecognizer(context: Context): SpeechRecognizer =

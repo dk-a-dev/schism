@@ -203,6 +203,7 @@ private fun TransactionCard(
 
 @Composable
 private fun PermissionRequest(onAllow: () -> Unit) {
+    val context = LocalContext.current
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -218,8 +219,24 @@ private fun PermissionRequest(onAllow: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             Button(onClick = onAllow) { Text("Allow SMS access") }
+            Text(
+                "If the prompt doesn't appear, open Settings → Permissions → SMS and turn it on.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            OutlinedButton(onClick = { context.openAppSettings() }) { Text("Open app settings") }
         }
     }
+}
+
+/** Deep-link to this app's system settings page so SMS permission can be granted manually. */
+private fun android.content.Context.openAppSettings() {
+    val intent = android.content.Intent(
+        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        android.net.Uri.fromParts("package", packageName, null),
+    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    startActivity(intent)
 }
 
 @Composable
