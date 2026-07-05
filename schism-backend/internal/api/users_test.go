@@ -14,13 +14,24 @@ import (
 
 func registerUser(t *testing.T, srv string, name, email, phone string) store.User {
 	t.Helper()
+	u, _ := registerUserToken(t, srv, name, email, phone)
+	return u
+}
+
+// registerUserToken is the variant used when the caller also needs the one-time bearer token (the
+// token is present only on the register response — never on the plain User).
+func registerUserToken(t *testing.T, srv string, name, email, phone string) (store.User, string) {
+	t.Helper()
 	body := fmt.Sprintf(`{"name":%q,"email":%q,"phone":%q}`, name, email, phone)
 	resp, err := http.Post(srv+"/v1/users", "application/json", bytes.NewBufferString(body))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var u store.User
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&u))
-	return u
+	var out struct {
+		store.User
+		Token string `json:"token"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	return out.User, out.Token
 }
 
 func TestRegisterUserAlwaysCreates(t *testing.T) {
@@ -45,12 +56,13 @@ func TestRegisterUserAlwaysCreates(t *testing.T) {
 
 func TestGroupParticipantUserID(t *testing.T) {
 	srv := newTestServer(t)
-	u := registerUser(t, srv.URL, "Carol", "carol-"+id.New()+"@example.com", "444")
+	u, token := registerUserToken(t, srv.URL, "Carol", "carol-"+id.New()+"@example.com", "444")
 
+	// The caller must authenticate to link a participant to their own user id; without the token the
+	// server sanitizes it away (see TestParticipantUserIDSanitized).
 	body := fmt.Sprintf(`{"name":"Trip","currency":"$","currencyCode":"USD",
 	          "participants":[{"name":"Carol","userId":%q},{"name":"Dave"}]}`, u.ID)
-	resp, err := http.Post(srv.URL+"/v1/groups", "application/json", bytes.NewBufferString(body))
-	require.NoError(t, err)
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups", token, body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var created struct {
 		GroupID string `json:"groupId"`

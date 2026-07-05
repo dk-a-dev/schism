@@ -6,7 +6,23 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/schism/schism-backend/internal/store"
 )
+
+// sanitizeParticipantUserIDs enforces identity: a participant may be linked to a user_id only by that
+// user themselves. Any UserID that doesn't match the authenticated caller is dropped (set to nil),
+// and when the caller is unauthenticated (self == nil) ALL links are dropped. This is the point of
+// the token — groups stay reachable by id, but you can't spoof "this participant is you".
+func sanitizeParticipantUserIDs(parts []store.ParticipantInput, self *store.User) {
+	for i := range parts {
+		if parts[i].UserID == nil {
+			continue
+		}
+		if self == nil || *parts[i].UserID != self.ID {
+			parts[i].UserID = nil
+		}
+	}
+}
 
 func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	var d groupFormDTO
@@ -18,7 +34,9 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "name>=2 chars and >=1 participant required")
 		return
 	}
-	g, err := h.store.CreateGroup(r.Context(), d.toInput())
+	in := d.toInput()
+	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
+	g, err := h.store.CreateGroup(r.Context(), in)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -49,7 +67,9 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	g, err := h.store.UpdateGroup(r.Context(), chi.URLParam(r, "groupID"), d.toInput())
+	in := d.toInput()
+	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
+	g, err := h.store.UpdateGroup(r.Context(), chi.URLParam(r, "groupID"), in)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

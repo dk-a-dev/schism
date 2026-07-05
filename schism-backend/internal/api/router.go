@@ -22,8 +22,10 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 	}
 
 	r.Route("/v1", func(r chi.Router) {
+		r.Use(h.withUser)
 		r.Get("/categories", h.listCategories)
 		r.Get("/dashboard", h.getPersonalDashboard)
+		r.Get("/users/me", h.me)
 		r.Post("/users", h.registerUser)
 		r.Route("/groups", func(r chi.Router) {
 			r.Post("/", h.createGroup)
