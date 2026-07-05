@@ -79,6 +79,10 @@ fun InboxScreen(
     val state by viewModel.state.collectAsState()
     val filter by viewModel.filter.collectAsState()
     val permissionNeeded by viewModel.permissionNeeded.collectAsState()
+    val scanningReceipt by viewModel.scanningReceipt.collectAsState()
+    if (scanningReceipt) {
+        ai.schism.split.sms.itemized.BillScanProgressDialog()
+    }
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 

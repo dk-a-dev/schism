@@ -5,13 +5,17 @@ import ai.schism.split.core.net.PaidForDto
 import ai.schism.split.groups.data.Group
 
 /**
- * A receipt line item together with the participants who are sharing it. The amount is minor units;
- * an item with no assignees contributes to nobody's owed total.
+ * A receipt line item together with WEIGHTED shares per participant: `{devId: 2, ruId: 1}` means Dev
+ * had two of it and Ru one, so Dev owes 2/3 of the line amount. The amount is minor units; an item
+ * with no shares contributes to nobody's owed total.
  */
 data class AssignedItem(
     val amountMinor: Long,
-    val participantIds: List<String>,
-)
+    val shares: Map<String, Long>,
+) {
+    constructor(amountMinor: Long, participantIds: List<String>) :
+        this(amountMinor, participantIds.associateWith { 1L })
+}
 
 /**
  * Builds a BY_AMOUNT group expense from itemised receipt lines: each person owes the sum of their
@@ -31,20 +35,22 @@ fun buildItemizedExpenseRequest(
     dateIso: String?,
     taxMinor: Long = 0,
 ): ExpenseRequest? {
-    if (items.none { it.participantIds.isNotEmpty() }) return null
+    if (items.none { it.shares.values.any { s -> s > 0 } }) return null
 
     // participantId -> owed minor units, preserving first-seen order for stable output.
     val owed = LinkedHashMap<String, Long>()
     for (item in items) {
-        val shareCount = item.participantIds.size
-        if (shareCount == 0) continue
-        val base = item.amountMinor / shareCount
-        var remainder = item.amountMinor - base * shareCount
-        for (participantId in item.participantIds) {
-            // Hand the leftover pennies to the first assignee(s) so the item splits exactly.
-            val extra = if (remainder > 0) 1L else 0L
-            if (remainder > 0) remainder--
-            owed[participantId] = (owed[participantId] ?: 0L) + base + extra
+        val active = item.shares.filterValues { it > 0 }
+        val totalShares = active.values.sum()
+        if (totalShares == 0L) continue
+        var distributed = 0L
+        val entries = active.entries.toList()
+        entries.forEachIndexed { i, (participantId, share) ->
+            // Weighted split; the last sharer absorbs rounding so the item splits exactly.
+            val part = if (i == entries.lastIndex) item.amountMinor - distributed
+            else item.amountMinor * share / totalShares
+            distributed += part
+            owed[participantId] = (owed[participantId] ?: 0L) + part
         }
     }
 

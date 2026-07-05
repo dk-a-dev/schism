@@ -21,7 +21,7 @@ import javax.inject.Inject
 
 data class ItemizedSplitUiState(
     val loading: Boolean = true,
-    /** True when the on-device AI model is downloaded + enabled (so parsing was the smart path). */
+    /** True when the on-device AI model is downloaded + enabled. */
     val aiActive: Boolean = false,
     val draft: ReceiptDraft? = null,
     val title: String = "",
@@ -29,27 +29,31 @@ data class ItemizedSplitUiState(
     val groups: List<Group> = emptyList(),
     val selectedGroupId: String? = null,
     val paidById: String = "",
-    // Item index -> the participant ids currently sharing that item.
-    val assignments: Map<Int, Set<String>> = emptyMap(),
+    // Item index -> participantId -> weighted share (0 = not having it, 2 = had two of it, …).
+    val assignments: Map<Int, Map<String, Long>> = emptyMap(),
     val submitting: Boolean = false,
     val error: String? = null,
 ) {
     val selectedGroup: Group? get() = groups.firstOrNull { it.id == selectedGroupId }
     val taxMinor: Long get() = draft?.taxMinor ?: 0L
+    /** True when this draft actually came from the on-device LLM (vs the heuristic fallback). */
+    val parsedByAi: Boolean get() = draft?.parsedByAi == true
 
-    /** Live per-participant owed totals in minor units (item shares + proportional tax). */
+    /** Live per-participant owed totals in minor units (weighted item shares + proportional tax). */
     val perPersonMinor: Map<String, Long>
         get() {
             val owed = LinkedHashMap<String, Long>()
             items.forEachIndexed { index, item ->
-                val assignees = assignments[index].orEmpty().toList()
-                if (assignees.isEmpty()) return@forEachIndexed
-                val base = item.amountMinor / assignees.size
-                var remainder = item.amountMinor - base * assignees.size
-                for (id in assignees) {
-                    val extra = if (remainder > 0) 1L else 0L
-                    if (remainder > 0) remainder--
-                    owed[id] = (owed[id] ?: 0L) + base + extra
+                val active = assignments[index].orEmpty().filterValues { it > 0 }
+                val totalShares = active.values.sum()
+                if (totalShares == 0L) return@forEachIndexed
+                var distributed = 0L
+                val entries = active.entries.toList()
+                entries.forEachIndexed { i, (pid, share) ->
+                    val part = if (i == entries.lastIndex) item.amountMinor - distributed
+                    else item.amountMinor * share / totalShares
+                    distributed += part
+                    owed[pid] = (owed[pid] ?: 0L) + part
                 }
             }
             val subtotal = owed.values.sum()
@@ -103,16 +107,16 @@ class ItemizedSplitViewModel @Inject constructor(
                         groups = known,
                         selectedGroupId = selectedId,
                         paidById = s.paidById.ifBlank { defaultPaidBy(selected) },
-                        assignments = s.assignments.ifEmpty { everyoneAssigned(s.items, selected) },
+                        assignments = s.assignments.ifEmpty { everyoneOnce(s.items, selected) },
                     )
                 }
             }
         }
     }
 
-    /** Default: every item is shared by everyone in the selected group. */
-    private fun everyoneAssigned(items: List<ReceiptLineItem>, group: Group?): Map<Int, Set<String>> {
-        val everyone = group?.participants?.map { it.id }?.toSet() ?: emptySet()
+    /** Default: every item is shared 1× by everyone in the selected group. */
+    private fun everyoneOnce(items: List<ReceiptLineItem>, group: Group?): Map<Int, Map<String, Long>> {
+        val everyone = group?.participants?.associate { it.id to 1L } ?: emptyMap()
         return items.indices.associateWith { everyone }
     }
 
@@ -127,7 +131,7 @@ class ItemizedSplitViewModel @Inject constructor(
             s.copy(
                 selectedGroupId = groupId,
                 paidById = defaultPaidBy(group),
-                assignments = everyoneAssigned(s.items, group),
+                assignments = everyoneOnce(s.items, group),
                 error = null,
             )
         }
@@ -137,12 +141,51 @@ class ItemizedSplitViewModel @Inject constructor(
         _state.update { it.copy(title = value, error = null) }
     }
 
-    /** Toggle whether [participantId] shares the item at [itemIndex]. */
-    fun toggleAssignment(itemIndex: Int, participantId: String) {
+    /** Cycle a participant's share of an item: none → 1× → 2× → 3× → none. */
+    fun cycleShare(itemIndex: Int, participantId: String) {
         _state.update { s ->
             val current = s.assignments[itemIndex].orEmpty()
-            val updated = if (participantId in current) current - participantId else current + participantId
-            s.copy(assignments = s.assignments + (itemIndex to updated), error = null)
+            val next = when (current[participantId] ?: 0L) {
+                0L -> 1L
+                1L -> 2L
+                2L -> 3L
+                else -> 0L
+            }
+            s.copy(
+                assignments = s.assignments + (itemIndex to (current + (participantId to next))),
+                error = null,
+            )
+        }
+    }
+
+    /** Edit an item's name/qty/amount in place. */
+    fun updateItem(index: Int, name: String, qty: Int, amountMinor: Long) {
+        _state.update { s ->
+            if (index !in s.items.indices) return@update s
+            val items = s.items.toMutableList()
+            items[index] = ReceiptLineItem(name = name.trim().take(60), amountMinor = amountMinor, qty = qty.coerceIn(1, 99))
+            s.copy(items = items, error = null)
+        }
+    }
+
+    /** Remove a mis-parsed item; its assignments are dropped and later indices reshuffled. */
+    fun removeItem(index: Int) {
+        _state.update { s ->
+            if (index !in s.items.indices) return@update s
+            val items = s.items.toMutableList().also { it.removeAt(index) }
+            val reindexed = s.assignments
+                .filterKeys { it != index }
+                .mapKeys { (k, _) -> if (k > index) k - 1 else k }
+            s.copy(items = items, assignments = reindexed, error = null)
+        }
+    }
+
+    /** Add a missing item by hand; everyone shares it 1× by default. */
+    fun addItem(name: String, qty: Int, amountMinor: Long) {
+        _state.update { s ->
+            val items = s.items + ReceiptLineItem(name.trim().take(60), amountMinor, qty.coerceIn(1, 99))
+            val everyone = s.selectedGroup?.participants?.associate { it.id to 1L } ?: emptyMap()
+            s.copy(items = items, assignments = s.assignments + (items.lastIndex to everyone), error = null)
         }
     }
 
@@ -156,7 +199,7 @@ class ItemizedSplitViewModel @Inject constructor(
         // You're adding it, so you paid: default to your participant, else the first one.
         val payerId = s.paidById.ifBlank { group.activeParticipantId ?: group.participants.firstOrNull()?.id.orEmpty() }
         val assigned = s.items.mapIndexed { index, item ->
-            AssignedItem(amountMinor = item.amountMinor, participantIds = s.assignments[index].orEmpty().toList())
+            AssignedItem(amountMinor = item.amountMinor, shares = s.assignments[index].orEmpty())
         }
         viewModelScope.launch {
             _state.update { it.copy(submitting = true, error = null) }

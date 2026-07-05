@@ -57,6 +57,10 @@ class InboxViewModel @Inject constructor(
     private val _permissionNeeded = MutableStateFlow(true)
     val permissionNeeded: StateFlow<Boolean> = _permissionNeeded.asStateFlow()
 
+    /** True while a receipt image is being OCR'd + parsed (drives a progress dialog). */
+    private val _scanningReceipt = MutableStateFlow(false)
+    val scanningReceipt: StateFlow<Boolean> = _scanningReceipt.asStateFlow()
+
     private val _filter = MutableStateFlow(InboxFilter.ToSplit)
     val filter: StateFlow<InboxFilter> = _filter.asStateFlow()
 
@@ -98,14 +102,16 @@ class InboxViewModel @Inject constructor(
     /** Scan a receipt image on-device (ML Kit OCR → parse) and add it to the inbox to split/keep. */
     fun scanReceipt(uri: Uri) {
         viewModelScope.launch {
+            _scanningReceipt.value = true
             runCatching {
                 val lines = receiptScanner.recognizeLines(appContext, uri)
                 llmParser.parseReceipt(lines) ?: parseReceipt(lines)
             }.onSuccess { draft ->
+                _scanningReceipt.value = false
                 if (draft == null) {
                     _messages.tryEmit("Couldn't read a total from that receipt")
-                } else if (draft.lineItems.size >= 2) {
-                    // Multi-item receipt: hand it off to the itemised split flow to assign per person.
+                } else if (draft.lineItems.isNotEmpty()) {
+                    // Itemised receipt: hand it off to the split flow to assign per person.
                     pendingReceipt.draft = draft
                     _navigateItemized.tryEmit(Unit)
                 } else {
@@ -113,6 +119,7 @@ class InboxViewModel @Inject constructor(
                     _messages.tryEmit("Added ${draft.merchant} — split it below")
                 }
             }.onFailure {
+                _scanningReceipt.value = false
                 _messages.tryEmit("Couldn't scan that image")
             }
         }

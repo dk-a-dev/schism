@@ -10,7 +10,9 @@ import (
 // token, so the app "just works". Override with MODEL_UPSTREAM_URL (e.g. a smaller/self-hosted
 // file). Set HF_TOKEN to proxy a license-gated model (e.g. Gemma) without exposing the token to
 // clients — best practice: the token lives on the server, never in the app.
-const defaultModelUpstream = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task"
+// ekv4096 = 4096-token context: receipt prompts are ~1k tokens, so the small-context (1280) build
+// would overflow and make on-device parsing fail silently.
+const defaultModelUpstream = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task"
 
 // modelDownload serves the on-device model to the app. With no HF_TOKEN it simply redirects to the
 // (ungated) upstream so the device downloads directly. With HF_TOKEN set it proxies the bytes,

@@ -3,6 +3,7 @@
 package ai.schism.split.sms.itemized
 
 import ai.schism.split.core.money.formatMinor
+import ai.schism.split.core.ui.WavyProgress
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.Participant
 import ai.schism.split.sms.receipt.ReceiptLineItem
@@ -16,15 +17,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import ai.schism.split.core.ui.WavyProgress
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -33,9 +38,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -46,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
@@ -56,6 +64,7 @@ fun ItemizedSplitScreen(
     viewModel: ItemizedSplitViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var addingItem by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -74,12 +83,6 @@ fun ItemizedSplitScreen(
                 state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     WavyProgress()
                 }
-                state.items.isEmpty() -> Box(
-                    Modifier.fillMaxSize().padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("This receipt has no line items to split.")
-                }
                 else -> Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -92,39 +95,14 @@ fun ItemizedSplitScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "You paid — tick who had each dish. Tax is split by what everyone ordered.",
+                        "You paid. Tap a person to include them in a dish — tap again for 2×, 3× " +
+                            "(had more of it). Tax splits by what each person ordered.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    if (!state.aiActive) {
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                Icon(
-                                    Icons.Filled.Lightbulb,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                                Column {
-                                    Text(
-                                        "Tip: turn on On-device AI",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                    Text(
-                                        "Settings → On-device AI → download the model, then bills read far better " +
-                                            "(item names, quantities & tax). You can fix any item below either way.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                }
-                            }
-                        }
+                    if (!state.parsedByAi) {
+                        AiTipCard(aiEnabled = state.aiActive)
                     }
 
                     if (state.groups.isEmpty()) {
@@ -146,8 +124,21 @@ fun ItemizedSplitScreen(
                                     item = item,
                                     currency = state.draft?.currency ?: "₹",
                                     participants = group.participants,
-                                    assigned = state.assignments[index].orEmpty(),
-                                    onToggle = { pid -> viewModel.toggleAssignment(index, pid) },
+                                    shares = state.assignments[index].orEmpty(),
+                                    onCycle = { pid -> viewModel.cycleShare(index, pid) },
+                                    onEdit = { name, qty, amount -> viewModel.updateItem(index, name, qty, amount) },
+                                    onRemove = { viewModel.removeItem(index) },
+                                )
+                            }
+                            OutlinedButton(onClick = { addingItem = true }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Filled.Add, contentDescription = null)
+                                Text("  Add item")
+                            }
+                            if (state.items.isEmpty()) {
+                                Text(
+                                    "Nothing could be read off this bill — add the dishes by hand above.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             PerPersonTotals(
@@ -165,7 +156,7 @@ fun ItemizedSplitScreen(
 
                     Button(
                         onClick = { viewModel.submit(onDone) },
-                        enabled = !state.submitting && state.selectedGroupId != null,
+                        enabled = !state.submitting && state.selectedGroupId != null && state.items.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (state.submitting) {
@@ -182,6 +173,54 @@ fun ItemizedSplitScreen(
             }
         }
     }
+
+    if (addingItem) {
+        ItemDialog(
+            title = "Add item",
+            initial = ReceiptLineItem("", 0L, 1),
+            onDismiss = { addingItem = false },
+            onSave = { name, qty, amount ->
+                viewModel.addItem(name, qty, amount)
+                addingItem = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun AiTipCard(aiEnabled: Boolean) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                Icons.Filled.Lightbulb,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Column {
+                Text(
+                    if (aiEnabled) "AI couldn't read this bill" else "This bill was read with the basic parser",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    if (aiEnabled) {
+                        "The on-device model didn't produce a clean read (try re-downloading it in " +
+                            "Settings → On-device AI). Fix or remove items below — everything is editable."
+                    } else {
+                        "Turn on Settings → On-device AI and download the model for far better reads " +
+                            "(names, quantities, tax). Fix or remove items below — everything is editable."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -189,11 +228,14 @@ private fun ItemCard(
     item: ReceiptLineItem,
     currency: String,
     participants: List<Participant>,
-    assigned: Set<String>,
-    onToggle: (String) -> Unit,
+    shares: Map<String, Long>,
+    onCycle: (String) -> Unit,
+    onEdit: (String, Int, Long) -> Unit,
+    onRemove: () -> Unit,
 ) {
+    var editing by remember { mutableStateOf(false) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     if (item.qty > 1) "${item.name}  ×${item.qty}" else item.name,
@@ -206,18 +248,98 @@ private fun ItemCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
+                IconButton(onClick = { editing = true }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit item", modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Filled.Close, contentDescription = "Remove item", modifier = Modifier.size(18.dp))
+                }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 8.dp, end = 12.dp),
+            ) {
                 participants.forEach { p ->
+                    val share = shares[p.id] ?: 0L
                     FilterChip(
-                        selected = p.id in assigned,
-                        onClick = { onToggle(p.id) },
-                        label = { Text(p.name) },
+                        selected = share > 0,
+                        onClick = { onCycle(p.id) },
+                        label = { Text(if (share > 1) "${p.name} ×$share" else p.name) },
                     )
                 }
             }
         }
     }
+
+    if (editing) {
+        ItemDialog(
+            title = "Edit item",
+            initial = item,
+            onDismiss = { editing = false },
+            onSave = { name, qty, amount ->
+                onEdit(name, qty, amount)
+                editing = false
+            },
+        )
+    }
+}
+
+/** Add/edit an item: name, quantity, and the line's total amount. */
+@Composable
+private fun ItemDialog(
+    title: String,
+    initial: ReceiptLineItem,
+    onDismiss: () -> Unit,
+    onSave: (String, Int, Long) -> Unit,
+) {
+    var name by remember { mutableStateOf(initial.name) }
+    var qty by remember { mutableStateOf(if (initial.qty > 0) initial.qty.toString() else "1") }
+    var amount by remember {
+        mutableStateOf(if (initial.amountMinor > 0) String.format("%.2f", initial.amountMinor / 100.0) else "")
+    }
+    val qtyInt = qty.trim().toIntOrNull()
+    val amountMinor = amount.trim().toDoubleOrNull()?.let { (it * 100).toLong() }
+    val valid = name.isNotBlank() && qtyInt != null && qtyInt > 0 && amountMinor != null && amountMinor > 0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Item name") },
+                    singleLine = true,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = qty,
+                        onValueChange = { qty = it },
+                        label = { Text("Qty") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Line amount") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(2f),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (valid) onSave(name, qtyInt!!, amountMinor!!) },
+                enabled = valid,
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -283,4 +405,3 @@ private fun GroupPicker(groups: List<Group>, selected: Group?, onSelect: (String
         }
     }
 }
-

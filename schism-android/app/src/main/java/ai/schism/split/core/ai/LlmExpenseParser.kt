@@ -35,7 +35,10 @@ class LlmExpenseParser @Inject constructor(
         return runCatching {
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(modelManager.modelFile.absolutePath)
-                .setMaxTokens(512)
+                // maxTokens covers input AND output: a full receipt prompt is ~700-1000 tokens, so a
+                // small cap makes inference fail silently and the app falls back to the weak regex
+                // parser. Needs a >=2k-context model (the backend serves an ekv4096 build).
+                .setMaxTokens(2048)
                 .build()
             LlmInference.createFromOptions(context, options)
         }.getOrNull()?.also { engine = it }
@@ -100,7 +103,9 @@ class LlmExpenseParser @Inject constructor(
     ): ai.schism.split.sms.receipt.ReceiptDraft? = withContext(Dispatchers.Default) {
         if (!settings.aiEnabled.first()) return@withContext null
         val llm = engine() ?: return@withContext null
-        val prompt = buildReceiptPrompt(ocrLines.joinToString("\n"))
+        // Cap the OCR fed to the model so prompt + JSON output stay inside the 2048-token context.
+        val ocr = ocrLines.map { it.take(64) }.take(45).joinToString("\n").take(2400)
+        val prompt = buildReceiptPrompt(ocr)
         val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return@withContext null
         val json = extractJson(raw) ?: return@withContext null
         val obj = runCatching { JSONObject(json) }.getOrNull() ?: return@withContext null
@@ -135,16 +140,21 @@ class LlmExpenseParser @Inject constructor(
             lineItems = items,
             taxMinor = tax,
             subtotalMinor = subtotal,
+            parsedByAi = true,
         )
     }
 
     private fun buildReceiptPrompt(ocr: String): String = """
         You are a precise restaurant-receipt parser. From the OCR text below, extract structured JSON.
         Rules:
+        - "items" = ONLY the purchased dishes/products. NEVER include phone numbers, mobile numbers,
+          bill/invoice numbers, dates, times, covers, table numbers, GST/CGST/SGST/tax rows,
+          subtotal/total/pay rows, or customer details as items.
         - Item names often wrap across two lines (e.g. "Buff Oklahoma" then "Smash") — join them into one name.
         - "qty" is the quantity column for that item; "amount" is that line's total price in currency units.
-        - Include every ordered dish, skip header/total/tax rows from the items list.
-        - "tax" = the sum of all taxes and charges (GST/CGST/SGST/service), "total" = the final payable.
+        - Sanity check: the sum of item amounts should be close to the subtotal. Drop anything that
+          doesn't look like a dish price.
+        - "tax" = all taxes and charges combined (GST/CGST/SGST/service), "total" = the final payable.
         Reply with ONLY minified JSON, no prose, exactly:
         {"merchant": string, "date": "YYYY-MM-DD" or null, "items": [{"name": string, "qty": number, "amount": number}], "subtotal": number, "tax": number, "total": number}
         OCR:

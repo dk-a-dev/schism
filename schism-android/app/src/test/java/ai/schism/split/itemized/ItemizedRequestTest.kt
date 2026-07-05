@@ -44,8 +44,8 @@ class ItemizedRequestTest {
     }
 
     @Test
-    fun remainderPenniesGoToFirstAssignee() {
-        // 100 minor split 3 ways = 34/33/33 (first assignee gets the extra penny).
+    fun remainderPenniesGoToLastSharerAndSplitIsExact() {
+        // 100 minor split 3 ways = 33/33/34 (the last sharer absorbs rounding so the split is exact).
         val items = listOf(AssignedItem(amountMinor = 100L, participantIds = listOf("a", "b", "c")))
         val req = buildItemizedExpenseRequest(
             items = items,
@@ -58,12 +58,32 @@ class ItemizedRequestTest {
         )!!
 
         val owed = req.paidFor.associate { it.participantId to it.shares }
-        assertEquals(34L, owed["a"])
+        assertEquals(33L, owed["a"])
         assertEquals(33L, owed["b"])
-        assertEquals(33L, owed["c"])
+        assertEquals(34L, owed["c"])
         // The split is exact: shares sum back to the item amount.
         assertEquals(100L, req.paidFor.sumOf { it.shares })
         assertEquals(100L, req.amount)
+    }
+
+    @Test
+    fun weightedSharesSplitProportionally() {
+        // ₹300 dish, dev had 2 of it, ru had 1 → dev owes 200, ru owes 100.
+        val items = listOf(AssignedItem(amountMinor = 30000L, shares = mapOf("dev" to 2L, "ru" to 1L)))
+        val req = buildItemizedExpenseRequest(
+            items = items,
+            group = group("dev", "ru"),
+            paidById = "dev",
+            addedBy = null,
+            title = "Dinner",
+            currency = "₹",
+            dateIso = null,
+        )!!
+
+        val owed = req.paidFor.associate { it.participantId to it.shares }
+        assertEquals(20000L, owed["dev"])
+        assertEquals(10000L, owed["ru"])
+        assertEquals(30000L, req.amount)
     }
 
     @Test

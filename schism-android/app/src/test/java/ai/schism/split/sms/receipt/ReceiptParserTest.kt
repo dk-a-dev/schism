@@ -53,6 +53,73 @@ class ReceiptParserTest {
     }
 
     @Test
+    fun restaurantBillExcludesMetadataAndJoinsWrappedNames() {
+        // Real POSIST-style bill: phone numbers, covers, bill no, GST rows and PAY must never be
+        // items; wrapped names ("Buff Oklahoma" ↵ "Smash 1 520.00") are joined; qty is read.
+        val ocr = listOf(
+            "SMASH GUYS",
+            "Bill No.:T3",
+            "Date:2026-07-05 20:36:47",
+            "Covers:3",
+            "Customer Detail",
+            "Name: dev",
+            "Mobile: 9555713188",
+            "Item  Qty  Amt",
+            "Flings Buffalo",
+            "Chkn  1  348.00",
+            "Sober Picante  1  248.00",
+            "Hazelnut Cold",
+            "Coffee  1  295.00",
+            "Buff Oklahoma",
+            "Smash  1  520.00",
+            "Lamb Chilli",
+            "Cheese  1  550.00",
+            "Chicken Chilli",
+            "Cheese Burg  1  450.00",
+            "Total Qty:  6",
+            "Sub Total:  2411.00",
+            "GST@5%  120.55",
+            "CGST @2.5  60.27",
+            "SGST @2.5  60.27",
+            "Round Off:  0.45",
+            "Total Invoice Value  2532",
+            "PAY:2532",
+            "Feedback: mail@popoventures.com",
+            "Powered by - POSIST",
+        )
+        val draft = parseReceipt(ocr)!!
+
+        assertEquals("SMASH GUYS", draft.merchant)
+        assertEquals(6, draft.lineItems.size)
+        assertEquals(
+            listOf(
+                "Flings Buffalo Chkn", "Sober Picante", "Hazelnut Cold Coffee",
+                "Buff Oklahoma Smash", "Lamb Chilli Cheese", "Chicken Chilli Cheese Burg",
+            ),
+            draft.lineItems.map { it.name },
+        )
+        assertEquals(
+            listOf(34800L, 24800L, 29500L, 52000L, 55000L, 45000L),
+            draft.lineItems.map { it.amountMinor },
+        )
+        assertEquals(List(6) { 1 }, draft.lineItems.map { it.qty })
+        // No phone number / covers / GST / PAY leaked into the items.
+        assertEquals(2411_00L, draft.lineItems.sumOf { it.amountMinor })
+        assertEquals(253200L, draft.totalMinor)
+        assertEquals(12055L, draft.taxMinor) // combined GST row wins over CGST+SGST sublines
+        assertEquals(241100L, draft.subtotalMinor)
+    }
+
+    @Test
+    fun qtyGreaterThanOneIsParsed() {
+        val draft = parseReceipt(listOf("Dhaba", "Butter Roti  4  120.00", "Total 120.00"))!!
+        assertEquals(1, draft.lineItems.size)
+        assertEquals("Butter Roti", draft.lineItems[0].name)
+        assertEquals(4, draft.lineItems[0].qty)
+        assertEquals(12000L, draft.lineItems[0].amountMinor)
+    }
+
+    @Test
     fun extractsLineItemsExcludingTotalsAndMerchant() {
         val ocr = listOf(
             "BIG BAZAAR",
