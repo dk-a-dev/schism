@@ -21,6 +21,8 @@ import javax.inject.Inject
 
 data class ItemizedSplitUiState(
     val loading: Boolean = true,
+    /** True when the on-device AI model is downloaded + enabled (so parsing was the smart path). */
+    val aiActive: Boolean = false,
     val draft: ReceiptDraft? = null,
     val title: String = "",
     val items: List<ReceiptLineItem> = emptyList(),
@@ -70,6 +72,7 @@ class ItemizedSplitViewModel @Inject constructor(
     private val groupRepo: GroupRepository,
     private val expenseRepo: ExpenseRepository,
     private val settings: SettingsRepository,
+    private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ItemizedSplitUiState())
@@ -79,6 +82,11 @@ class ItemizedSplitViewModel @Inject constructor(
         val draft = pending.draft
         _state.update {
             it.copy(draft = draft, items = draft?.lineItems.orEmpty(), title = draft?.merchant ?: "Receipt")
+        }
+
+        viewModelScope.launch {
+            val aiActive = llmParser.isAvailable && settings.aiEnabled.first()
+            _state.update { it.copy(aiActive = aiActive) }
         }
 
         viewModelScope.launch {
