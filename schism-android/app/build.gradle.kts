@@ -11,7 +11,7 @@ plugins {
 // env var or a `schism.backendUrl` Gradle property; defaults to the Android emulator's host loopback.
 val backendUrl: String = System.getenv("SCHISM_BACKEND_URL")
     ?: (project.findProperty("schism.backendUrl") as String?)
-    ?: "http://10.0.2.2:8080"
+    ?: "https://api.schism.182116111.xyz"
 
 android {
     namespace = "ai.schism.split"
@@ -21,8 +21,8 @@ android {
         applicationId = "ai.schism.split"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.1.6"
+        versionCode = 8
+        versionName = "0.1.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
     }

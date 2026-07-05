@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.runtime.collectAsState
@@ -101,7 +103,9 @@ fun AppNav() {
             }
         },
     ) { padding ->
-        androidx.compose.foundation.layout.Column(modifier = Modifier.padding(padding)) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.padding(padding).windowInsetsPadding(WindowInsets.statusBars),
+        ) {
             CloudStatusBanner(online = online, pending = pending)
             NavHost(
                 navController = navController,
