@@ -30,7 +30,12 @@ class LlmExpenseParser @Inject constructor(
     val isAvailable: Boolean get() = modelManager.isReady()
 
     private fun engine(): LlmInference? {
-        if (!modelManager.isReady()) return null
+        if (!modelManager.isReady()) {
+            // Model was deleted: release the stale engine so inference can't run off a dead file.
+            engine?.let { runCatching { it.close() } }
+            engine = null
+            return null
+        }
         engine?.let { return it }
         return runCatching {
             val options = LlmInference.LlmInferenceOptions.builder()
@@ -105,14 +110,37 @@ class LlmExpenseParser @Inject constructor(
         val llm = engine() ?: return@withContext null
         // Cap the OCR fed to the model so prompt + JSON output stay inside the 2048-token context.
         val ocr = ocrLines.map { it.take(64) }.take(45).joinToString("\n").take(2400)
-        val prompt = buildReceiptPrompt(ocr)
-        val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return@withContext null
-        val json = extractJson(raw) ?: return@withContext null
-        val obj = runCatching { JSONObject(json) }.getOrNull() ?: return@withContext null
+
+        // Harness: generate → scrub → validate; on failure, one repair round that tells the model
+        // exactly what was wrong with its previous answer. Never trust a single unvalidated pass.
+        val first = generateReceiptDraft(llm, buildReceiptPrompt(ocr))
+        var best = first?.let(::scrubDraft)
+        val problem: String? = if (best == null) "the JSON could not be parsed" else validateDraft(best)
+        if (problem != null) {
+            val repairPrompt = buildReceiptPrompt(ocr) + "\nYour previous answer was rejected because: " +
+                problem + ". Re-read the OCR and output corrected JSON only."
+            val second = generateReceiptDraft(llm, repairPrompt)?.let(::scrubDraft)
+            if (second != null && validateDraft(second) == null) {
+                best = second
+            }
+        }
+        // A scrubbed-but-imperfect draft (e.g. slight sum drift) still beats the regex fallback, as
+        // long as it has plausible items; hard failures return null so the heuristic takes over.
+        val result = best
+        if (result == null || result.lineItems.isEmpty()) null else result
+    }
+
+    private fun generateReceiptDraft(
+        llm: LlmInference,
+        prompt: String,
+    ): ai.schism.split.sms.receipt.ReceiptDraft? {
+        val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return null
+        val json = extractJson(raw) ?: return null
+        val obj = runCatching { JSONObject(json) }.getOrNull() ?: return null
 
         fun money(v: Double): Long = (v * 100).roundToLong()
 
-        val itemsArr = obj.optJSONArray("items") ?: return@withContext null
+        val itemsArr = obj.optJSONArray("items") ?: return null
         val items = (0 until itemsArr.length()).mapNotNull { i ->
             val it = itemsArr.optJSONObject(i) ?: return@mapNotNull null
             val name = it.optString("name").trim().ifBlank { return@mapNotNull null }
@@ -124,7 +152,7 @@ class LlmExpenseParser @Inject constructor(
                 qty = it.optInt("qty", 1).coerceAtLeast(1),
             )
         }
-        if (items.isEmpty()) return@withContext null
+        if (items.isEmpty()) return null
 
         val subtotal = obj.optDouble("subtotal", Double.NaN).takeIf { !it.isNaN() }?.let(::money)
             ?: items.sumOf { it.amountMinor }
@@ -132,7 +160,7 @@ class LlmExpenseParser @Inject constructor(
         val total = obj.optDouble("total", Double.NaN).takeIf { !it.isNaN() }?.let(::money) ?: (subtotal + tax)
         val date = obj.optString("date").trim().takeIf { it.length == 10 && it[4] == '-' }
 
-        ai.schism.split.sms.receipt.ReceiptDraft(
+        return ai.schism.split.sms.receipt.ReceiptDraft(
             merchant = obj.optString("merchant").trim().ifBlank { "Receipt" }.take(60),
             totalMinor = total,
             currency = "₹",
@@ -142,6 +170,43 @@ class LlmExpenseParser @Inject constructor(
             subtotalMinor = subtotal,
             parsedByAi = true,
         )
+    }
+
+    // Names the model must never emit as dishes — mirror of the heuristic parser's blocklist.
+    private val metadataName = Regex(
+        """(?i)\b(total|subtotal|tax|gst|cgst|sgst|vat|covers?|mobile|phone|bill|invoice|pay|""" +
+            """round\s*off|qty|date|time|customer|feedback|change|cash|balance|service)\b""",
+    )
+
+    /** Drop obviously-wrong items (metadata names, absurd amounts) instead of rejecting everything. */
+    private fun scrubDraft(
+        draft: ai.schism.split.sms.receipt.ReceiptDraft,
+    ): ai.schism.split.sms.receipt.ReceiptDraft {
+        val kept = draft.lineItems.filter { item ->
+            !metadataName.containsMatchIn(item.name) &&
+                item.name.count { it.isLetter() } >= 2 &&
+                item.amountMinor > 0 &&
+                (draft.totalMinor <= 0 || item.amountMinor <= draft.totalMinor)
+        }
+        return draft.copy(lineItems = kept)
+    }
+
+    /** Returns a human-readable problem for the repair round, or null when the draft is sound. */
+    private fun validateDraft(draft: ai.schism.split.sms.receipt.ReceiptDraft): String? {
+        if (draft.lineItems.isEmpty()) return "the items list was empty or contained only metadata rows"
+        val sum = draft.lineItems.sumOf { it.amountMinor }
+        val reference = if (draft.subtotalMinor > 0) draft.subtotalMinor else draft.totalMinor - draft.taxMinor
+        if (reference > 0) {
+            val drift = kotlin.math.abs(sum - reference)
+            val tolerance = maxOf(reference / 20, 1000L) // 5% or ₹10
+            if (drift > tolerance) {
+                return "the item amounts sum to ${sum / 100.0} but the subtotal is ${reference / 100.0}"
+            }
+        }
+        if (draft.totalMinor > 0 && draft.totalMinor < sum / 2) {
+            return "the total is far smaller than the sum of the items"
+        }
+        return null
     }
 
     private fun buildReceiptPrompt(ocr: String): String = """

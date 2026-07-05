@@ -59,6 +59,7 @@ private fun AuthForm(
     var register by rememberSaveable { mutableStateOf(true) }
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
 
     val emailValid = email.contains("@")
@@ -110,6 +111,17 @@ private fun AuthForm(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (register) {
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Phone (optional)") },
+                    singleLine = true,
+                    supportingText = { Text("Friends who added you by number get linked automatically") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -128,7 +140,7 @@ private fun AuthForm(
 
             Button(
                 onClick = {
-                    if (register) viewModel.register(name, email, password, onDone)
+                    if (register) viewModel.register(name, email, password, phone, onDone)
                     else viewModel.login(email, password, onDone)
                 },
                 enabled = canSubmit,

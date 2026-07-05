@@ -110,6 +110,12 @@ data class AuthRequest(
     val email: String,
     val password: String,
     val name: String = "",
+    val phone: String = "",
+)
+
+@Serializable
+data class MyGroupsDto(
+    val groupIds: List<String> = emptyList(),
 )
 
 @Serializable
@@ -125,6 +131,8 @@ data class ParticipantRequest(
     val id: String? = null,
     val name: String,
     val userId: String? = null,
+    /** Phone number for invite-by-contact: lets the backend link this participant when they join. */
+    val phone: String? = null,
 )
 
 @Serializable

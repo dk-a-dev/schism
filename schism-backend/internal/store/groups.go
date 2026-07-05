@@ -18,6 +18,34 @@ type ParticipantInput struct {
 	ID     *string
 	Name   string
 	UserID *string
+	Phone  *string
+}
+
+// NormalizePhone keeps digits only and compares by the last 10 (mobile length), so
+// "+91 95557-13188", "09555713188" and "9555713188" all normalize identically.
+func NormalizePhone(raw string) string {
+	digits := make([]rune, 0, len(raw))
+	for _, r := range raw {
+		if r >= '0' && r <= '9' {
+			digits = append(digits, r)
+		}
+	}
+	s := string(digits)
+	if len(s) > 10 {
+		s = s[len(s)-10:]
+	}
+	return s
+}
+
+func normalizePhonePtr(p *string) any {
+	if p == nil {
+		return nil
+	}
+	n := NormalizePhone(*p)
+	if n == "" {
+		return nil
+	}
+	return n
 }
 type GroupInput struct {
 	Name         string
@@ -58,8 +86,8 @@ func (s *Store) CreateGroup(ctx context.Context, in GroupInput) (Group, error) {
 	}
 	for _, p := range in.Participants {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO participants (id, group_id, name, user_id) VALUES ($1,$2,$3,$4)`,
-			id.New(), gid, p.Name, nullifyPtr(p.UserID)); err != nil {
+			`INSERT INTO participants (id, group_id, name, user_id, phone) VALUES ($1,$2,$3,$4,$5)`,
+			id.New(), gid, p.Name, nullifyPtr(p.UserID), normalizePhonePtr(p.Phone)); err != nil {
 			return Group{}, err
 		}
 	}
@@ -149,16 +177,18 @@ func (s *Store) UpdateGroup(ctx context.Context, gid string, in GroupInput) (*Gr
 		if p.ID != nil {
 			keep[*p.ID] = true
 			if _, err := tx.Exec(ctx,
-				`UPDATE participants SET name=$2, user_id=$4 WHERE id=$1 AND group_id=$3`,
-				*p.ID, p.Name, gid, nullifyPtr(p.UserID)); err != nil {
+				// COALESCE keeps an existing phone when an edit doesn't resend it.
+				`UPDATE participants SET name=$2, user_id=$4, phone=COALESCE($5, phone)
+				 WHERE id=$1 AND group_id=$3`,
+				*p.ID, p.Name, gid, nullifyPtr(p.UserID), normalizePhonePtr(p.Phone)); err != nil {
 				return nil, err
 			}
 		} else {
 			newID := id.New()
 			keep[newID] = true
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO participants (id, group_id, name, user_id) VALUES ($1,$2,$3,$4)`,
-				newID, gid, p.Name, nullifyPtr(p.UserID)); err != nil {
+				`INSERT INTO participants (id, group_id, name, user_id, phone) VALUES ($1,$2,$3,$4,$5)`,
+				newID, gid, p.Name, nullifyPtr(p.UserID), normalizePhonePtr(p.Phone)); err != nil {
 				return nil, err
 			}
 		}

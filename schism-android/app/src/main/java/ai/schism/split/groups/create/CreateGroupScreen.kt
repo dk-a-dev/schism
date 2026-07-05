@@ -150,10 +150,17 @@ fun CreateGroupScreen(
                 }
 
                 val context = LocalContext.current
+                // Pick a PHONE entry (not just a contact) so we get name + number in one tap with no
+                // READ_CONTACTS permission; the number lets the backend auto-link the friend when
+                // they join and powers the SMS invite after the group is created.
                 val pickContact = rememberLauncherForActivityResult(
-                    ActivityResultContracts.PickContact(),
-                ) { uri ->
-                    if (uri != null) contactDisplayName(context, uri)?.let(viewModel::addParticipantNamed)
+                    ActivityResultContracts.StartActivityForResult(),
+                ) { result ->
+                    result.data?.data?.let { uri ->
+                        contactNameAndPhone(context, uri)?.let { (name, phone) ->
+                            viewModel.addParticipantFromContact(name, phone)
+                        }
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
@@ -164,7 +171,13 @@ fun CreateGroupScreen(
                         Text("Add", modifier = Modifier.padding(start = 8.dp))
                     }
                     OutlinedButton(
-                        onClick = { pickContact.launch(null) },
+                        onClick = {
+                            pickContact.launch(
+                                android.content.Intent(android.content.Intent.ACTION_PICK).apply {
+                                    type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+                                },
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(Icons.Filled.Contacts, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -181,8 +194,18 @@ fun CreateGroupScreen(
                 )
             }
 
+            val inviteContext = LocalContext.current
             Button(
-                onClick = { viewModel.submit(onCreated) },
+                onClick = {
+                    viewModel.submit { groupId ->
+                        // Real invites: prefill an SMS to every contact-added member with the link.
+                        val phones = viewModel.pendingInvitePhones()
+                        if (phones.isNotEmpty()) {
+                            sendSmsInvites(inviteContext, phones, viewModel.groupNameForInvite(), groupId)
+                        }
+                        onCreated(groupId)
+                    }
+                },
                 enabled = !state.submitting,
                 shape = MaterialTheme.shapes.large,
                 contentPadding = ButtonDefaults.ContentPadding,
@@ -205,13 +228,40 @@ fun CreateGroupScreen(
 }
 
 /**
- * Reads the display name of a contact the user picked. The picker grants temporary read access to
- * this one contact URI, so no READ_CONTACTS permission is needed.
+ * Reads the display name + phone number of the phone entry the user picked. The picker grants
+ * temporary read access to this one row, so no READ_CONTACTS permission is needed.
  */
-private fun contactDisplayName(context: Context, uri: Uri): String? =
+private fun contactNameAndPhone(context: Context, uri: Uri): Pair<String, String?>? =
     context.contentResolver
-        .query(uri, arrayOf(ContactsContract.Contacts.DISPLAY_NAME), null, null, null)
-        ?.use { c -> if (c.moveToFirst()) c.getString(0)?.takeIf { it.isNotBlank() } else null }
+        .query(
+            uri,
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ),
+            null,
+            null,
+            null,
+        )
+        ?.use { c ->
+            if (!c.moveToFirst()) return@use null
+            val name = c.getString(0)?.takeIf { it.isNotBlank() } ?: return@use null
+            name to c.getString(1)?.takeIf { it.isNotBlank() }
+        }
+
+/** Prefill an SMS to every invited number with the group's join link. */
+private fun sendSmsInvites(context: Context, phones: List<String>, groupName: String, groupId: String) {
+    val link = ai.schism.split.groups.join.JoinGroupViewModel.shareLink(groupId)
+    val name = groupName.ifBlank { "our group" }
+    val intent = android.content.Intent(
+        android.content.Intent.ACTION_SENDTO,
+        Uri.parse("smsto:" + phones.joinToString(";")),
+    ).apply {
+        putExtra("sms_body", "Join \"$name\" on Schism to split our expenses: $link")
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(intent) }
+}
 
 @Composable
 private fun SectionCard(

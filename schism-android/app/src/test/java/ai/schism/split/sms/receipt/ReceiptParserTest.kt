@@ -120,6 +120,48 @@ class ReceiptParserTest {
     }
 
     @Test
+    fun rateColumnBillUsesLineAmountNotRate() {
+        // "name qty rate amount" columns (common on Indian restaurant bills).
+        val draft = parseReceipt(
+            listOf(
+                "SHARMA DHABA",
+                "Paneer Tikka  2  190.00  380.00",
+                "Dal Makhani  1  220.00  220.00",
+                "Butter Naan  4  40.00  160.00",
+                "Total  760.00",
+            ),
+        )!!
+        assertEquals(listOf("Paneer Tikka", "Dal Makhani", "Butter Naan"), draft.lineItems.map { it.name })
+        assertEquals(listOf(38000L, 22000L, 16000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(listOf(2, 1, 4), draft.lineItems.map { it.qty })
+        assertEquals(76000L, draft.totalMinor)
+    }
+
+    @Test
+    fun leadingQtyCafeStyle() {
+        val draft = parseReceipt(listOf("Blue Tokai", "2 x Cappuccino  7.00", "1 x Croissant  3.50", "Total 10.50"))!!
+        assertEquals(listOf("Cappuccino", "Croissant"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(700L, 350L), draft.lineItems.map { it.amountMinor })
+    }
+
+    @Test
+    fun dottedLeadersAndCurrencyPrefix() {
+        val draft = parseReceipt(
+            listOf("Udupi Palace", "Masala Dosa......85.00", "Filter Coffee ₹40.00", "Total ₹125.00"),
+        )!!
+        assertEquals(listOf("Masala Dosa", "Filter Coffee"), draft.lineItems.map { it.name })
+        assertEquals(listOf(8500L, 4000L), draft.lineItems.map { it.amountMinor })
+    }
+
+    @Test
+    fun plainIntegerTotalIsNotTruncated() {
+        // Regression: "2532" once parsed as 253 (three-digit group), corrupting the total.
+        val draft = parseReceipt(listOf("Store", "Snack 100.00", "Total Invoice Value 2532"))!!
+        assertEquals(253200L, draft.totalMinor)
+    }
+
+    @Test
     fun extractsLineItemsExcludingTotalsAndMerchant() {
         val ocr = listOf(
             "BIG BAZAAR",

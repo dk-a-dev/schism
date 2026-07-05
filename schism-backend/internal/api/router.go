@@ -35,6 +35,7 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 		r.Get("/categories", h.listCategories)
 		r.Get("/dashboard", h.getPersonalDashboard)
 		r.Get("/users/me", h.me)
+		r.Get("/users/me/groups", h.myGroups)
 		r.Delete("/users/me", h.deleteMe)
 		r.Post("/users", h.registerUser)
 		r.Post("/auth/register", h.authRegister)

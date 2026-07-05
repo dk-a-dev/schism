@@ -9,7 +9,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,22 +40,27 @@ class ModelManager @Inject constructor(
 
     fun sizeBytes(): Long? = modelFile.takeIf { it.exists() }?.length()
 
+    // Bumped after local file mutations (delete): WorkManager's flow only re-emits on job changes,
+    // so without this the UI kept saying "Ready" after the model file was removed.
+    private val fileTick = MutableStateFlow(0)
+
     /** Live download state: Ready when the file exists, else derived from the worker's WorkInfo. */
     val state: Flow<State> by lazy {
-        WorkManager.getInstance(context)
-            .getWorkInfosForUniqueWorkFlow(ModelDownloadWorker.UNIQUE)
-            .map { infos ->
-                val info = infos.firstOrNull()
-                when {
-                    isReady() -> State.Ready
-                    info == null -> State.Absent
-                    info.state == WorkInfo.State.RUNNING ->
-                        State.Downloading(info.progress.getInt(ModelDownloadWorker.KEY_PCT, 0))
-                    info.state == WorkInfo.State.ENQUEUED -> State.Downloading(0)
-                    info.state == WorkInfo.State.FAILED -> State.Failed("Download failed — try again")
-                    else -> State.Absent
-                }
+        combine(
+            WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(ModelDownloadWorker.UNIQUE),
+            fileTick,
+        ) { infos, _ ->
+            val info = infos.firstOrNull()
+            when {
+                isReady() -> State.Ready
+                info == null -> State.Absent
+                info.state == WorkInfo.State.RUNNING ->
+                    State.Downloading(info.progress.getInt(ModelDownloadWorker.KEY_PCT, 0))
+                info.state == WorkInfo.State.ENQUEUED -> State.Downloading(0)
+                info.state == WorkInfo.State.FAILED -> State.Failed("Download failed — try again")
+                else -> State.Absent
             }
+        }
     }
 
     /** Kick off (or restart) the foreground download of the model. */
@@ -75,5 +81,6 @@ class ModelManager @Inject constructor(
     fun delete() {
         cancel()
         modelFile.delete()
+        fileTick.value++
     }
 }

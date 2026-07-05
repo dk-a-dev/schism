@@ -46,6 +46,8 @@ private val DECIMAL_AMOUNT = Regex("""\d{1,3}(?:,\d{3})*\.\d{2}""")
 // Trailing small integer before the price = the quantity column ("Chkn  1  348.00").
 private val TRAILING_QTY = Regex("""(?:^|\s)(\d{1,2})\s*[xX×@]?\s*$""")
 private val LEADING_QTY = Regex("""^\s*(\d{1,2})\s*[xX×]\s+""")
+// A trailing per-unit rate column ("Paneer Tikka  2  190.00  380.00" → strip the 190.00).
+private val TRAILING_RATE = Regex("""(?:^|\s)[₹$€£]?\d{1,3}(?:,\d{3})*\.\d{2}\s*$""")
 
 private val TOTAL_LABEL = Regex("""(?i)\b(grand\s*total|sub\s*total|subtotal|total|amount\s*(?:due|payable)|net\s*payable|balance|tax|gst|vat|change|cash|tip)\b""")
 
@@ -127,15 +129,31 @@ private fun extractLineItems(lines: List<String>, merchantIndex: Int, totalMinor
 
         var before = line.substring(0, price.range.first).trim().trimEnd('₹', '$', '€', '£').trim()
         var qty = 1
-        TRAILING_QTY.find(before)?.let { m ->
-            qty = m.groupValues[1].toIntOrNull()?.coerceIn(1, 99) ?: 1
-            before = before.removeRange(m.range).trim()
+        var qtySet = false
+        // Strip trailing numeric columns: rate ("... 2 190.00 [380.00]") and the qty column. Repeat
+        // so "name qty rate amount" collapses to a clean name regardless of column order.
+        while (true) {
+            val rate = TRAILING_RATE.find(before)
+            if (rate != null) {
+                before = before.removeRange(rate.range).trim()
+                continue
+            }
+            val q = TRAILING_QTY.find(before)
+            if (q != null) {
+                if (!qtySet) {
+                    qty = q.groupValues[1].toIntOrNull()?.coerceIn(1, 99) ?: 1
+                    qtySet = true
+                }
+                before = before.removeRange(q.range).trim()
+                continue
+            }
+            break
         }
         LEADING_QTY.find(before)?.let { m ->
-            qty = m.groupValues[1].toIntOrNull()?.coerceIn(1, 99) ?: qty
+            if (!qtySet) qty = m.groupValues[1].toIntOrNull()?.coerceIn(1, 99) ?: qty
             before = before.removeRange(m.range).trim()
         }
-        var name = before.trimEnd(':', '-', '·', '.').trim()
+        var name = before.trimEnd(':', '-', '·', '.', '*').trim()
         if (name.count { it.isLetter() } < 3) return@forEachIndexed
 
         // Wrapped names: a short item name whose previous row is letters-only ("Buff Oklahoma" ↵ "Smash").

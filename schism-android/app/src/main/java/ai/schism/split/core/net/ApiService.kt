@@ -24,6 +24,9 @@ interface ApiService {
     @POST("v1/auth/login")
     suspend fun authLogin(@Body body: AuthRequest): AuthResponse
 
+    @GET("v1/users/me/groups")
+    suspend fun myGroups(): MyGroupsDto
+
     @GET("v1/categories")
     suspend fun listCategories(): List<CategoryDto>
 

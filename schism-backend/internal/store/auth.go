@@ -30,8 +30,10 @@ func newToken() (raw, hash string, err error) {
 }
 
 // RegisterUser creates a password account and mints a bearer token. Email must be unique among
-// password accounts. The raw token is returned once; only its hash is stored.
-func (s *Store) RegisterUser(ctx context.Context, name, email, password string) (User, string, error) {
+// password accounts. The raw token is returned once; only its hash is stored. When a phone is
+// provided, participants added earlier by friends under that number are claimed for this account,
+// so their groups show up the moment the user joins the platform.
+func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone string) (User, string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, "", err
@@ -40,12 +42,13 @@ func (s *Store) RegisterUser(ctx context.Context, name, email, password string) 
 	if err != nil {
 		return User{}, "", err
 	}
+	normPhone := NormalizePhone(phone)
 	var u User
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO users (id, name, email, phone, token_hash, password_hash)
-		 VALUES ($1,$2,$3,'',$4,$5)
+		 VALUES ($1,$2,$3,$4,$5,$6)
 		 RETURNING id, name, email, phone, created_at`,
-		id.New(), name, strings.TrimSpace(email), tokenHash, string(hash)).
+		id.New(), name, strings.TrimSpace(email), normPhone, tokenHash, string(hash)).
 		Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -54,7 +57,37 @@ func (s *Store) RegisterUser(ctx context.Context, name, email, password string) 
 		}
 		return User{}, "", err
 	}
+	_ = s.ClaimParticipantsByPhone(ctx, u.ID, normPhone)
 	return u, raw, nil
+}
+
+// ClaimParticipantsByPhone links unclaimed participants carrying [phone] to [userID].
+func (s *Store) ClaimParticipantsByPhone(ctx context.Context, userID, phone string) error {
+	if phone == "" {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE participants SET user_id = $1 WHERE phone = $2 AND user_id IS NULL`, userID, phone)
+	return err
+}
+
+// GroupIDsForUser lists the ids of every group where a participant is linked to [userID].
+func (s *Store) GroupIDsForUser(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT group_id FROM participants WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var gid string
+		if err := rows.Scan(&gid); err != nil {
+			return nil, err
+		}
+		out = append(out, gid)
+	}
+	return out, rows.Err()
 }
 
 // LoginUser verifies credentials and mints a fresh session token.
@@ -81,5 +114,7 @@ func (s *Store) LoginUser(ctx context.Context, email, password string) (User, st
 	if _, err := s.pool.Exec(ctx, `UPDATE users SET token_hash = $2 WHERE id = $1`, u.ID, tokenHash); err != nil {
 		return User{}, "", err
 	}
+	// Claim any participants friends added under this phone since the last session.
+	_ = s.ClaimParticipantsByPhone(ctx, u.ID, NormalizePhone(u.Phone))
 	return u, raw, nil
 }

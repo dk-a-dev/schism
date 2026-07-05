@@ -79,6 +79,27 @@ class CreateGroupViewModel @Inject constructor(
     fun addParticipant() =
         _state.update { it.copy(form = it.form.copy(participants = it.form.participants + "")) }
 
+    // Phone numbers captured from the contacts picker, keyed by participant name (lowercased).
+    // Sent to the backend so the friend is auto-linked when they register with the same number,
+    // and used for the post-create SMS invite.
+    private val contactPhones = mutableMapOf<String, String>()
+
+    /** Add a participant picked from contacts, remembering their phone for linking + invites. */
+    fun addParticipantFromContact(name: String, phone: String?) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        if (!phone.isNullOrBlank()) contactPhones[trimmed.lowercase()] = phone.trim()
+        addParticipantNamed(trimmed)
+    }
+
+    /** Phones of contact-added participants still present in the form (for the SMS invite). */
+    fun pendingInvitePhones(): List<String> {
+        val names = _state.value.form.participants.map { it.trim().lowercase() }.toSet()
+        return contactPhones.filterKeys { it in names }.values.toList()
+    }
+
+    fun groupNameForInvite(): String = _state.value.form.name.trim()
+
     /** Add a participant picked from contacts: fills the first empty row, otherwise appends. */
     fun addParticipantNamed(name: String) = _state.update { s ->
         val trimmed = name.trim()
@@ -128,7 +149,11 @@ class CreateGroupViewModel @Inject constructor(
                         // Link the device owner's participant to their backend user.
                         val linkedUserId = youUserId
                             .takeIf { it.isNotBlank() && participantName.equals(youName, ignoreCase = true) }
-                        ParticipantRequest(name = participantName, userId = linkedUserId)
+                        ParticipantRequest(
+                            name = participantName,
+                            userId = linkedUserId,
+                            phone = contactPhones[participantName.lowercase()],
+                        )
                     },
                 ),
             ).onSuccess { id ->

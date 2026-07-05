@@ -54,6 +54,7 @@ func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		Phone    string `json:"phone"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -67,7 +68,7 @@ func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "password must be at least 6 characters")
 		return
 	}
-	u, token, err := h.store.RegisterUser(r.Context(), strings.TrimSpace(d.Name), d.Email, d.Password)
+	u, token, err := h.store.RegisterUser(r.Context(), strings.TrimSpace(d.Name), d.Email, d.Password, d.Phone)
 	if errors.Is(err, store.ErrEmailTaken) {
 		writeErr(w, http.StatusConflict, "that email is already registered")
 		return
@@ -107,6 +108,22 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, u)
+}
+
+// myGroups lists ids of groups the caller belongs to (participants linked to their account —
+// including ones claimed by phone), so a fresh login/device can restore its groups.
+func (h *Handler) myGroups(w http.ResponseWriter, r *http.Request) {
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	ids, err := h.store.GroupIDsForUser(r.Context(), u.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string][]string{"groupIds": ids})
 }
 
 func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {

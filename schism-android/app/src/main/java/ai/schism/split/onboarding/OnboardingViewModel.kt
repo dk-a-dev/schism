@@ -24,23 +24,32 @@ class OnboardingViewModel @Inject constructor(
     private val _state = MutableStateFlow(AuthUiState())
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
-    /** Create an account (email + password), store the session, and finish onboarding. */
-    fun register(name: String, email: String, password: String, onDone: () -> Unit) {
-        submit(onDone) { api.authRegister(AuthRequest(email.trim(), password, name.trim())) }
+    /** Create an account (email + password + optional phone), store the session, finish onboarding. */
+    fun register(name: String, email: String, password: String, phone: String, onDone: () -> Unit) {
+        submit(onDone, phone) { api.authRegister(AuthRequest(email.trim(), password, name.trim(), phone.trim())) }
     }
 
     /** Log in to an existing account and finish onboarding. */
     fun login(email: String, password: String, onDone: () -> Unit) {
-        submit(onDone) { api.authLogin(AuthRequest(email.trim(), password)) }
+        submit(onDone, "") { api.authLogin(AuthRequest(email.trim(), password)) }
     }
 
-    private fun submit(onDone: () -> Unit, call: suspend () -> ai.schism.split.core.net.AuthResponse) {
+    private fun submit(
+        onDone: () -> Unit,
+        phone: String,
+        call: suspend () -> ai.schism.split.core.net.AuthResponse,
+    ) {
         viewModelScope.launch {
             _state.value = AuthUiState(submitting = true)
             runCatching { call() }
                 .onSuccess { r ->
                     settings.setIdentity(r.id, r.token)
-                    settings.completeOnboarding(r.name, r.email, "")
+                    settings.completeOnboarding(r.name, r.email, phone.trim())
+                    // Restore groups this account belongs to — including ones friends added them to
+                    // by phone number before they ever installed the app.
+                    runCatching { api.myGroups() }.onSuccess { mine ->
+                        mine.groupIds.forEach { settings.addKnownGroup(it) }
+                    }
                     _state.value = AuthUiState()
                     onDone()
                 }
