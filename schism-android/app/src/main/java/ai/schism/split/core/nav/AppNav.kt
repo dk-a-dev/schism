@@ -1,25 +1,27 @@
 package ai.schism.split.core.nav
 
+import ai.schism.split.dashboard.group.GroupDashboardScreen
+import ai.schism.split.dashboard.personal.PersonalDashboardScreen
 import ai.schism.split.groups.create.CreateGroupScreen
+import ai.schism.split.expense.edit.ExpenseEditScreen
+import ai.schism.split.groups.detail.GroupDetailScreen
 import ai.schism.split.groups.join.JoinGroupScreen
 import ai.schism.split.groups.list.GroupsListScreen
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import ai.schism.split.settings.SettingsScreen
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -71,7 +73,7 @@ fun AppNav() {
         ) {
             composable(Routes.GROUPS) {
                 GroupsListScreen(
-                    onOpenGroup = { /* Task 10: group detail */ },
+                    onOpenGroup = { id -> navController.navigate(Routes.groupDetail(id)) },
                     onCreateGroup = { navController.navigate(Routes.CREATE_GROUP) },
                     onJoinGroup = { navController.navigate(Routes.JOIN_GROUP) },
                 )
@@ -88,20 +90,41 @@ fun AppNav() {
                     onJoined = { navController.popBackStack() },
                 )
             }
-            composable(Routes.DASHBOARD) { PlaceholderScreen("Dashboard") }
-            composable(Routes.SETTINGS) { PlaceholderScreen("Settings") }
+            composable(
+                Routes.GROUP_DETAIL,
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+            ) {
+                GroupDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onAddExpense = { id -> navController.navigate(Routes.addExpense(id)) },
+                    onEditExpense = { id, expenseId -> navController.navigate(Routes.editExpense(id, expenseId)) },
+                    onOpenDashboard = { id -> navController.navigate(Routes.groupDashboard(id)) },
+                )
+            }
+            composable(
+                Routes.GROUP_DASHBOARD,
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+            ) {
+                GroupDashboardScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                Routes.EXPENSE_EDIT,
+                arguments = listOf(
+                    navArgument("groupId") { type = NavType.StringType },
+                    navArgument("expenseId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
+                ExpenseEditScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaved = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.DASHBOARD) { PersonalDashboardScreen() }
+            composable(Routes.SETTINGS) { SettingsScreen() }
         }
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(title: String) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
-        Text("Coming soon", style = MaterialTheme.typography.bodyMedium)
     }
 }
