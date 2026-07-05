@@ -28,6 +28,13 @@ object NetworkModule {
         val builder = OkHttpClient.Builder()
             .addInterceptor(BackendUrlInterceptor(urlProvider))
             .addInterceptor(AuthInterceptor(authProvider))
+            // Bypass ngrok's free-tier browser interstitial on tunneled backends (harmless elsewhere).
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("ngrok-skip-browser-warning", "true").build(),
+                )
+            }
         if (BuildConfig.DEBUG) {
             builder.addInterceptor(
                 HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY },

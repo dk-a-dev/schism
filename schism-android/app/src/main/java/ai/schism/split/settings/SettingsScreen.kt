@@ -3,6 +3,9 @@ package ai.schism.split.settings
 import ai.schism.split.BuildConfig
 import ai.schism.split.core.theme.ThemeMode
 import ai.schism.split.core.ui.InitialAvatar
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
@@ -40,8 +45,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
@@ -83,7 +90,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             // ── Profile ────────────────────────────────────────────────────
-            SettingsSection("Profile") {
+            SettingsSection("Profile", initiallyExpanded = true) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         Modifier.padding(16.dp),
@@ -206,6 +213,9 @@ fun SettingsScreen(
             // ── On-device AI ───────────────────────────────────────────────
             AiSection()
 
+            // ── Account ────────────────────────────────────────────────────
+            AccountSection()
+
             // ── Data ───────────────────────────────────────────────────────
             SettingsSection("Data") {
                 OutlinedButton(
@@ -240,10 +250,75 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSection(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        content()
+private fun SettingsSection(
+    title: String,
+    initiallyExpanded: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var expanded by rememberSaveable(title) { mutableStateOf(initiallyExpanded) }
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { expanded = !expanded }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountSection(viewModel: AccountSettingsViewModel = hiltViewModel()) {
+    var confirmLogout by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    SettingsSection("Account") {
+        OutlinedButton(onClick = { confirmLogout = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Log out")
+        }
+        OutlinedButton(
+            onClick = { confirmDelete = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error,
+            ),
+        ) { Text("Delete account") }
+    }
+
+    if (confirmLogout) {
+        AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text("Log out?") },
+            text = { Text("You'll return to sign-in. Your account and groups stay on the server.") },
+            confirmButton = { TextButton(onClick = { viewModel.logout(); confirmLogout = false }) { Text("Log out") } },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Cancel") } },
+        )
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete account?") },
+            text = { Text("This permanently deletes your account on the server and clears this device. It can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteAccount(); confirmDelete = false }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
     }
 }
 

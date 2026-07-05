@@ -66,3 +66,19 @@ func (s *Store) UserByToken(ctx context.Context, rawToken string) (*User, error)
 	}
 	return &u, nil
 }
+
+// DeleteUser removes the account, unlinking their participants first (their group history stays).
+func (s *Store) DeleteUser(ctx context.Context, userID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `UPDATE participants SET user_id = NULL WHERE user_id = $1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}

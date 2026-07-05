@@ -45,3 +45,16 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, u)
 }
+
+func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if err := h.store.DeleteUser(r.Context(), u.ID); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

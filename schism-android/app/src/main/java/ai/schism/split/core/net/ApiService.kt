@@ -15,6 +15,9 @@ interface ApiService {
     @POST("v1/users")
     suspend fun registerUser(@Body body: UserRequest): UserDto
 
+    @retrofit2.http.DELETE("v1/users/me")
+    suspend fun deleteAccount(): retrofit2.Response<Unit>
+
     @GET("v1/categories")
     suspend fun listCategories(): List<CategoryDto>
 
