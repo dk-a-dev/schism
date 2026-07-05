@@ -18,8 +18,14 @@ import ai.schism.split.sms.split.PushToSplitScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Groups
@@ -59,6 +65,9 @@ fun AppNav() {
     // The bottom bar belongs to the three top-level tabs only, not detail/create/edit screens.
     val showBottomBar = currentRoute in destinations.map { it.route }
 
+    val connectivity: ai.schism.split.core.net.ConnectivityViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val online by connectivity.isOnline.collectAsState()
+
     Scaffold(
         // Each screen owns its own Scaffold + top bar, which consumes the status-bar inset. Zero the
         // outer insets so the top spacing isn't counted twice; the returned padding is just the nav bar.
@@ -86,11 +95,13 @@ fun AppNav() {
             }
         },
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.GROUPS,
-            modifier = Modifier.padding(padding),
-        ) {
+        androidx.compose.foundation.layout.Column(modifier = Modifier.padding(padding)) {
+            OfflineBanner(visible = !online)
+            NavHost(
+                navController = navController,
+                startDestination = Routes.GROUPS,
+                modifier = Modifier.weight(1f),
+            ) {
             composable(Routes.GROUPS) {
                 GroupsListScreen(
                     onOpenGroup = { id -> navController.navigate(Routes.groupDetail(id)) },
@@ -215,6 +226,33 @@ fun AppNav() {
             composable(Routes.DASHBOARD) { PersonalDashboardScreen() }
             composable(Routes.SPENDING) { SpendingScreen() }
             composable(Routes.SETTINGS) { SettingsScreen() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OfflineBanner(visible: Boolean) {
+    androidx.compose.animation.AnimatedVisibility(visible = visible) {
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                androidx.compose.material.icons.Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                "You're offline — changes will sync when you're back.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
+            )
         }
     }
 }
