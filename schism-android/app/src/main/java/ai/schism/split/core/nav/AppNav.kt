@@ -6,10 +6,12 @@ import ai.schism.split.groups.create.CreateGroupScreen
 import ai.schism.split.expense.edit.ExpenseEditScreen
 import ai.schism.split.groups.detail.GroupDetailScreen
 import ai.schism.split.groups.join.JoinGroupScreen
+import ai.schism.split.groups.join.OpenGroupScreen
 import ai.schism.split.groups.list.GroupsListScreen
 import ai.schism.split.settings.SettingsScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -96,6 +98,26 @@ fun AppNav() {
                 JoinGroupScreen(
                     onBack = { navController.popBackStack() },
                     onJoined = { navController.popBackStack() },
+                )
+            }
+            composable(
+                Routes.OPEN_GROUP,
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+                deepLinks = listOf(navDeepLink { uriPattern = "schism://group/{groupId}" }),
+            ) { entry ->
+                val gid = entry.arguments?.getString("groupId").orEmpty()
+                OpenGroupScreen(
+                    groupId = gid,
+                    onOpened = { id ->
+                        navController.navigate(Routes.groupDetail(id)) {
+                            popUpTo(Routes.OPEN_GROUP) { inclusive = true }
+                        }
+                    },
+                    onFailed = {
+                        navController.navigate(Routes.GROUPS) {
+                            popUpTo(Routes.OPEN_GROUP) { inclusive = true }
+                        }
+                    },
                 )
             }
             composable(
