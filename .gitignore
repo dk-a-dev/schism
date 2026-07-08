@@ -28,3 +28,6 @@ captures/
 keystore.properties
 *.jks
 *.keystore
+
+.codegraph/
+.superpowers/
