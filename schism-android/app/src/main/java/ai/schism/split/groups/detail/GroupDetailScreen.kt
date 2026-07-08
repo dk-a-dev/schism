@@ -66,6 +66,17 @@ fun GroupDetailScreen(
     val activities by viewModel.activities.collectAsState()
     var selected by remember { mutableIntStateOf(0) }
 
+    // Balances/activities are imperative fetches (not Room-observed): re-fetch whenever this screen
+    // resumes, so returning from the expense editor/itemised/settle shows fresh numbers + activity.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val g = group
     val groupId = g?.id
     val currency = g?.currency ?: ""

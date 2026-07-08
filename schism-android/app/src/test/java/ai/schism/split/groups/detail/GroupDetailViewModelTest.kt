@@ -19,6 +19,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -48,6 +49,23 @@ class GroupDetailViewModelTest {
     private lateinit var groupRepo: GroupRepository
     private lateinit var expenseRepo: ExpenseRepository
 
+    // Mutable so a single test can drive refresh() through a changed server state (see
+    // enqueueGroupExpensesBalancesActivities below); the custom path-based Dispatcher (rather than
+    // MockWebServer's default FIFO queue) is required so refresh()'s concurrent fan-out
+    // (group/expenses/balances/activities all fired at once) always resolves each request correctly
+    // regardless of arrival order.
+    private var balanceTotal = 2100L
+
+    /**
+     * "Enqueues" the next round of group/expenses/balances/activities responses by setting the
+     * balance total the path-based dispatcher will serve; combined with a later `vm.refresh()` this
+     * simulates the server state changing between the initial load and a refresh (e.g. an expense
+     * edited elsewhere).
+     */
+    private fun enqueueGroupExpensesBalancesActivities(balanceTotal: Long) {
+        this.balanceTotal = balanceTotal
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
@@ -58,8 +76,8 @@ class GroupDetailViewModelTest {
                 val path = request.path ?: ""
                 return when {
                     path.contains("/balances") -> MockResponse().setBody(
-                        """{"balances":{"p1":{"paid":4200,"paidFor":2100,"total":2100},
-                            "p2":{"paid":0,"paidFor":2100,"total":-2100}},
+                        """{"balances":{"p1":{"paid":4200,"paidFor":2100,"total":$balanceTotal},
+                            "p2":{"paid":0,"paidFor":2100,"total":${-balanceTotal}}},
                             "reimbursements":[{"from":"p2","to":"p1","amount":2100}]}""",
                     )
                     path.contains("/activities") -> MockResponse().setBody(
@@ -131,5 +149,23 @@ class GroupDetailViewModelTest {
 
         val activities = vm.activities.filterIsInstance<UiState.Data<List<Activity>>>().first().value
         assertTrue(activities.any { it.activityType == "EXPENSE_CREATED" })
+    }
+
+    @Test
+    fun refreshRefetchesBalancesAfterChange() = runTest(dispatcher) {
+        // First load returns one balance snapshot…
+        enqueueGroupExpensesBalancesActivities(balanceTotal = 100L)
+        val vm = vm()
+        backgroundScope.launch { vm.balances.collect {} }
+        vm.balances.first { it is UiState.Data<*> }
+
+        // …the server state changes (e.g. an expense was edited elsewhere)…
+        enqueueGroupExpensesBalancesActivities(balanceTotal = 250L)
+        vm.refresh()
+
+        val updated = vm.balances.first {
+            it is UiState.Data<*> && (it.value as Balances).perParticipant.values.first().total == 250L
+        }
+        assertTrue(updated is UiState.Data<*>)
     }
 }
