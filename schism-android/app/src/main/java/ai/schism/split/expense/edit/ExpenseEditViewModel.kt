@@ -321,6 +321,22 @@ class ExpenseEditViewModel @Inject constructor(
         )
     }
 
+    /** Delete this expense (edit mode only — the editor is only reachable by its creator). */
+    fun delete(onDeleted: () -> Unit) {
+        val id = expenseId ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(submitting = true, error = null) }
+            expenseRepo.deleteExpense(groupId, id)
+                .onSuccess {
+                    _state.update { it.copy(submitting = false) }
+                    onDeleted()
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(submitting = false, error = e.message ?: "Couldn't delete") }
+                }
+        }
+    }
+
     private fun currentForm(): ExpenseForm {
         val s = _state.value
         return ExpenseForm(

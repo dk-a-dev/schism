@@ -23,7 +23,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -71,6 +73,21 @@ fun ExpenseEditScreen(
     val voice = rememberVoiceInput { transcript -> viewModel.applyVoice(transcript) }
     VoiceListeningDialog(voice)
 
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this expense?") },
+            text = { Text("This removes it for everyone in the group and recalculates balances.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; viewModel.delete(onBack) }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -81,6 +98,11 @@ fun ExpenseEditScreen(
                     }
                 },
                 actions = {
+                    if (state.isEdit) {
+                        IconButton(onClick = { confirmDelete = true }) {
+                            Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete expense")
+                        }
+                    }
                     IconButton(onClick = voice.start) {
                         Icon(Icons.Filled.Mic, contentDescription = "Add by voice")
                     }

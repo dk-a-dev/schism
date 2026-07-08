@@ -27,6 +27,8 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,6 +59,9 @@ class ExpenseEditViewModelRobolectricTest {
     /** Set by a test to script the `getExpense` response for edit-mode prefill. */
     private var expenseDtoJson: String? = null
 
+    /** Flips true once the mock server sees a DELETE on an expense path. */
+    private var deleteRequested = false
+
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
@@ -66,6 +71,10 @@ class ExpenseEditViewModelRobolectricTest {
                 val path = request.path ?: ""
                 return when {
                     path.contains("/categories") -> MockResponse().setBody("[]")
+                    request.method == "DELETE" && path.contains("/expenses/") -> {
+                        deleteRequested = true
+                        MockResponse().setResponseCode(200)
+                    }
                     path.contains("/expenses/") && expenseDtoJson != null ->
                         MockResponse().setBody(expenseDtoJson!!)
                     else -> MockResponse().setResponseCode(404)
@@ -129,5 +138,39 @@ class ExpenseEditViewModelRobolectricTest {
         vm.onDateChange("2026-08-01")
 
         assertEquals("2026-08-01", vm.state.value.expenseDate)
+    }
+
+    // ---- Task 4: delete expense, creator-only ----
+
+    @Test
+    fun deleteInEditModeCallsRepoAndInvokesCallback() = runTest(dispatcher) {
+        seedGroup()
+        expenseDtoJson = """{"id":"e1","groupId":"g1","title":"Dinner","amount":4200,"paidById":"p1",
+            "splitMode":"EVENLY","paidFor":[{"participantId":"p1","shares":1},{"participantId":"p2","shares":1}]}"""
+        val vm = vm(expenseId = "e1")
+        vm.state.first { it.participants.isNotEmpty() }
+
+        // delete() hits real Room + MockWebServer threads via viewModelScope (a real, non-test
+        // dispatcher), so the callback fires asynchronously; await it with a deferred rather than
+        // polling `submitting` (which starts false and would satisfy a naive check trivially).
+        val deletedSignal = kotlinx.coroutines.CompletableDeferred<Unit>()
+        vm.delete { deletedSignal.complete(Unit) }
+        deletedSignal.await()
+
+        assertTrue(deleteRequested)
+        assertFalse(vm.state.value.submitting)
+    }
+
+    @Test
+    fun deleteInAddModeIsNoOp() = runTest(dispatcher) {
+        seedGroup()
+        val vm = vm() // no expenseId: add mode, delete() has nothing to delete
+        vm.state.first { it.participants.isNotEmpty() }
+
+        var deleted = false
+        vm.delete { deleted = true }
+
+        assertFalse(deleted)
+        assertFalse(deleteRequested)
     }
 }
