@@ -103,6 +103,16 @@ class ItemizedRequestTest {
     }
 
     @Test
+    fun notesArePassedThrough() {
+        val items = listOf(AssignedItem(amountMinor = 500L, participantIds = listOf("a")))
+        val req = buildItemizedExpenseRequest(
+            items = items, group = group("a"), paidById = "a", addedBy = null,
+            title = "Coffee", currency = "₹", dateIso = null, notes = "team offsite",
+        )!!
+        assertEquals("team offsite", req.notes)
+    }
+
+    @Test
     fun returnsNullWhenNothingAssigned() {
         val items = listOf(
             AssignedItem(amountMinor = 500L, participantIds = emptyList()),

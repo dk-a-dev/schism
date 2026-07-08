@@ -31,6 +31,7 @@ data class ItemizedSplitUiState(
     val paidById: String = "",
     // Item index -> participantId -> weighted share (0 = not having it, 2 = had two of it, …).
     val assignments: Map<Int, Map<String, Long>> = emptyMap(),
+    val notes: String = "",
     val submitting: Boolean = false,
     val error: String? = null,
 ) {
@@ -141,6 +142,8 @@ class ItemizedSplitViewModel @Inject constructor(
         _state.update { it.copy(title = value, error = null) }
     }
 
+    fun onNotesChange(v: String) = _state.update { it.copy(notes = v) }
+
     /** Adjust a participant's share of an item by [delta] (+1 / −1), clamped at 0. */
     fun adjustShare(itemIndex: Int, participantId: String, delta: Long) {
         _state.update { s ->
@@ -213,6 +216,7 @@ class ItemizedSplitViewModel @Inject constructor(
                 currency = s.draft?.currency ?: "₹",
                 dateIso = s.draft?.date,
                 taxMinor = s.taxMinor,
+                notes = s.notes.trim(),
             )
             if (request == null) {
                 _state.update { it.copy(submitting = false, error = "Assign at least one item to someone") }

@@ -34,6 +34,7 @@ fun buildItemizedExpenseRequest(
     currency: String,
     dateIso: String?,
     taxMinor: Long = 0,
+    notes: String = "",
 ): ExpenseRequest? {
     if (items.none { it.shares.values.any { s -> s > 0 } }) return null
 
@@ -79,7 +80,7 @@ fun buildItemizedExpenseRequest(
         splitMode = "BY_AMOUNT",
         isReimbursement = false,
         addedBy = addedBy,
-        notes = "",
+        notes = notes,
         paidFor = paidFor,
     )
 }

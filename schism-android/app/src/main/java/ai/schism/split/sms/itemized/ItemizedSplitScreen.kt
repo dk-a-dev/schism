@@ -154,6 +154,13 @@ fun ItemizedSplitScreen(
                         Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     }
 
+                    OutlinedTextField(
+                        value = state.notes,
+                        onValueChange = viewModel::onNotesChange,
+                        label = { Text("Notes (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
                     Button(
                         onClick = { viewModel.submit(onDone) },
                         enabled = !state.submitting && state.selectedGroupId != null && state.items.isNotEmpty(),
