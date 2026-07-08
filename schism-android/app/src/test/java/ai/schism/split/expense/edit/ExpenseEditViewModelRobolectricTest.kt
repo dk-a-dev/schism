@@ -226,4 +226,40 @@ class ExpenseEditViewModelRobolectricTest {
 
         assertEquals(null, vm.peekPendingReceipt())
     }
+
+    // ---- Task 10: voice preview + confirm ----
+
+    @Test
+    fun previewVoiceThenApplyUpdatesStateAndClearsPreview() = runTest(dispatcher) {
+        seedGroup(activeParticipantId = "p1")
+        val vm = vm()
+        vm.state.first { it.participants.isNotEmpty() }
+
+        vm.previewVoice("paid 800 for dinner split with Sam")
+        val preview = vm.voicePreview.first { it != null }
+        assertEquals("Dinner", preview?.title)
+        assertEquals(80000L, preview?.amountMinor)
+
+        vm.applyVoicePreview()
+
+        assertEquals(null, vm.voicePreview.value)
+        assertEquals("Dinner", vm.state.value.title)
+        assertEquals("800.00", vm.state.value.amountText)
+        assertEquals("p1", vm.state.value.paidById)
+    }
+
+    @Test
+    fun dismissVoicePreviewClearsWithoutApplying() = runTest(dispatcher) {
+        seedGroup()
+        val vm = vm()
+        vm.state.first { it.participants.isNotEmpty() }
+
+        vm.previewVoice("paid 800 for dinner split with Sam")
+        vm.voicePreview.first { it != null }
+
+        vm.dismissVoicePreview()
+
+        assertEquals(null, vm.voicePreview.value)
+        assertTrue(vm.state.value.title.isBlank())
+    }
 }

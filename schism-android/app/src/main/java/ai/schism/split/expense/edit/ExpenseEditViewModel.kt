@@ -252,22 +252,39 @@ class ExpenseEditViewModel @Inject constructor(
     fun onPercentChange(id: String, value: String) = updateRow(id) { it.copy(percentText = value) }
     fun onParticipantAmountChange(id: String, value: String) = updateRow(id) { it.copy(amountText = value) }
 
+    private val _voicePreview = MutableStateFlow<ai.schism.split.expense.edit.voice.SpokenExpenseDraft?>(null)
+
     /**
-     * Apply a spoken sentence (e.g. "paid 800 for dinner split with Riya and Sam") to the form. The
-     * transcript is parsed on-device into a [ai.schism.split.expense.edit.voice.SpokenExpenseDraft]
-     * and only the non-null fields are written, so anything the parse couldn't infer is left as-is.
-     * Never submits: the user still reviews and taps Save.
+     * The structured draft parsed from the last spoken sentence, awaiting the user's confirmation in
+     * [applyVoicePreview] / [dismissVoicePreview]. Null when nothing is pending.
      */
-    fun applyVoice(text: String) {
+    val voicePreview: StateFlow<ai.schism.split.expense.edit.voice.SpokenExpenseDraft?> = _voicePreview.asStateFlow()
+
+    /**
+     * Parse a spoken sentence (e.g. "paid 800 for dinner split with Riya and Sam") into a
+     * [ai.schism.split.expense.edit.voice.SpokenExpenseDraft] and stage it in [voicePreview] for the
+     * user to confirm — nothing is written to the form until [applyVoicePreview] is called.
+     */
+    fun previewVoice(text: String) {
         viewModelScope.launch {
             val s = _state.value
             val you = youParticipantId ?: s.paidById.ifBlank { null }
             // Prefer the on-device LLM when a model is loaded; fall back to the regex parser.
-            val draft = llmParser.parseSpoken(text, s.participants, you)
+            _voicePreview.value = llmParser.parseSpoken(text, s.participants, you)
                 ?: parseSpokenExpense(text, s.participants, you)
-            applyDraft(draft, you)
         }
     }
+
+    /** Apply the staged [voicePreview] draft to the form and clear it. Never submits. */
+    fun applyVoicePreview() {
+        val draft = _voicePreview.value ?: return
+        val you = youParticipantId ?: _state.value.paidById.ifBlank { null }
+        applyDraft(draft, you)
+        _voicePreview.value = null
+    }
+
+    /** Discard the staged [voicePreview] draft without applying it. */
+    fun dismissVoicePreview() { _voicePreview.value = null }
 
     private fun applyDraft(draft: ai.schism.split.expense.edit.voice.SpokenExpenseDraft, you: String?) {
         _state.update { cur ->

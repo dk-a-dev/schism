@@ -72,8 +72,30 @@ fun ExpenseEditScreen(
     viewModel: ExpenseEditViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val voice = rememberVoiceInput { transcript -> viewModel.applyVoice(transcript) }
+    val voice = rememberVoiceInput { transcript -> viewModel.previewVoice(transcript) }
     VoiceListeningDialog(voice)
+
+    val preview by viewModel.voicePreview.collectAsState()
+    preview?.let { d ->
+        val who = d.paidForParticipantIds
+            ?.mapNotNull { id -> state.participants.firstOrNull { it.id == id }?.name }
+            ?.joinToString(", ")
+        AlertDialog(
+            onDismissRequest = viewModel::dismissVoicePreview,
+            title = { Text("Heard this:") },
+            text = {
+                Text(
+                    listOfNotNull(
+                        d.title?.let { "Title: $it" },
+                        d.amountMinor?.let { "Amount: ${String.format("%.2f", it / 100.0)}" },
+                        who?.takeIf { it.isNotBlank() }?.let { "Split with: $it" },
+                    ).joinToString("\n").ifBlank { "Couldn't pick out details — apply nothing?" },
+                )
+            },
+            confirmButton = { TextButton(onClick = viewModel::applyVoicePreview) { Text("Apply") } },
+            dismissButton = { TextButton(onClick = viewModel::dismissVoicePreview) { Text("Discard") } },
+        )
+    }
 
     var scannedDraft by remember {
         mutableStateOf<ai.schism.split.sms.receipt.ReceiptDraft?>(null)
