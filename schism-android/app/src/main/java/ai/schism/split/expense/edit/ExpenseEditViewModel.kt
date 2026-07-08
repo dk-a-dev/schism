@@ -239,6 +239,7 @@ class ExpenseEditViewModel @Inject constructor(
     fun onTitleChange(value: String) = _state.update { it.copy(title = value, error = null) }
     fun onAmountChange(value: String) = _state.update { it.copy(amountText = value, error = null) }
     fun onCategoryChange(id: Int) = _state.update { it.copy(categoryId = id) }
+    fun onDateChange(iso: String) = _state.update { it.copy(expenseDate = iso, error = null) }
     fun onPaidByChange(id: String) = _state.update { it.copy(paidById = id) }
     fun onSplitModeChange(mode: SplitMode) = _state.update { it.copy(splitMode = mode, error = null) }
     fun onReimbursementChange(value: Boolean) = _state.update { it.copy(isReimbursement = value) }
