@@ -205,6 +205,7 @@ fun AppNav() {
                 ExpenseEditScreen(
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },
+                    onScanItemized = { navController.navigate(Routes.RECEIPT_ITEMIZED) },
                 )
             }
             composable(Routes.INBOX) {

@@ -160,6 +160,7 @@ class ExpenseEditViewModel @Inject constructor(
     private val api: ApiService,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     private val smsRepo: ai.schism.split.sms.data.SmsRepository,
+    private val pendingReceipt: ai.schism.split.sms.itemized.PendingReceipt,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -322,6 +323,9 @@ class ExpenseEditViewModel @Inject constructor(
             onFailure = { e -> _state.update { it.copy(error = e.message) } },
         )
     }
+
+    /** The receipt draft from a just-completed bill scan, if any (consumed once by the caller). */
+    fun peekPendingReceipt(): ai.schism.split.sms.receipt.ReceiptDraft? = pendingReceipt.draft
 
     /** Delete this expense (edit mode only — the editor is only reachable by its creator). */
     fun delete(onDeleted: () -> Unit) {

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -67,11 +68,37 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun ExpenseEditScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    onScanItemized: () -> Unit = {},
     viewModel: ExpenseEditViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val voice = rememberVoiceInput { transcript -> viewModel.applyVoice(transcript) }
     VoiceListeningDialog(voice)
+
+    var scannedDraft by remember {
+        mutableStateOf<ai.schism.split.sms.receipt.ReceiptDraft?>(null)
+    }
+    val scanBill = ai.schism.split.sms.itemized.rememberBillScan(onItemized = {
+        // rememberBillScan stores the draft in PendingReceipt; surface the choice dialog.
+        scannedDraft = viewModel.peekPendingReceipt()
+    })
+    scannedDraft?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { scannedDraft = null },
+            title = { Text("Bill read: ${ai.schism.split.core.money.formatMinor(draft.totalMinor, draft.currency)}") },
+            text = { Text("Use just the total here, or split it dish-by-dish?") },
+            confirmButton = {
+                TextButton(onClick = { scannedDraft = null; onScanItemized() }) { Text("Split by items") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.onTitleChange(draft.merchant)
+                    viewModel.onAmountChange(String.format("%.2f", draft.totalMinor / 100.0))
+                    scannedDraft = null
+                }) { Text("Use total") }
+            },
+        )
+    }
 
     var confirmDelete by remember { mutableStateOf(false) }
     if (confirmDelete) {
@@ -143,6 +170,11 @@ fun ExpenseEditScreen(
                     label = { Text("Amount") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    trailingIcon = {
+                        IconButton(onClick = scanBill) {
+                            Icon(Icons.Filled.DocumentScanner, contentDescription = "Scan a bill")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
 

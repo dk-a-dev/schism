@@ -10,6 +10,7 @@ import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.expense.data.ExpenseRepository
 import ai.schism.split.groups.data.GroupRepository
 import ai.schism.split.sms.data.SmsRepository
+import ai.schism.split.sms.itemized.PendingReceipt
 import androidx.lifecycle.SavedStateHandle
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -54,6 +55,7 @@ class ExpenseEditViewModelRobolectricTest {
     private lateinit var expenseRepo: ExpenseRepository
     private lateinit var smsRepo: SmsRepository
     private lateinit var llmParser: LlmExpenseParser
+    private lateinit var pendingReceipt: PendingReceipt
     private lateinit var api: ai.schism.split.core.net.ApiService
 
     /** Set by a test to script the `getExpense` response for edit-mode prefill. */
@@ -94,6 +96,7 @@ class ExpenseEditViewModelRobolectricTest {
         smsRepo = SmsRepository(db.transactionDao())
         val modelManager = ModelManager(ApplicationProvider.getApplicationContext())
         llmParser = LlmExpenseParser(ApplicationProvider.getApplicationContext(), modelManager, settings)
+        pendingReceipt = PendingReceipt()
     }
 
     @After
@@ -118,6 +121,7 @@ class ExpenseEditViewModelRobolectricTest {
         api,
         llmParser,
         smsRepo,
+        pendingReceipt,
         SavedStateHandle(
             mapOf(
                 "groupId" to "g1",
@@ -194,5 +198,32 @@ class ExpenseEditViewModelRobolectricTest {
         val state = vm.state.first { it.participants.isNotEmpty() }
 
         assertEquals("p1", state.paidById)
+    }
+
+    // ---- Task 8: scan-a-bill hand-off ----
+
+    @Test
+    fun peekPendingReceiptReturnsStoredDraft() = runTest(dispatcher) {
+        seedGroup()
+        val draft = ai.schism.split.sms.receipt.ReceiptDraft(
+            merchant = "Cafe",
+            totalMinor = 1000L,
+            currency = "₹",
+            date = null,
+        )
+        pendingReceipt.draft = draft
+        val vm = vm()
+        vm.state.first { it.participants.isNotEmpty() }
+
+        assertEquals(draft, vm.peekPendingReceipt())
+    }
+
+    @Test
+    fun peekPendingReceiptIsNullWhenNothingScanned() = runTest(dispatcher) {
+        seedGroup()
+        val vm = vm()
+        vm.state.first { it.participants.isNotEmpty() }
+
+        assertEquals(null, vm.peekPendingReceipt())
     }
 }
