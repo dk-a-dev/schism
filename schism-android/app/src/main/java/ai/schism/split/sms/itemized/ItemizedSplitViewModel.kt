@@ -141,16 +141,11 @@ class ItemizedSplitViewModel @Inject constructor(
         _state.update { it.copy(title = value, error = null) }
     }
 
-    /** Cycle a participant's share of an item: none → 1× → 2× → 3× → none. */
-    fun cycleShare(itemIndex: Int, participantId: String) {
+    /** Adjust a participant's share of an item by [delta] (+1 / −1), clamped at 0. */
+    fun adjustShare(itemIndex: Int, participantId: String, delta: Long) {
         _state.update { s ->
             val current = s.assignments[itemIndex].orEmpty()
-            val next = when (current[participantId] ?: 0L) {
-                0L -> 1L
-                1L -> 2L
-                2L -> 3L
-                else -> 0L
-            }
+            val next = ((current[participantId] ?: 0L) + delta).coerceAtLeast(0L)
             s.copy(
                 assignments = s.assignments + (itemIndex to (current + (participantId to next))),
                 error = null,

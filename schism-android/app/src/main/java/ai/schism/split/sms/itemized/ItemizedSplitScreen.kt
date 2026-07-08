@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package ai.schism.split.sms.itemized
 
@@ -10,7 +10,6 @@ import ai.schism.split.sms.receipt.ReceiptLineItem
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,9 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -33,7 +34,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -95,8 +95,8 @@ fun ItemizedSplitScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "You paid. Tap a person to include them in a dish — tap again for 2×, 3× " +
-                            "(had more of it). Tax splits by what each person ordered.",
+                        "You paid. Use − / + to set how much of each dish a person had. Tax splits by " +
+                            "what each person ordered.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -125,7 +125,7 @@ fun ItemizedSplitScreen(
                                     currency = state.draft?.currency ?: "₹",
                                     participants = group.participants,
                                     shares = state.assignments[index].orEmpty(),
-                                    onCycle = { pid -> viewModel.cycleShare(index, pid) },
+                                    onAdjust = { pid, d -> viewModel.adjustShare(index, pid, d) },
                                     onEdit = { name, qty, amount -> viewModel.updateItem(index, name, qty, amount) },
                                     onRemove = { viewModel.removeItem(index) },
                                 )
@@ -229,7 +229,7 @@ private fun ItemCard(
     currency: String,
     participants: List<Participant>,
     shares: Map<String, Long>,
-    onCycle: (String) -> Unit,
+    onAdjust: (String, Long) -> Unit,
     onEdit: (String, Int, Long) -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -255,17 +255,32 @@ private fun ItemCard(
                     Icon(Icons.Filled.Close, contentDescription = "Remove item", modifier = Modifier.size(18.dp))
                 }
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 8.dp, end = 12.dp),
-            ) {
+            Column(Modifier.padding(top = 4.dp, end = 12.dp)) {
                 participants.forEach { p ->
                     val share = shares[p.id] ?: 0L
-                    FilterChip(
-                        selected = share > 0,
-                        onClick = { onCycle(p.id) },
-                        label = { Text(if (share > 1) "${p.name} ×$share" else p.name) },
-                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            p.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (share > 0) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { onAdjust(p.id, -1L) }, enabled = share > 0) {
+                            Icon(Icons.Filled.RemoveCircleOutline, contentDescription = "Less")
+                        }
+                        Text(
+                            share.toString(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        IconButton(onClick = { onAdjust(p.id, +1L) }) {
+                            Icon(Icons.Filled.AddCircleOutline, contentDescription = "More")
+                        }
+                    }
                 }
             }
         }
@@ -313,14 +328,15 @@ private fun ItemDialog(
                     singleLine = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = qty,
-                        onValueChange = { qty = it },
-                        label = { Text("Qty") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        IconButton(
+                            onClick = { qty = ((qty.toIntOrNull() ?: 1) - 1).coerceAtLeast(1).toString() },
+                        ) { Icon(Icons.Filled.RemoveCircleOutline, contentDescription = "Less") }
+                        Text(qty, style = MaterialTheme.typography.titleMedium)
+                        IconButton(
+                            onClick = { qty = ((qty.toIntOrNull() ?: 1) + 1).toString() },
+                        ) { Icon(Icons.Filled.AddCircleOutline, contentDescription = "More") }
+                    }
                     OutlinedTextField(
                         value = amount,
                         onValueChange = { amount = it },
