@@ -36,7 +36,7 @@ fun ExpensesTab(
     currency: String,
     participantNames: Map<String, String>,
     youParticipantId: String?,
-    onEditExpense: (expenseId: String) -> Unit,
+    onExpenseClick: (Expense) -> Unit,
 ) {
     StateSlice(state, emptyMessage = "No expenses yet. Add one with the button below.") { expenses ->
         LazyColumn(
@@ -45,7 +45,7 @@ fun ExpensesTab(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(expenses, key = { it.id }) { expense ->
-                ExpenseCard(expense, currency, participantNames, youParticipantId, onEditExpense)
+                ExpenseCard(expense, currency, participantNames, youParticipantId, onExpenseClick)
             }
         }
     }
@@ -57,7 +57,7 @@ private fun ExpenseCard(
     currency: String,
     participantNames: Map<String, String>,
     youParticipantId: String?,
-    onEditExpense: (String) -> Unit,
+    onExpenseClick: (Expense) -> Unit,
 ) {
     fun label(id: String) = if (id == youParticipantId) "You" else participantNames[id] ?: "someone"
     val payer = label(expense.paidById)
@@ -106,9 +106,5 @@ private fun ExpenseCard(
             }
         }
     }
-    if (editable) {
-        Card(onClick = { onEditExpense(expense.id) }, colors = cardColors, modifier = Modifier.fillMaxWidth()) { body() }
-    } else {
-        Card(colors = cardColors, modifier = Modifier.fillMaxWidth()) { body() }
-    }
+    Card(onClick = { onExpenseClick(expense) }, colors = cardColors, modifier = Modifier.fillMaxWidth()) { body() }
 }

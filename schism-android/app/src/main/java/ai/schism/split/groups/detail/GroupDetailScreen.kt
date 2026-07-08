@@ -1,6 +1,7 @@
 package ai.schism.split.groups.detail
 
 import ai.schism.split.core.ui.UiState
+import ai.schism.split.expense.data.Expense
 import ai.schism.split.groups.detail.tabs.ActivityTab
 import ai.schism.split.groups.detail.tabs.BalancesTab
 import ai.schism.split.groups.detail.tabs.ExpensesTab
@@ -60,6 +61,7 @@ fun GroupDetailScreen(
     viewModel: GroupDetailViewModel = hiltViewModel(),
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    var viewing by remember { mutableStateOf<Expense?>(null) }
     val group by viewModel.group.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val balances by viewModel.balances.collectAsState()
@@ -146,7 +148,7 @@ fun GroupDetailScreen(
                     currency = currency,
                     participantNames = participantNames,
                     youParticipantId = g?.activeParticipantId,
-                    onEditExpense = { expenseId -> groupId?.let { onEditExpense(it, expenseId) } },
+                    onExpenseClick = { viewing = it },
                 )
                 DetailTab.Balances -> BalancesTab(
                     state = balances,
@@ -162,6 +164,24 @@ fun GroupDetailScreen(
                 )
             }
         }
+    }
+
+    viewing?.let { exp ->
+        val youParticipantId = g?.activeParticipantId
+        // Matches the edit gate in ExpensesTab: only the person who added the expense can edit it;
+        // legacy rows with no recorded creator stay editable.
+        val canEdit = exp.addedBy.isBlank() || exp.addedBy == youParticipantId
+        ExpenseDetailSheet(
+            expense = exp,
+            participantNames = participantNames,
+            currency = currency,
+            canEdit = canEdit,
+            onEdit = {
+                viewing = null
+                groupId?.let { onEditExpense(it, exp.id) }
+            },
+            onDismiss = { viewing = null },
+        )
     }
 }
 
