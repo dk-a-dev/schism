@@ -25,12 +25,26 @@ func main() {
 	defer pool.Close()
 	s := store.NewStore(pool)
 
-	// Wipe group data (participants/expenses/paid_for/activities cascade). Users/tokens are kept so
-	// the device stays registered.
-	if _, err := pool.Exec(ctx, `TRUNCATE TABLE groups CASCADE`); err != nil {
-		log.Fatalf("wipe: %v", err)
+	wipeAll := os.Getenv("WIPE_ALL") == "1"
+	seedMocks := os.Getenv("SEED") == "1" || (!wipeAll && os.Getenv("SEED") == "")
+
+	if wipeAll {
+		// Full reset: accounts AND groups (participants/expenses/claims cascade).
+		if _, err := pool.Exec(ctx, `TRUNCATE TABLE users, groups CASCADE`); err != nil {
+			log.Fatalf("wipe all: %v", err)
+		}
+		log.Println("wiped ALL data (users + groups)")
+	} else {
+		if _, err := pool.Exec(ctx, `TRUNCATE TABLE groups CASCADE`); err != nil {
+			log.Fatalf("wipe: %v", err)
+		}
+		log.Println("wiped group data")
 	}
-	log.Println("wiped group data")
+
+	if !seedMocks {
+		fmt.Println("wipe complete (no mock data seeded; set SEED=1 to seed)")
+		return
+	}
 
 	now := time.Now()
 	seeds := []struct {

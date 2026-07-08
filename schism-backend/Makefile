@@ -24,4 +24,8 @@ run:
 seed:
 	DATABASE_URL="$(DB_URL)" go run ./cmd/seed
 
-.PHONY: db up down logs test run seed
+# DANGER: wipe EVERYTHING (accounts + groups) on the target DB. For prod: pass DB_URL.
+wipe-all:
+	DATABASE_URL="$(DB_URL)" WIPE_ALL=1 go run ./cmd/seed
+
+.PHONY: db up down logs test run seed wipe-all
