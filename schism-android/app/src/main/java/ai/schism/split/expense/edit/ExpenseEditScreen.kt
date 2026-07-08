@@ -179,7 +179,22 @@ fun ExpenseEditScreen(
                 }
 
                 CategoryDropdown(state, viewModel)
-                PaidBySelector(state, viewModel)
+
+                var showPayerPicker by remember { mutableStateOf(state.isEdit) }
+                if (!showPayerPicker) {
+                    val youName = state.participants
+                        .firstOrNull { it.id == state.paidById }?.name ?: "you"
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Paid by $youName",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { showPayerPicker = true }) { Text("Change") }
+                    }
+                } else {
+                    PaidBySelector(state, viewModel)
+                }
             }
 
             SectionCard(title = "How to split") {

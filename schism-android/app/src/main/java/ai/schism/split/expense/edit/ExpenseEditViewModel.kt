@@ -229,7 +229,9 @@ class ExpenseEditViewModel @Inject constructor(
                     val rows = group.participants.map { p ->
                         byId[p.id] ?: newRow(p.id, p.name, s.splitMode, s.isEdit, paidForById[p.id])
                     }
-                    val paidBy = s.paidById.ifBlank { group.participants.firstOrNull()?.id ?: "" }
+                    val paidBy = s.paidById.ifBlank {
+                        group.activeParticipantId ?: group.participants.firstOrNull()?.id ?: ""
+                    }
                     s.copy(loading = false, participants = group.participants, rows = rows, paidById = paidBy)
                 }
             }

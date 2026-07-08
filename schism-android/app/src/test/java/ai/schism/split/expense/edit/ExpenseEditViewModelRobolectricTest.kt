@@ -173,4 +173,26 @@ class ExpenseEditViewModelRobolectricTest {
         assertFalse(deleted)
         assertFalse(deleteRequested)
     }
+
+    // ---- Task 5: "Paid by you" default ----
+
+    @Test
+    fun addModeDefaultsPaidByToActiveParticipant() = runTest(dispatcher) {
+        seedGroup(activeParticipantId = "p2")
+        val vm = vm()
+
+        val state = vm.state.first { it.participants.isNotEmpty() }
+
+        assertEquals("p2", state.paidById)
+    }
+
+    @Test
+    fun addModeFallsBackToFirstParticipantWhenNoActiveParticipant() = runTest(dispatcher) {
+        seedGroup(activeParticipantId = null)
+        val vm = vm()
+
+        val state = vm.state.first { it.participants.isNotEmpty() }
+
+        assertEquals("p1", state.paidById)
+    }
 }
