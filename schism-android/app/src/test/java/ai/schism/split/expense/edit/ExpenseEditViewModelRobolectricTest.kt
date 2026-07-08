@@ -144,6 +144,19 @@ class ExpenseEditViewModelRobolectricTest {
         assertEquals("2026-08-01", vm.state.value.expenseDate)
     }
 
+    @Test
+    fun editModePrefillsExpenseDateFromExistingExpense() = runTest(dispatcher) {
+        seedGroup()
+        expenseDtoJson = """{"id":"e1","groupId":"g1","title":"Dinner","amount":4200,"expenseDate":"2026-03-14",
+            "paidById":"p1","splitMode":"EVENLY",
+            "paidFor":[{"participantId":"p1","shares":1},{"participantId":"p2","shares":1}]}"""
+        val vm = vm(expenseId = "e1")
+
+        val state = vm.state.first { !it.loading }
+
+        assertEquals("2026-03-14", state.expenseDate)
+    }
+
     // ---- Task 4: delete expense, creator-only ----
 
     @Test

@@ -197,6 +197,7 @@ class ExpenseEditViewModel @Inject constructor(
                             .getOrDefault(SplitMode.EVENLY),
                         isReimbursement = existing.isReimbursement,
                         notes = existing.notes,
+                        expenseDate = existing.expenseDate,
                     )
                 }
                 existingAddedBy = existing.addedBy
@@ -343,6 +344,16 @@ class ExpenseEditViewModel @Inject constructor(
 
     /** The receipt draft from a just-completed bill scan, if any (consumed once by the caller). */
     fun peekPendingReceipt(): ai.schism.split.sms.receipt.ReceiptDraft? = pendingReceipt.draft
+
+    /** Apply a scanned bill's total as this expense: title + amount (locale-safe) and clear the pending draft. */
+    fun useScannedTotal(draft: ai.schism.split.sms.receipt.ReceiptDraft) {
+        onTitleChange(draft.merchant)
+        onAmountChange(minorToPlain(draft.totalMinor))
+        pendingReceipt.draft = null
+    }
+
+    /** Locale-safe minor-units-to-plain-text conversion for display (e.g. in confirmation dialogs). */
+    fun amountText(minor: Long): String = minorToPlain(minor)
 
     /** Delete this expense (edit mode only — the editor is only reachable by its creator). */
     fun delete(onDeleted: () -> Unit) {

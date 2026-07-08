@@ -87,7 +87,7 @@ fun ExpenseEditScreen(
                 Text(
                     listOfNotNull(
                         d.title?.let { "Title: $it" },
-                        d.amountMinor?.let { "Amount: ${String.format("%.2f", it / 100.0)}" },
+                        d.amountMinor?.let { "Amount: ${viewModel.amountText(it)}" },
                         who?.takeIf { it.isNotBlank() }?.let { "Split with: $it" },
                     ).joinToString("\n").ifBlank { "Couldn't pick out details — apply nothing?" },
                 )
@@ -114,8 +114,7 @@ fun ExpenseEditScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    viewModel.onTitleChange(draft.merchant)
-                    viewModel.onAmountChange(String.format("%.2f", draft.totalMinor / 100.0))
+                    viewModel.useScannedTotal(draft)
                     scannedDraft = null
                 }) { Text("Use total") }
             },
@@ -214,7 +213,14 @@ fun ExpenseEditScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (showDatePicker) {
-                    val pickerState = rememberDatePickerState()
+                    val pickerState = rememberDatePickerState(
+                        initialSelectedDateMillis = state.expenseDate?.let {
+                            runCatching {
+                                java.time.LocalDate.parse(it).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()
+                                    .toEpochMilli()
+                            }.getOrNull()
+                        },
+                    )
                     DatePickerDialog(
                         onDismissRequest = { showDatePicker = false },
                         confirmButton = {
