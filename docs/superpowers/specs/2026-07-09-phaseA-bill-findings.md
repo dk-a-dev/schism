@@ -56,5 +56,43 @@ verifies — never trust the model's number.**
   Subtotal 738, Discount 0; CGST 2.5%=4.70, SGST 2.5%=4.70, CGST 9%=49.50, SGST 9%=49.50; Grand
   846.40, Round −0.40, Rounded 846. (HSN lines must NOT be items; multi-slab tax sums to 108.40.)
 
-Status: NOT started. Begins after 1.0.4 (Phase D+C) ships. Will get its own plan
-(`docs/superpowers/plans/…-v1.1-phase-a.md`).
+## App screenshots are IN SCOPE (deterministic, no vision model)
+
+User: "bills could be of more variety… Blinkit, Swiggy, Zomato… screenshots or anything." Critical
+insight: **app-order screenshots are clean digital text** — OCR reads them near-perfectly. The
+difficulty is layout, not legibility, so per-app templates in the deterministic engine handle them
+on-device with no vision model:
+
+- **Swiggy / Zomato order screenshots**: item line `Name (Regular) x1  ₹319` with an indented option
+  subline (`Cilantro Lime Rice`) that folds into the item name; a "Bill Details / Item Total /
+  Restaurant Packaging / Platform fee with GST / Delivery Fee (FREE) / Taxes / Bill Total" block →
+  Item Total is the subtotal, the fee/tax rows are charges (Delivery "FREE"/strikethrough = 0), Bill
+  Total is the printed grand total (verified, not copied). `x2` etc. is the quantity.
+- **Blinkit / grocery-app screenshots**: rows with product thumbnail + name + pack-size line
+  (`40 g x 1`, `2 x 80 g x 1` → qty from the trailing `x1`, not the pack count) + a **strikethrough
+  MRP then paid price** (`₹96 ₹72` → take the right/last as paid). "N items in this order" header.
+- Detect source by keywords: "Bill Details", "Item Total", "Restaurant Packaging", "Platform fee",
+  "Order summary", "items in this order", "Grand Total", "MRP".
+
+### App-screenshot golden fixtures (from user's earlier shots)
+- **Swiggy — California Burrito (₹755)**: Crispy Peri Peri Chicken Rice Bowl (Regular) x1 = 319
+  (+ subline Cilantro Lime Rice folds in), Popcorn Chicken x2 = 338; Item Total 657, Restaurant
+  Packaging 45, Platform fee 17.58, Delivery FREE (0), Taxes 35.10; Bill Total 755.
+- **Swiggy — California Burrito (₹1039)**: Crispy Peri Peri Rice Bowl x1 = 368 (subline Melted Cheese
+  Queso / Cilantro Lime Rice), Black Pepsi Can x3 = 200.10, Crispy Peri Peri Rice Bowl x1 = 354
+  (subline Cheese / Brown Rice); Item Total 922.10, Packaging 51, Platform 17.58, Delivery FREE,
+  Taxes 48.66; Bill Total 1039.
+- **Zomato — Theobroma (₹567.58)**: Choco-Vanilla Oreo Cake [540g] x1 = 500; Item total 500, GST &
+  restaurant packaging 52.68, Delivery partner fee FREE (0), Platform fee 14.90; Paid 567.58.
+- **Blinkit (6 items)**: Sour Punk Cola Candy 40g x1 = 40, Paper Boat Cranberry 600ml x1 = 60,
+  Uncle Chipps Pack of 2 (2x80g) x1 = 72 (MRP 96 struck), Kurkure Playz 84g x1 = 33 (MRP 48),
+  Sour Punk Apple Candy 40g x1 = 40, Dairy Day Ice Cream Sandwich Pack of 2 x1 = 54 (MRP 60).
+
+## Decisions (2026-07-09)
+- **Engine: deterministic-first, LLM optional** (off by default). No model in the hot path → fast,
+  crash-proof, zero hallucination. Numbers are OCR + arithmetic only.
+- **Hard-case fallback: manual edit** for now (residual illegible photos). Cloud/on-device vision is
+  a later follow-up, not this phase. App screenshots are handled deterministically (above), NOT
+  treated as a hard case.
+
+Status: PLANNED next. Plan: `docs/superpowers/plans/2026-07-09-v1.1-phase-a.md`.
