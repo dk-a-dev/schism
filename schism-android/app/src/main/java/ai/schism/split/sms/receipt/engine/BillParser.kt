@@ -106,7 +106,7 @@ private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: St
  *
  * Rows with no derivable name (2+ letters) or no derivable amount are skipped.
  */
-private val LEADING_SERIAL = Regex("""^\d{1,3}[.)]?\s+""")
+private val PURE_SERIAL = Regex("""^\d{1,3}[.)]?$""")
 
 /**
  * The item name for a row is every cell EXCEPT the qty cell and the money cells sitting in the
@@ -115,18 +115,19 @@ private val LEADING_SERIAL = Regex("""^\d{1,3}[.)]?\s+""")
  * split the name region into several columns; keeping "everything that isn't a qty/rate/amount cell"
  * is robust to that AND to a qty-first layout (`Qty | Item | Rate | Amount`), where a purely
  * positional "left of the numbers" rule would wrongly drop the whole name (it sits right of the
- * leftmost, qty, column). A name fragment that is itself digit-shaped ("7" of "7 Up") is kept as long
- * as it sits left of the money band, so it isn't mistaken for a price. A leading serial-number token
- * ("1", "12.") is dropped.
+ * leftmost, qty, column).
+ *
+ * A leading serial-number cell ("1", "12.") is dropped — but ONLY when it is its OWN standalone cell
+ * with real name cells following it, never by regex-stripping a leading digit off a joined string
+ * (that would eat the "7" of a name like "7 Up" or "500ml Water" whose first token is a digit).
  */
-private fun nameOfRow(row: Row, qtyCell: Cell?, moneyLeftBound: Int): String =
-    row.cells.filter { cell ->
-        cell !== qtyCell && !(cell.xCenter >= moneyLeftBound && isMoneyToken(cell.text))
-    }
+private fun nameOfRow(row: Row, qtyCell: Cell?, moneyLeftBound: Int): String {
+    val kept = row.cells
+        .filter { cell -> cell !== qtyCell && !(cell.xCenter >= moneyLeftBound && isMoneyToken(cell.text)) }
         .sortedBy { it.xLeft }
-        .joinToString(" ") { it.text.trim() }
-        .trim()
-        .replaceFirst(LEADING_SERIAL, "")
+    val nameCells = if (kept.size > 1 && PURE_SERIAL.matches(kept.first().text.trim())) kept.drop(1) else kept
+    return nameCells.joinToString(" ") { it.text.trim() }.trim()
+}
 
 /**
  * Resolves a single items-row's (qty, amountMinor, unitPriceMinor).

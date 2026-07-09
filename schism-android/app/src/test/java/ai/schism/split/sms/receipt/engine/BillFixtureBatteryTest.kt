@@ -436,4 +436,199 @@ class BillFixtureBatteryTest {
         assertEquals(39000L, draft.subtotalMinor)
         assertTrue(draft.verified)
     }
+
+    // ======================================================================================
+    // Group D — Multi-line item names
+    // ======================================================================================
+
+    /**
+     * Names wrap UPWARD: the numeric triple sits on the LAST line of each item and the name fragments
+     * are the moneyless rows ABOVE it (attached as a prefix to the anchor below them).
+     */
+    @Test fun multiLineNames_wrapUpward_numericOnLastLine() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                WOK EXPRESS|60|360|20
+
+                Item|60|140|60
+                Qty|300|340|60
+                Rate|380|440|60
+                Amount|480|560|60
+
+                Chicken|60|180|100
+                Hakka Noodles|60|280|130
+                1|310|330|160
+                160.00|380|440|160
+                160.00|480|560|160
+
+                Schezwan|60|200|320
+                Fried Rice|60|260|350
+                2|310|330|380
+                130.00|380|440|380
+                260.00|480|560|380
+
+                Sub Total|300|455|440
+                420.00|480|560|440
+
+                Grand Total|60|300|480
+                420.00|480|560|480
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Chicken Hakka Noodles", "Schezwan Fried Rice"), draft.lineItems.map { it.name })
+        assertEquals(listOf(1, 2), draft.lineItems.map { it.qty })
+        assertEquals(listOf(16000L, 26000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(42000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * A 4-line item name wrapping DOWNWARD (thermal): the numeric triple + first name word on the
+     * first line, three name fragments on the following moneyless rows (attached as a suffix),
+     * bounded by the next item's anchor.
+     */
+    @Test fun multiLineNames_wrapDownwardFourLines() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                TANDOOR HOUSE|60|360|20
+
+                Item|60|140|60
+                Qty|300|340|60
+                Rate|380|440|60
+                Amount|480|560|60
+
+                Royal|60|160|100
+                1|310|330|100
+                320.00|380|440|100
+                320.00|480|560|100
+
+                Butter|60|160|130
+
+                Chicken|60|180|160
+
+                Masala|60|170|190
+
+                Garlic Naan|60|230|350
+                3|310|330|350
+                45.00|380|440|350
+                135.00|480|560|350
+
+                Sub Total|300|455|420
+                455.00|480|560|420
+
+                Grand Total|60|300|460
+                455.00|480|560|460
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Royal Butter Chicken Masala", "Garlic Naan"), draft.lineItems.map { it.name })
+        assertEquals(listOf(1, 3), draft.lineItems.map { it.qty })
+        assertEquals(listOf(32000L, 13500L), draft.lineItems.map { it.amountMinor })
+        assertEquals(45500L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Item names CONTAINING digits ("7 Up", "500ml Water", "... 2pc") must not be read as a qty or a
+     * price — they sit left of the money band and stay part of the name.
+     */
+    @Test fun namesContainingDigits_notReadAsQtyOrPrice() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                SNACK SHACK|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                7 Up|60|130|140
+                2|310|330|140
+                40.00|380|440|140
+                80.00|480|560|140
+
+                500ml Water|60|220|180
+                1|310|330|180
+                20.00|380|440|180
+                20.00|480|560|180
+
+                Paneer Roll 2pc|60|280|220
+                1|310|330|220
+                90.00|380|440|220
+                90.00|480|560|220
+
+                Sub Total|300|455|280
+                190.00|480|560|280
+
+                Grand Total|60|300|320
+                190.00|480|560|320
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("7 Up", "500ml Water", "Paneer Roll 2pc"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(8000L, 2000L, 9000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(19000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Item names containing `&`, `/`, `-`, `(`, `)` and `%` must survive intact — in particular a `%`
+     * inside a name must NOT make the cell read as a percentage/tax token.
+     */
+    @Test fun namesWithSpecialCharacters() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                FUSION BITES|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                Egg & Cheese|60|240|140
+                1|310|330|140
+                120.00|380|440|140
+                120.00|480|560|140
+
+                Tea/Coffee Combo|60|280|180
+                2|310|330|180
+                50.00|380|440|180
+                100.00|480|560|180
+
+                Roll (Half-Plate)|60|300|220
+                1|310|330|220
+                80.00|380|440|220
+                80.00|480|560|220
+
+                Combo 50% Extra|60|280|260
+                1|310|330|260
+                60.00|380|440|260
+                60.00|480|560|260
+
+                Sub Total|300|455|320
+                360.00|480|560|320
+
+                Grand Total|60|300|360
+                360.00|480|560|360
+                """,
+            ),
+        )!!
+
+        assertEquals(
+            listOf("Egg & Cheese", "Tea/Coffee Combo", "Roll (Half-Plate)", "Combo 50% Extra"),
+            draft.lineItems.map { it.name },
+        )
+        assertEquals(listOf(1, 2, 1, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(12000L, 10000L, 8000L, 6000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(36000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
 }
