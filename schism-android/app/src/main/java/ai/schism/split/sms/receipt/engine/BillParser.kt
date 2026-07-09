@@ -1,6 +1,8 @@
 package ai.schism.split.sms.receipt.engine
 
+import ai.schism.split.sms.receipt.ReceiptDraft
 import ai.schism.split.sms.receipt.ReceiptLineItem
+import ai.schism.split.sms.receipt.isoDate
 import kotlin.math.abs
 import kotlin.math.ceil
 
@@ -145,4 +147,71 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
         items.add(ReceiptLineItem(name = fullName, amountMinor = amountMinor, qty = qty))
     }
     return items
+}
+
+/**
+ * Generic bill-metadata keyword classes (tax IDs, order/invoice references, contact/address
+ * lines, boilerplate) — never a merchant name — used to skip non-merchant rows when hunting for
+ * the merchant name line in [parseBill].
+ */
+private val METADATA_KEYWORDS = Regex(
+    """(?i)\b(gstin|fssai|invoice|order\s*id|table|covers?|date|time|phone|mobile|tel|contact|""" +
+        """bill\s*details|item\s*total|sub\s*total|grand\s*total|amount|paid|qty|thank|welcome|""" +
+        """address|www|http|token|kot)\b""",
+)
+
+/** True when [text] is bill metadata (a date, or a generic metadata-keyword line) rather than a plausible merchant name. */
+private fun isMetadataRow(text: String): Boolean = isoDate(text) != null || METADATA_KEYWORDS.containsMatchIn(text)
+
+/**
+ * Assembles the full deterministic bill-reading engine into a [ReceiptDraft]: per-source template
+ * normalization ([applyTemplate]) runs first, then the generic geometry pipeline — column
+ * detection ([detectColumns]), region segmentation ([segment]), item extraction ([extractItems]),
+ * totals reading ([readTotals]) — and finally the arithmetic constraint solver ([reconcile]) ties
+ * items and totals together into one internally-consistent draft.
+ *
+ * The merchant name is the first letters-dominant row that isn't bill metadata (a date, tax ID,
+ * order reference, or other boilerplate keyword line); the date is the first [isoDate]-shaped row
+ * text found anywhere on the bill.
+ *
+ * Returns `null` only when the bill yields neither a single line item nor a detected grand total —
+ * i.e. there's nothing usable to build a draft from at all.
+ */
+fun parseBill(rows: List<Row>): ReceiptDraft? {
+    if (rows.isEmpty()) return null
+
+    val norm = applyTemplate(detectSource(rows), rows)
+
+    val merchant = norm.firstNotNullOfOrNull { row ->
+        val text = row.text.trim()
+        text.takeIf {
+            it.isNotEmpty() && it.count { ch -> ch.isLetter() } >= 3 &&
+                it.count { ch -> ch.isLetter() } > it.count { ch -> ch.isDigit() } &&
+                !isMetadataRow(it)
+        }
+    }?.take(60) ?: "Receipt"
+
+    val date = norm.firstNotNullOfOrNull { isoDate(it.text) }
+
+    val columns = detectColumns(norm)
+    val regions = segment(norm)
+    val items = extractItems(regions, columns)
+    val totals = readTotals(regions)
+
+    if (items.isEmpty() && totals.grandTotal == null) return null
+
+    val v = reconcile(items, totals)
+    return ReceiptDraft(
+        merchant = merchant,
+        totalMinor = v.grandTotal,
+        currency = "₹",
+        date = date,
+        lineItems = v.items,
+        taxMinor = v.tax + v.fees - v.discount,
+        subtotalMinor = v.subtotal,
+        feesMinor = v.fees,
+        discountMinor = v.discount,
+        verified = v.verified,
+        parsedByAi = false,
+    )
 }

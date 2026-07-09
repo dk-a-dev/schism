@@ -210,7 +210,8 @@ private fun toMinor(raw: String): Long? {
     return Math.round(value * 100)
 }
 
-private fun isoDate(line: String): String? {
+/** Visible across the module (not just this file) so the geometry-based engine's `parseBill` can reuse the same date detection. */
+internal fun isoDate(line: String): String? {
     val m = DATE_REGEX.find(line) ?: return null
     return if (m.groupValues[1].isNotEmpty()) {
         // yyyy-mm-dd
