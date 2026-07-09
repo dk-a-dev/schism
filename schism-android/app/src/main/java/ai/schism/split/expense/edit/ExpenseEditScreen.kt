@@ -6,7 +6,6 @@
 package ai.schism.split.expense.edit
 
 import ai.schism.split.core.ui.InitialAvatar
-import ai.schism.split.core.ui.SchismFilterChip
 import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.expense.edit.voice.VoiceListeningDialog
 import ai.schism.split.expense.edit.voice.rememberVoiceInput
@@ -14,8 +13,6 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,9 +29,11 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import ai.schism.split.core.ui.DotsLoader
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -334,15 +333,20 @@ private fun SplitMode.label(): String = when (this) {
     SplitMode.BY_AMOUNT -> "Amount"
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SplitModeChips(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    ButtonGroup(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         SplitMode.entries.forEach { mode ->
-            SchismFilterChip(
-                selected = state.splitMode == mode,
-                onClick = { viewModel.onSplitModeChange(mode) },
-                label = { Text(mode.label()) },
+            toggleableItem(
+                checked = state.splitMode == mode,
+                onCheckedChange = { checked -> if (checked) viewModel.onSplitModeChange(mode) },
+                label = mode.label(),
+                icon = { Text(mode.label()) },
+                weight = 1f,
             )
         }
     }

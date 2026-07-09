@@ -1,20 +1,12 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+)
 
 package ai.schism.split.groups.list
 
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.UiState
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
@@ -36,10 +29,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import ai.schism.split.core.ui.ListSkeleton
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FloatingActionButtonMenu
+import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.ToggleFloatingActionButton
+import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -58,7 +54,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -163,99 +158,42 @@ private fun GroupCard(group: GroupSummary, onOpenGroup: (String) -> Unit) {
 }
 
 /**
- * A single FAB that expands into two labeled mini-actions ("Create group" / "Join group") instead
- * of offering two separate, easily-confused entry points. Tapping the main FAB rotates its icon
- * from `+` to `×` and reveals the mini-actions above it with a fade/slide-in; tapping a mini-action
- * or the scrim collapses it again.
+ * The signature Material 3 Expressive FAB menu: a morphing +/× toggle button that expands into
+ * labeled pill actions ("Create group" / "Join group") instead of offering two separate, easily
+ * confused entry points.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 45f else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "fabRotation",
-    )
 
-    Box(Modifier.fillMaxSize()) {
-        if (expanded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { expanded = false },
-            )
-        }
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) {
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
-            ) {
-                MiniFabAction(label = "Create group", icon = Icons.Filled.Add) {
-                    expanded = false
-                    onCreate()
-                }
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
-            ) {
-                MiniFabAction(label = "Join group", icon = Icons.Filled.GroupAdd) {
-                    expanded = false
-                    onJoin()
-                }
-            }
-            FloatingActionButton(
-                onClick = { expanded = !expanded },
-                shape = MaterialTheme.shapes.large,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    FloatingActionButtonMenu(
+        expanded = expanded,
+        button = {
+            ToggleFloatingActionButton(
+                checked = expanded,
+                onCheckedChange = { expanded = it },
             ) {
                 Icon(
-                    Icons.Filled.Add,
+                    imageVector = if (checkedProgress > 0.5f) Icons.Filled.Close else Icons.Filled.Add,
                     contentDescription = if (expanded) "Close" else "New group",
-                    modifier = Modifier.rotate(rotation),
+                    modifier = Modifier.animateIcon({ checkedProgress }),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun MiniFabAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shadowElevation = 2.dp,
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        },
+        content = {
+            FloatingActionButtonMenuItem(
+                onClick = { expanded = false; onCreate() },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("Create group") },
             )
-        }
-        SmallFloatingActionButton(
-            onClick = onClick,
-            shape = MaterialTheme.shapes.large,
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ) {
-            Icon(icon, contentDescription = label)
-        }
-    }
+            FloatingActionButtonMenuItem(
+                onClick = { expanded = false; onJoin() },
+                icon = { Icon(Icons.Filled.GroupAdd, contentDescription = null) },
+                text = { Text("Join group") },
+            )
+        },
+    )
 }
 
 @Composable

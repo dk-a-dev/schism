@@ -3,10 +3,12 @@ package ai.schism.split.core.ui
 import ai.schism.split.core.theme.AvatarColors
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,7 +18,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.absoluteValue
 
-/** A circular avatar with a deterministic brand color (from [key]) and the [name]'s initials. */
+/**
+ * An avatar with a deterministic brand color (from [key]) and the [name]'s initials, clipped to an
+ * expressive Material 3 "cookie" blob shape instead of a plain circle — a friendlier, more
+ * characterful silhouette used for both group and participant avatars.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InitialAvatar(
     name: String,
@@ -25,7 +32,8 @@ fun InitialAvatar(
     size: Dp = 44.dp,
 ) {
     val color = AvatarColors[key.hashCode().absoluteValue % AvatarColors.size]
-    Surface(shape = CircleShape, color = color, modifier = modifier.size(size)) {
+    val shape = MaterialShapes.Cookie7Sided.toShape()
+    Surface(shape = shape, color = color, modifier = modifier.size(size)) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = initialsOf(name),

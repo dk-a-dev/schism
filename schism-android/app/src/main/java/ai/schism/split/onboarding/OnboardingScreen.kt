@@ -81,7 +81,7 @@ private fun AuthForm(
             SchismLogo(size = 72.dp)
             Text(
                 if (register) "Create your account" else "Welcome back",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
             )
             Text(

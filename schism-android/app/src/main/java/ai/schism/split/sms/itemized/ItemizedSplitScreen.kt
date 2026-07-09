@@ -83,7 +83,7 @@ fun ItemizedSplitScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Split by items") },
+                title = { Text("Split by items", style = MaterialTheme.typography.headlineSmall) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
