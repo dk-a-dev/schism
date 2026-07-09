@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -19,11 +19,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
- * Read-only breakdown of any expense — including ones the viewer can't edit: who paid, how it was
- * split (exact per-person amounts for BY_AMOUNT; shares otherwise), notes, date. The creator also
- * gets an Edit button (edit screen owns delete).
+ * Read-only breakdown of any expense: what it was, who paid, how it split per person, and — for a
+ * receipt split by items — a clean itemised list of who had what. The creator also gets an Edit
+ * button (the editor owns delete).
  */
 @Composable
 fun ExpenseDetailSheet(
@@ -35,52 +39,124 @@ fun ExpenseDetailSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(expense.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
+
+            // ── Header ─────────────────────────────────────────────
             Text(
-                formatMinor(expense.amount, currency) + "  ·  " + expense.expenseDate.take(10),
+                expense.title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                formatMinor(expense.amount, currency) + "  ·  " + prettyDate(expense.expenseDate),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 "Paid by " + (participantNames[expense.paidById] ?: "someone"),
                 style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider()
-            Text("Split", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+
+            // ── Split between ──────────────────────────────────────
+            Spacer(Modifier.height(24.dp))
+            SectionLabel("Split between")
+            Spacer(Modifier.height(8.dp))
             expense.paidFor.forEach { pf ->
-                Row(Modifier.fillMaxWidth()) {
-                    Text(participantNames[pf.participantId] ?: pf.participantId, Modifier.weight(1f))
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        participantNames[pf.participantId] ?: pf.participantId,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
                     Text(
                         when (expense.splitMode) {
                             "BY_AMOUNT" -> formatMinor(pf.shares, currency)
                             "BY_PERCENTAGE" -> "${pf.shares / 100.0}%"
                             else -> "${pf.shares}×"
                         },
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
-            if (expense.notes.isNotBlank()) {
-                HorizontalDivider()
-                val isItemBreakdown = expense.splitMode == "BY_AMOUNT" &&
-                    expense.notes.startsWith("Split by items")
-                Text(
-                    if (isItemBreakdown) "Split by items" else "Notes",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+
+            // ── Items (only for a receipt split by items) ─────────
+            val items = parseItemBreakdown(expense.notes)
+            if (expense.splitMode == "BY_AMOUNT" && items.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                SectionLabel("Items")
+                Spacer(Modifier.height(8.dp))
+                items.forEach { item ->
+                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        Text(item.name, style = MaterialTheme.typography.bodyLarge)
+                        if (item.sharedBy.isNotBlank()) {
+                            Text(
+                                item.sharedBy,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            } else if (expense.notes.isNotBlank()) {
+                Spacer(Modifier.height(24.dp))
+                SectionLabel("Notes")
+                Spacer(Modifier.height(8.dp))
                 Text(expense.notes, style = MaterialTheme.typography.bodyMedium)
             }
+
             if (canEdit) {
-                SchismPrimaryButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Spacer(Modifier.height(28.dp))
+                SchismPrimaryButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                     Text("Edit expense")
                 }
             }
-            Spacer(Modifier.padding(bottom = 16.dp))
         }
     }
+}
+
+/** A quiet uppercase eyebrow label that heads each section — refined, not shouty. */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(Locale.getDefault()),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+private data class SplitItem(val name: String, val sharedBy: String)
+
+/**
+ * Parses the "Split by items:" note the itemised flow writes into an expense into structured rows.
+ * Each source line looks like `• <item name> — <PersonA×2, PersonB>`; the leading "Split by items:"
+ * caption is dropped (the section already labels it). Returns empty when the note isn't a breakdown.
+ */
+private fun parseItemBreakdown(notes: String): List<SplitItem> {
+    if (!notes.startsWith("Split by items")) return emptyList()
+    return notes.lineSequence()
+        .map { it.trim() }
+        .filter { it.startsWith("•") }
+        .mapNotNull { line ->
+            val body = line.removePrefix("•").trim()
+            val dash = body.lastIndexOf(" — ")
+            if (dash < 0) SplitItem(body, "") else SplitItem(body.substring(0, dash).trim(), body.substring(dash + 3).trim())
+        }
+        .toList()
+}
+
+/** "2026-07-09" → "9 Jul 2026"; falls back to the raw date-only string if it can't be parsed. */
+private fun prettyDate(iso: String): String {
+    val datePart = iso.take(10)
+    return runCatching {
+        LocalDate.parse(datePart).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()))
+    }.getOrDefault(datePart)
 }

@@ -22,8 +22,8 @@ import androidx.compose.ui.unit.dp
  * chips: bold pill shapes, a comfortable touch target, and a confident label style, so the same
  * "big rounded button" language shows up everywhere instead of drifting screen to screen.
  */
-private val CtaMinHeight = 56.dp
-private val CtaContentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
+private val CtaMinHeight = 50.dp
+private val CtaContentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
 
 /** The one bold action a screen wants you to take: Create group, Save, Log in, Finalize, ... */
 @Composable

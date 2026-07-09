@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package ai.schism.split.settings
 
 import ai.schism.split.BuildConfig
@@ -33,7 +35,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -360,7 +362,7 @@ private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
         when (val s = state) {
             is ai.schism.split.core.ai.ModelManager.State.Absent -> InfoRow("Model", "Not downloaded")
             is ai.schism.split.core.ai.ModelManager.State.Downloading -> {
-                LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth())
+                LinearWavyProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth())
                 InfoRow("Downloading", "${s.percent}%  ·  keeps going if you leave")
             }
             is ai.schism.split.core.ai.ModelManager.State.Ready ->
