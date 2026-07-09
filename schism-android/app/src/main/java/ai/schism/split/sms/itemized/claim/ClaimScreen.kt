@@ -8,6 +8,7 @@ import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.ui.SplitLoader
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +19,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
@@ -150,6 +153,7 @@ fun ClaimScreen(
                                     currency = session.currency,
                                     weight = state.weightFor(item.idx),
                                     claimants = state.claimantsFor(item.idx),
+                                    readyParticipantIds = session.readyParticipantIds,
                                     myParticipantId = state.myParticipantId,
                                     onAdjust = { delta -> viewModel.adjustWeight(item.idx, delta) },
                                     onSet = { w -> viewModel.setWeight(item.idx, w) },
@@ -322,12 +326,40 @@ private fun TaxesCard(taxes: List<ai.schism.split.core.net.TaxLineDto>, currency
     }
 }
 
+/** A claimant's avatar with a small ✓ badge in the bottom-right corner when they've marked themselves
+ * "done" claiming (session.readyParticipantIds) — a tasteful, at-a-glance ready signal on the
+ * "claimed by" row, not just in the footer. */
+@Composable
+private fun ClaimantAvatar(name: String, key: String, isReady: Boolean) {
+    Box {
+        InitialAvatar(name = name, key = key, size = 28.dp)
+        if (isReady) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceContainer),
+                modifier = Modifier.size(13.dp).align(Alignment.BottomEnd),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = "Ready",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(2.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ClaimItemCard(
     item: ClaimItemDto,
     currency: String,
     weight: Double,
     claimants: List<ai.schism.split.groups.data.Participant>,
+    readyParticipantIds: List<String>,
     myParticipantId: String,
     onAdjust: (Double) -> Unit,
     onSet: (Double) -> Unit,
@@ -356,7 +388,9 @@ private fun ClaimItemCard(
             }
             if (claimants.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
-                    claimants.forEach { p -> InitialAvatar(name = p.name, key = p.id, size = 28.dp) }
+                    claimants.forEach { p ->
+                        ClaimantAvatar(name = p.name, key = p.id, isReady = p.id in readyParticipantIds)
+                    }
                 }
             } else {
                 Text(
