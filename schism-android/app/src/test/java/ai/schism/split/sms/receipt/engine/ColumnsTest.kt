@@ -1,6 +1,8 @@
 package ai.schism.split.sms.receipt.engine
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ColumnsTest {
@@ -77,5 +79,37 @@ class ColumnsTest {
         assertEquals("DOSA", dosa.cellIn(byRole.getValue(ColRole.ITEM))!!.text)
         assertEquals("1", dosa.cellIn(byRole.getValue(ColRole.QTY))!!.text)
         assertEquals("60.00", dosa.cellIn(byRole.getValue(ColRole.AMOUNT))!!.text)
+    }
+
+    /**
+     * Fused Price+Amount header ("PriceAmount", matching no `\b`-anchored keyword) over two money
+     * columns printed so close the clusterer merges them. Naively this yields an AMOUNT column with
+     * no RATE; the fused-column split must recover BOTH a RATE (price) and an AMOUNT column, so a
+     * qty>1 row reads its price and line amount into distinct columns.
+     */
+    @Test fun fusedPriceAmountHeaderSplitsIntoRateAndAmount() {
+        val rows = listOf(
+            Row(listOf(c("Item", 60, 300, 90), c("Qty.", 833, 867, 90), c("PriceAmount", 890, 960, 90))),
+            Row(listOf(c("Jumbo Roll", 140, 400, 140), c("3", 833, 867, 140), c("149.00", 890, 924, 140), c("447.00", 926, 960, 140))),
+            Row(listOf(c("Lime Juice", 140, 400, 180), c("3", 833, 867, 180), c("35.00", 895, 924, 180), c("105.00", 926, 960, 180))),
+        )
+        val cols = detectColumns(rows)
+        val byRole = cols.associateBy { it.role }
+        assertTrue("must recover a distinct RATE column", byRole.containsKey(ColRole.RATE))
+        val jumbo = rows[1]
+        assertEquals("3", jumbo.cellIn(byRole.getValue(ColRole.QTY))!!.text)
+        assertEquals("149.00", jumbo.cellIn(byRole.getValue(ColRole.RATE))!!.text)
+        assertEquals("447.00", jumbo.cellIn(byRole.getValue(ColRole.AMOUNT))!!.text)
+    }
+
+    /** A genuine single-amount layout (Description|Qty|Amount) must NOT be split into a phantom RATE. */
+    @Test fun singleAmountColumnIsNotSplit() {
+        val rows = listOf(
+            Row(listOf(c("Description", 20, 160, 40), c("Qty", 300, 340, 40), c("Amount", 430, 520, 40))),
+            Row(listOf(c("PLAIN PAPAD", 20, 200, 80), c("2", 310, 325, 80), c("80.00", 430, 500, 80))),
+            Row(listOf(c("MASALA DOSA", 20, 200, 120), c("1", 310, 325, 120), c("60.00", 430, 500, 120))),
+        )
+        val cols = detectColumns(rows)
+        assertFalse("no phantom RATE column for a single-amount layout", cols.any { it.role == ColRole.RATE })
     }
 }

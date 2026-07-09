@@ -162,10 +162,48 @@ fun detectColumns(rows: List<Row>): List<Column> {
         if (rateIdx != null) roles[rateIdx] = ColRole.RATE
     }
 
-    return clusters.indices.map { i ->
+    val cols = clusters.indices.map { i ->
         val (l, r) = bounds[i]
         Column(l, r, roles[i] ?: ColRole.OTHER)
     }
+
+    return splitFusedMoneyColumn(cols, dataRows)
+}
+
+/**
+ * Rescues a fused Price+Amount layout (defect (d)): a header whose price/amount labels are printed
+ * with no gap (OCR emits one "PriceAmount" cell that matches no `\b`-anchored keyword), sitting over
+ * two money columns close enough that the gap clusterer merged them into a single AMOUNT column with
+ * NO distinct RATE. When that has happened — [columns] has an AMOUNT column but no RATE — and the
+ * data genuinely carries two money cells per row (a rate AND a line amount), re-derive the two money
+ * columns structurally by seeding them from the two rightmost money cells of each such row: the
+ * rightmost is AMOUNT, the one before it is RATE. Splits the merged band at the midpoint between the
+ * two seed clusters. When there aren't two money cells per row (a real single-amount layout, e.g.
+ * Description|Qty|Amount), nothing is split.
+ */
+private fun splitFusedMoneyColumn(columns: List<Column>, dataRows: List<Row>): List<Column> {
+    if (columns.any { it.role == ColRole.RATE }) return columns
+    val amount = columns.firstOrNull { it.role == ColRole.AMOUNT } ?: return columns
+
+    // Money cells sitting inside the merged AMOUNT band, per data row, left-to-right.
+    val moneyPerRow = dataRows.map { row ->
+        row.cells.filter { it.xCenter in amount.xLeft..amount.xRight && isMoneyToken(it.text) }
+            .sortedBy { it.xCenter }
+    }
+    val twoMoneyRows = moneyPerRow.filter { it.size >= 2 }
+    // Need the two-money-column shape to be a real, repeated structure — not one stray double row.
+    if (twoMoneyRows.size < 2) return columns
+
+    val rateCells = twoMoneyRows.map { it[it.size - 2] }
+    val amountCells = twoMoneyRows.map { it.last() }
+    val split = (rateCells.maxOf { it.xCenter } + amountCells.minOf { it.xCenter }) / 2
+
+    val rateLeft = minOf(amount.xLeft, rateCells.minOf { it.xLeft })
+    val amountRight = maxOf(amount.xRight, amountCells.maxOf { it.xRight })
+
+    return columns.map { col ->
+        if (col === amount) Column(split + 1, amountRight, ColRole.AMOUNT) else col
+    } + Column(rateLeft, split, ColRole.RATE)
 }
 
 /** The cell in this row whose xCenter falls within [col]'s bounds, if any. */
