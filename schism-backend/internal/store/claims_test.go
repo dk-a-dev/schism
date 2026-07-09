@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/schism/schism-backend/internal/id"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateAndGetClaimSession(t *testing.T) {
@@ -188,5 +190,62 @@ func TestCancelClaimSessionAndParticipantLookup(t *testing.T) {
 	}
 	if err := st.UpsertClaims(ctx, cs.ID, devPid, 1, map[int]float64{0: 1}); err != ErrClaimLocked {
 		t.Fatalf("want ErrClaimLocked, got %v", err)
+	}
+}
+
+// TestClaimVsFinalizeRace proves the row-lock state machine never silently loses a claim: a concurrent
+// UpsertClaims and FinalizeClaimSession either both succeed (the claim is counted in the expense) or
+// the claim is cleanly rejected with ErrClaimLocked — never a partial/lost write, and exactly one
+// expense results. Run with -race.
+func TestClaimVsFinalizeRace(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	dev, ru := g.Participants[0].ID, g.Participants[1].ID
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: dev,
+		Items: []ClaimItem{{Idx: 0, Name: "X", Qty: 1, AmountMinor: 1000}}})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var claimErr error
+	var finErr error
+	var eid string
+	go func() {
+		defer wg.Done()
+		claimErr = st.UpsertClaims(ctx, cs.ID, ru, 1, map[int]float64{0: 1})
+	}()
+	go func() {
+		defer wg.Done()
+		eid, finErr = st.FinalizeClaimSession(ctx, cs.ID, 1, nil)
+	}()
+	wg.Wait()
+
+	// No panic; claim either counted (nil) or cleanly locked out — never any other error.
+	if claimErr != nil && claimErr != ErrClaimLocked {
+		t.Fatalf("unexpected claim error: %v", claimErr)
+	}
+	require.NoError(t, finErr)
+	require.NotEmpty(t, eid)
+
+	// Exactly one expense exists for the group.
+	list, err := st.ListExpenses(ctx, g.ID)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+
+	// If the claim landed before finalize, ru is in the expense; otherwise the claim was locked out.
+	got, _ := st.GetClaimSession(ctx, cs.ID)
+	require.Equal(t, "finalized", got.Status)
+	e := list[0]
+	ruInExpense := false
+	for _, pf := range e.PaidFor {
+		if pf.ParticipantID == ru {
+			ruInExpense = true
+		}
+	}
+	if claimErr == nil {
+		require.True(t, ruInExpense, "claim succeeded but ru not in finalized expense")
+	} else {
+		require.False(t, ruInExpense, "claim was locked out but ru appeared in expense")
 	}
 }
