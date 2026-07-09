@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
+	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/schism/schism-backend/internal/id"
@@ -63,6 +66,139 @@ type ClaimSession struct {
 	Version              int         `json:"version"`
 	ExpenseID            *string     `json:"expenseId"`
 	Claims               []Claim     `json:"claims"`
+}
+
+// UnclaimedResolution tells ComputeClaimSplit how to synthesize a weight for an item nobody claimed.
+// Mode is one of "assign" (give it entirely to ParticipantID), "split" (split evenly across every
+// participant), or "cover" (the creator eats it).
+type UnclaimedResolution struct {
+	ItemIdx       int
+	Mode          string
+	ParticipantID string
+}
+
+// ComputeClaimSplit is the pure, DB-free proportional-split math shared by FinalizeClaimSession and
+// the API's live "owesPreview". It mirrors the Android buildItemizedExpenseRequest algorithm:
+//
+//  1. Per item, gather claimed weights (participantID -> weight). An item with no claims uses its
+//     UnclaimedResolution (if any) to synthesize a weight of 1 for the relevant participant(s); an
+//     item with neither claims nor a resolution contributes to nobody.
+//  2. The item's amount splits proportionally to weight, with the last sharer (by participant id,
+//     for determinism) absorbing the rounding remainder so the item's split is always exact.
+//  3. The net charge pot (tax + fees - discount + roundoff) splits proportionally to each
+//     participant's claimed subtotal, again with the last participant absorbing the remainder.
+//
+// Weights are scaled to integer "centi-weights" (NUMERIC(6,2) has 2 decimal places) so the split uses
+// exact integer division throughout, matching money's int64-minor-units discipline.
+func ComputeClaimSplit(items []ClaimItem, claims []Claim, tax, fees, discount, roundoff int64,
+	resolutions []UnclaimedResolution, allParticipantIDs []string, creatorID string) map[string]int64 {
+
+	claimsByItem := map[int]map[string]float64{}
+	for _, c := range claims {
+		if claimsByItem[c.ItemIdx] == nil {
+			claimsByItem[c.ItemIdx] = map[string]float64{}
+		}
+		claimsByItem[c.ItemIdx][c.ParticipantID] += c.Weight
+	}
+	resByItem := map[int]UnclaimedResolution{}
+	for _, r := range resolutions {
+		resByItem[r.ItemIdx] = r
+	}
+
+	owed := map[string]int64{}
+
+	for _, item := range items {
+		weights := claimsByItem[item.Idx]
+		hasClaims := false
+		for _, w := range weights {
+			if w > 0 {
+				hasClaims = true
+				break
+			}
+		}
+		if !hasClaims {
+			res, ok := resByItem[item.Idx]
+			if !ok {
+				continue // nobody claimed it and nothing resolved it
+			}
+			weights = map[string]float64{}
+			switch res.Mode {
+			case "assign":
+				if res.ParticipantID != "" {
+					weights[res.ParticipantID] = 1
+				}
+			case "split":
+				for _, pid := range allParticipantIDs {
+					weights[pid] = 1
+				}
+			case "cover":
+				if creatorID != "" {
+					weights[creatorID] = 1
+				}
+			}
+		}
+
+		scaled := map[string]int64{}
+		var total int64
+		for pid, w := range weights {
+			if w <= 0 {
+				continue
+			}
+			cw := int64(math.Round(w * 100))
+			if cw <= 0 {
+				continue
+			}
+			scaled[pid] = cw
+			total += cw
+		}
+		if total <= 0 {
+			continue
+		}
+		pids := make([]string, 0, len(scaled))
+		for pid := range scaled {
+			pids = append(pids, pid)
+		}
+		sort.Strings(pids)
+
+		var distributed int64
+		for i, pid := range pids {
+			var part int64
+			if i == len(pids)-1 {
+				part = item.AmountMinor - distributed
+			} else {
+				part = item.AmountMinor * scaled[pid] / total
+			}
+			distributed += part
+			owed[pid] += part
+		}
+	}
+
+	chargePot := tax + fees - discount + roundoff
+	var assignedSubtotal int64
+	for _, v := range owed {
+		assignedSubtotal += v
+	}
+	if chargePot != 0 && assignedSubtotal > 0 {
+		pids := make([]string, 0, len(owed))
+		for pid := range owed {
+			pids = append(pids, pid)
+		}
+		sort.Strings(pids)
+
+		remaining := chargePot
+		for i, pid := range pids {
+			var share int64
+			if i == len(pids)-1 {
+				share = remaining
+			} else {
+				share = chargePot * owed[pid] / assignedSubtotal
+			}
+			remaining -= share
+			owed[pid] += share
+		}
+	}
+
+	return owed
 }
 
 // CreateClaimSession inserts a new open claim session (version 1) with the given items and charge
@@ -232,6 +368,139 @@ func (s *Store) EditItems(ctx context.Context, sid string, items []ClaimItem) (i
 		return 0, err
 	}
 	return newVersion, nil
+}
+
+// FinalizeClaimSession locks a session into a group expense. Inside a row-locked tx: if the session
+// is already finalized it returns the existing expense id (idempotent); if cancelled it errors; if
+// the caller's expectedVersion is behind it returns ErrClaimStale. Otherwise it loads the claims and
+// group participants, runs ComputeClaimSplit, builds a BY_AMOUNT expense (paidBy = creator, paidFor =
+// each owed participant, amount = sum), inserts it via insertExpenseTx, marks the session finalized,
+// and returns the new expense id.
+func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVersion int, resolutions []UnclaimedResolution) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var status, groupID, creatorID, title string
+	var version int
+	var tax, fees, discount, roundoff int64
+	var itemsJSON []byte
+	var existingExpenseID *string
+	err = tx.QueryRow(ctx,
+		`SELECT status, group_id, creator_participant_id, title, items,
+		        tax_minor, fees_minor, discount_minor, roundoff_minor, version, expense_id
+		 FROM claim_sessions WHERE id=$1 FOR UPDATE`, sid).
+		Scan(&status, &groupID, &creatorID, &title, &itemsJSON,
+			&tax, &fees, &discount, &roundoff, &version, &existingExpenseID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrClaimLocked
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if status == "finalized" {
+		if existingExpenseID != nil {
+			return *existingExpenseID, nil
+		}
+		return "", errors.New("finalized session missing expense id")
+	}
+	if status == "cancelled" {
+		return "", ErrClaimLocked
+	}
+	if version != expectedVersion {
+		return "", ErrClaimStale
+	}
+
+	var items []ClaimItem
+	if err := json.Unmarshal(itemsJSON, &items); err != nil {
+		return "", err
+	}
+
+	// Load this session's claims inside the tx (consistent with the FOR UPDATE lock).
+	rows, err := tx.Query(ctx,
+		`SELECT item_idx, participant_id, weight FROM claims WHERE session_id=$1 ORDER BY item_idx, participant_id`, sid)
+	if err != nil {
+		return "", err
+	}
+	var claims []Claim
+	for rows.Next() {
+		var c Claim
+		if err := rows.Scan(&c.ItemIdx, &c.ParticipantID, &c.Weight); err != nil {
+			rows.Close()
+			return "", err
+		}
+		claims = append(claims, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	// Load group participants (for split/cover resolutions over "everyone").
+	pRows, err := tx.Query(ctx, `SELECT id FROM participants WHERE group_id=$1 ORDER BY id`, groupID)
+	if err != nil {
+		return "", err
+	}
+	var allParticipantIDs []string
+	for pRows.Next() {
+		var pid string
+		if err := pRows.Scan(&pid); err != nil {
+			pRows.Close()
+			return "", err
+		}
+		allParticipantIDs = append(allParticipantIDs, pid)
+	}
+	pRows.Close()
+	if err := pRows.Err(); err != nil {
+		return "", err
+	}
+
+	owed := ComputeClaimSplit(items, claims, tax, fees, discount, roundoff, resolutions, allParticipantIDs, creatorID)
+
+	pids := make([]string, 0, len(owed))
+	for pid := range owed {
+		pids = append(pids, pid)
+	}
+	sort.Strings(pids)
+	var amount int64
+	paidFor := make([]PaidForInput, 0, len(pids))
+	for _, pid := range pids {
+		share := owed[pid]
+		if share == 0 {
+			continue
+		}
+		amount += share
+		paidFor = append(paidFor, PaidForInput{ParticipantID: pid, Shares: share})
+	}
+
+	expTitle := title
+	if expTitle == "" {
+		expTitle = "Claimed bill"
+	}
+	eid, err := s.insertExpenseTx(ctx, tx, groupID, ExpenseInput{
+		Title:       expTitle,
+		Amount:      amount,
+		ExpenseDate: time.Now(),
+		PaidByID:    creatorID,
+		SplitMode:   "BY_AMOUNT",
+		AddedBy:     creatorID,
+		PaidFor:     paidFor,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE claim_sessions SET status='finalized', expense_id=$2 WHERE id=$1`, sid, eid); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return eid, nil
 }
 
 func (s *Store) claimsFor(ctx context.Context, sid string) ([]Claim, error) {

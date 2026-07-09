@@ -79,3 +79,68 @@ func TestEditItemsDropsChangedItemClaims(t *testing.T) {
 		t.Fatalf("claims should be dropped: %+v", got.Claims)
 	}
 }
+
+func TestComputeClaimSplitWeightedWithTax(t *testing.T) {
+	items := []ClaimItem{{Idx: 0, Name: "Dish", Qty: 3, AmountMinor: 30000}}
+	claims := []Claim{{ItemIdx: 0, ParticipantID: "dev", Weight: 2}, {ItemIdx: 0, ParticipantID: "ru", Weight: 1}}
+	owed := ComputeClaimSplit(items, claims, 3000, 0, 0, 0, nil, []string{"dev", "ru"}, "dev")
+	// 30000 split 2:1 → dev 20000, ru 10000; tax 3000 split 2:1 → dev 2000, ru 1000
+	if owed["dev"] != 22000 || owed["ru"] != 11000 {
+		t.Fatalf("owed %+v", owed)
+	}
+}
+
+func TestComputeClaimSplitUnclaimedSplitEvenly(t *testing.T) {
+	items := []ClaimItem{{Idx: 0, Name: "Nobody", Qty: 1, AmountMinor: 10000}}
+	owed := ComputeClaimSplit(items, nil, 0, 0, 0, 0,
+		[]UnclaimedResolution{{ItemIdx: 0, Mode: "split"}}, []string{"a", "b"}, "a")
+	if owed["a"] != 5000 || owed["b"] != 5000 {
+		t.Fatalf("owed %+v", owed)
+	}
+}
+
+func TestFinalizeClaimSessionBuildsExpenseAndIsIdempotent(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	dev, ru := g.Participants[0].ID, g.Participants[1].ID
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: dev, Title: "Dinner",
+		Items: []ClaimItem{{Idx: 0, Name: "Dish", Qty: 3, AmountMinor: 30000}}, TaxMinor: 3000})
+	if err := st.UpsertClaims(ctx, cs.ID, dev, 1, map[int]float64{0: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertClaims(ctx, cs.ID, ru, 1, map[int]float64{0: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	eid, err := st.FinalizeClaimSession(ctx, cs.ID, 1, nil)
+	if err != nil || eid == "" {
+		t.Fatalf("finalize: eid=%q err=%v", eid, err)
+	}
+	e, err := st.GetExpense(ctx, g.ID, eid)
+	if err != nil || e == nil {
+		t.Fatalf("get expense: %v %v", e, err)
+	}
+	if e.Amount != 33000 {
+		t.Fatalf("amount %d", e.Amount)
+	}
+	byPid := map[string]int64{}
+	for _, pf := range e.PaidFor {
+		byPid[pf.ParticipantID] = pf.Shares
+	}
+	if byPid[dev] != 22000 || byPid[ru] != 11000 {
+		t.Fatalf("paidFor %+v", byPid)
+	}
+
+	got, err := st.GetClaimSession(ctx, cs.ID)
+	if err != nil || got.Status != "finalized" || got.ExpenseID == nil || *got.ExpenseID != eid {
+		t.Fatalf("session after finalize: %+v err=%v", got, err)
+	}
+
+	// Idempotent: a second finalize (even with a now-stale expectedVersion) returns the same expense id.
+	eid2, err := st.FinalizeClaimSession(ctx, cs.ID, 999, nil)
+	if err != nil || eid2 != eid {
+		t.Fatalf("second finalize: eid=%q err=%v", eid2, err)
+	}
+}

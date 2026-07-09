@@ -63,25 +63,15 @@ func (s *Store) CreateExpense(ctx context.Context, groupID string, in ExpenseInp
 		}
 	}
 
-	eid := id.New()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Expense{}, err
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO expenses (id, group_id, expense_date, title, category_id, amount, paid_by_id, is_reimbursement, split_mode, notes, added_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		eid, groupID, in.ExpenseDate, in.Title, in.CategoryID, in.Amount, in.PaidByID, in.IsReimbursement, in.SplitMode, nullify(in.Notes), in.AddedBy); err != nil {
+	eid, err := s.insertExpenseTx(ctx, tx, groupID, in)
+	if err != nil {
 		return Expense{}, err
-	}
-	for _, pf := range in.PaidFor {
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO expense_paid_for (expense_id, participant_id, shares) VALUES ($1,$2,$3)`,
-			eid, pf.ParticipantID, pf.Shares); err != nil {
-			return Expense{}, err
-		}
 	}
 	if idemKey != "" {
 		if _, err := tx.Exec(ctx,
@@ -97,6 +87,27 @@ func (s *Store) CreateExpense(ctx context.Context, groupID string, in ExpenseInp
 		return Expense{}, err
 	}
 	return *e, nil
+}
+
+// insertExpenseTx inserts an expense (and its paid_for rows) using the caller's transaction, without
+// committing it. Shared by CreateExpense and FinalizeClaimSession so a claim session's finalize build
+// uses the exact same expense-insert SQL as a normal expense create.
+func (s *Store) insertExpenseTx(ctx context.Context, tx pgx.Tx, groupID string, in ExpenseInput) (string, error) {
+	eid := id.New()
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO expenses (id, group_id, expense_date, title, category_id, amount, paid_by_id, is_reimbursement, split_mode, notes, added_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		eid, groupID, in.ExpenseDate, in.Title, in.CategoryID, in.Amount, in.PaidByID, in.IsReimbursement, in.SplitMode, nullify(in.Notes), in.AddedBy); err != nil {
+		return "", err
+	}
+	for _, pf := range in.PaidFor {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO expense_paid_for (expense_id, participant_id, shares) VALUES ($1,$2,$3)`,
+			eid, pf.ParticipantID, pf.Shares); err != nil {
+			return "", err
+		}
+	}
+	return eid, nil
 }
 
 func (s *Store) GetExpense(ctx context.Context, groupID, expenseID string) (*Expense, error) {
