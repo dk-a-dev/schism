@@ -7,6 +7,7 @@ import ai.schism.split.core.ui.WavyProgress
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.Participant
 import ai.schism.split.sms.receipt.ReceiptLineItem
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -126,6 +127,7 @@ fun ItemizedSplitScreen(
                                     participants = group.participants,
                                     shares = state.assignments[index].orEmpty(),
                                     onAdjust = { pid, d -> viewModel.adjustShare(index, pid, d) },
+                                    onSetShare = { pid, value -> viewModel.setShare(index, pid, value) },
                                     onEdit = { name, qty, amount -> viewModel.updateItem(index, name, qty, amount) },
                                     onRemove = { viewModel.removeItem(index) },
                                 )
@@ -237,10 +239,12 @@ private fun ItemCard(
     participants: List<Participant>,
     shares: Map<String, Long>,
     onAdjust: (String, Long) -> Unit,
+    onSetShare: (String, Long) -> Unit,
     onEdit: (String, Int, Long) -> Unit,
     onRemove: () -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var editingShareFor by remember { mutableStateOf<Pair<String, Long>?>(null) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -283,6 +287,9 @@ private fun ItemCard(
                             share.toString(),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clickable { editingShareFor = p.id to share }
+                                .padding(horizontal = 4.dp),
                         )
                         IconButton(onClick = { onAdjust(p.id, +1L) }) {
                             Icon(Icons.Filled.AddCircleOutline, contentDescription = "More")
@@ -304,6 +311,50 @@ private fun ItemCard(
             },
         )
     }
+
+    editingShareFor?.let { (pid, current) ->
+        ShareEntryDialog(
+            initial = current,
+            onDismiss = { editingShareFor = null },
+            onSave = { value ->
+                onSetShare(pid, value)
+                editingShareFor = null
+            },
+        )
+    }
+}
+
+/** Type a participant's share of an item directly, instead of tapping − / + repeatedly. */
+@Composable
+private fun ShareEntryDialog(
+    initial: Long,
+    onDismiss: () -> Unit,
+    onSave: (Long) -> Unit,
+) {
+    var value by remember { mutableStateOf(initial.toString()) }
+    val parsed = value.trim().toLongOrNull()
+    val valid = parsed != null && parsed >= 0L
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set share") },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                label = { Text("Count") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (valid) onSave(parsed!!.coerceAtLeast(0L)) },
+                enabled = valid,
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** Add/edit an item: name, quantity, and the line's total amount. */
@@ -335,11 +386,18 @@ private fun ItemDialog(
                     singleLine = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(3f)) {
                         IconButton(
                             onClick = { qty = ((qty.toIntOrNull() ?: 1) - 1).coerceAtLeast(1).toString() },
                         ) { Icon(Icons.Filled.RemoveCircleOutline, contentDescription = "Less") }
-                        Text(qty, style = MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(
+                            value = qty,
+                            onValueChange = { qty = it },
+                            label = { Text("Qty") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                        )
                         IconButton(
                             onClick = { qty = ((qty.toIntOrNull() ?: 1) + 1).toString() },
                         ) { Icon(Icons.Filled.AddCircleOutline, contentDescription = "More") }

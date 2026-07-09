@@ -156,6 +156,18 @@ class ItemizedSplitViewModel @Inject constructor(
         }
     }
 
+    /** Directly set a participant's share of an item to [value] (typed entry), clamped at 0. */
+    fun setShare(itemIndex: Int, participantId: String, value: Long) {
+        _state.update { s ->
+            val current = s.assignments[itemIndex].orEmpty()
+            val next = value.coerceAtLeast(0L)
+            s.copy(
+                assignments = s.assignments + (itemIndex to (current + (participantId to next))),
+                error = null,
+            )
+        }
+    }
+
     /** Edit an item's name/qty/amount in place. */
     fun updateItem(index: Int, name: String, qty: Int, amountMinor: Long) {
         _state.update { s ->
