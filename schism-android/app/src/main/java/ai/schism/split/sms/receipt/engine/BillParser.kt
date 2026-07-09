@@ -14,8 +14,14 @@ private val QTY_RATE_AMOUNT_PERMUTATIONS: List<Triple<Int, Int, Int>> = listOf(
 /** True when [text] has at least 2 letters — enough to be a plausible item name, not a stray symbol. */
 private fun looksLikeName(text: String): Boolean = text.count { it.isLetter() } >= 2
 
-/** Parses a QTY cell's raw text as a plain positive integer count (never minor units). */
-private fun parseQty(raw: String): Int? = raw.trim().replace(",", "").toIntOrNull()?.takeIf { it > 0 }
+/**
+ * Parses a QTY cell's raw text as a plain positive integer count (never minor units) — but only
+ * when it's a plausible quantity ([isSmallInt]: a bare 1-999 integer). Bounding this to small ints
+ * keeps a decimal-less large number (e.g. a total that's missing its decimal point) from being
+ * accepted as a "qty" candidate — both here, for the row's naive per-column reading, and in
+ * [resolveQtyAndAmount]'s remap search, which calls this same function per permutation slot.
+ */
+private fun parseQty(raw: String): Int? = raw.trim().takeIf { isSmallInt(it) }?.toIntOrNull()
 
 /** Tolerance (minor units) for the rate*qty≈amount invariant: 1% of the amount, floored at 200. */
 private fun tolerance(amountMinor: Long): Long = maxOf(ceil(amountMinor * 0.01).toLong(), 200L)
@@ -56,6 +62,11 @@ private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: St
         // way this row's role/position assignment is untrustworthy. Re-map its three raw texts
         // across {qty, rate, amount}, trying every assignment, and keep the one whose arithmetic
         // checks out, preferring the smallest integer qty among the valid candidates.
+        // Known residual limitation: this invariant is arithmetic-only, so when the true rate and
+        // qty are both small ints whose product is commutative (e.g. rate=2,qty=3,amount=6 vs.
+        // rate=3,qty=2,amount=6) every valid-looking permutation reconciles and "smallest integer =
+        // qty" is just a tiebreak guess — it can pick the swapped (wrong) reading. Accepted as an
+        // inherent limit of disambiguating by arithmetic alone, with no row-specific special-casing.
         val texts = listOf(qtyRaw, rateRaw, amountRaw)
         val remapped = QTY_RATE_AMOUNT_PERMUTATIONS.mapNotNull { (qi, ri, ai) ->
             val q = parseQty(texts[qi]) ?: return@mapNotNull null
@@ -120,11 +131,17 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
             continue
         }
 
+        // Don't clear wrappedNamePrefix until this row is confirmed to actually consume it (a real
+        // item gets emitted below) — a stray/garbled row between a wrapped name and its priced row
+        // must not discard the pending name fragment before it can attach to the next real item.
         val fullName = listOfNotNull(wrappedNamePrefix, nameText.ifBlank { null }).joinToString(" ").trim()
-        wrappedNamePrefix = null
         if (!looksLikeName(fullName)) continue
-
         val (qty, amountMinor) = resolveQtyAndAmount(qtyCell?.text, rateCell?.text, amountCell?.text) ?: continue
+        // A discount/void/zero row (e.g. "Discount -50.00", or a stray "0.00") resolves to a
+        // non-positive amount — never a real purchased item, so skip it before adding.
+        if (amountMinor <= 0) continue
+
+        wrappedNamePrefix = null
         items.add(ReceiptLineItem(name = fullName, amountMinor = amountMinor, qty = qty))
     }
     return items
