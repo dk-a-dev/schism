@@ -164,6 +164,33 @@ func TestClaimSessionRequiresMembership(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, noauth.StatusCode)
 }
 
+func TestSetReadyAsMemberAndNonMember(t *testing.T) {
+	srv := newTestServer(t)
+	g, token, creator := claimFixture(t, srv.URL)
+
+	createBody := `{"title":"Dinner","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":1000}]}`
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/claim-sessions", token, createBody)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var session struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+
+	// A member marking themselves ready → 200 with readyParticipantIds containing the caller.
+	readyResp := authRequest(t, http.MethodPut, srv.URL+"/v1/claim-sessions/"+session.ID+"/ready", token, `{"ready":true}`)
+	require.Equal(t, http.StatusOK, readyResp.StatusCode)
+	var ready struct {
+		ReadyParticipantIds []string `json:"readyParticipantIds"`
+	}
+	require.NoError(t, json.NewDecoder(readyResp.Body).Decode(&ready))
+	require.Contains(t, ready.ReadyParticipantIds, creator)
+
+	// A non-member → 403.
+	_, otherToken := registerUserToken(t, srv.URL, "Mallory", "m-"+id.New()+"@example.com", "9")
+	other := authRequest(t, http.MethodPut, srv.URL+"/v1/claim-sessions/"+session.ID+"/ready", otherToken, `{"ready":true}`)
+	require.Equal(t, http.StatusForbidden, other.StatusCode)
+}
+
 func TestClaimDeepLinkLanding(t *testing.T) {
 	srv := newTestServer(t)
 	resp, err := http.Get(srv.URL + "/c/test-sid")

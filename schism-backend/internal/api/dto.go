@@ -104,6 +104,10 @@ func (d finalizeDTO) toResolutions() []store.UnclaimedResolution {
 	return out
 }
 
+type setReadyDTO struct {
+	Ready bool `json:"ready"`
+}
+
 type editItemsDTO struct {
 	Items []claimItemDTO `json:"items"`
 }

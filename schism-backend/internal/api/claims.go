@@ -14,6 +14,8 @@ import (
 type claimSessionResponse struct {
 	*store.ClaimSession
 	OwesPreview map[string]int64 `json:"owesPreview"`
+	// ReadyParticipantIds mirrors ClaimSession.Ready as an explicit response field (never null).
+	ReadyParticipantIds []string `json:"readyParticipantIds"`
 }
 
 // callerParticipant resolves the authenticated caller to their participant id in the given group.
@@ -114,7 +116,11 @@ func (h *Handler) writeSession(w http.ResponseWriter, r *http.Request, status in
 	if preview == nil {
 		preview = map[string]int64{}
 	}
-	writeJSON(w, status, claimSessionResponse{ClaimSession: cs, OwesPreview: preview})
+	ready := cs.Ready
+	if ready == nil {
+		ready = []string{}
+	}
+	writeJSON(w, status, claimSessionResponse{ClaimSession: cs, OwesPreview: preview, ReadyParticipantIds: ready})
 }
 
 func (h *Handler) putClaims(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +236,43 @@ func (h *Handler) cancelClaimSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) setReady(w http.ResponseWriter, r *http.Request) {
+	sid := chi.URLParam(r, "sid")
+	cs, err := h.store.GetClaimSession(r.Context(), sid)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if cs == nil {
+		writeErr(w, http.StatusNotFound, "claim session not found")
+		return
+	}
+	pid, ok := h.callerParticipant(w, r, cs.GroupID)
+	if !ok {
+		return
+	}
+	var d setReadyDTO
+	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	err = h.store.SetReady(r.Context(), sid, pid, d.Ready)
+	if errors.Is(err, store.ErrClaimLocked) {
+		writeErr(w, http.StatusConflict, "LOCKED")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	updated, err := h.store.GetClaimSession(r.Context(), sid)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeSession(w, r, http.StatusOK, updated)
 }
 
 func (h *Handler) editClaimItems(w http.ResponseWriter, r *http.Request) {

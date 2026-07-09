@@ -72,6 +72,9 @@ type ClaimSession struct {
 	Version              int         `json:"version"`
 	ExpenseID            *string     `json:"expenseId"`
 	Claims               []Claim     `json:"claims"`
+	// Ready is the participant ids who have marked themselves "done" (advisory signal, not a finalize
+	// gate). Kept sorted for deterministic responses.
+	Ready []string `json:"ready"`
 }
 
 // UnclaimedResolution tells ComputeClaimSplit how to synthesize a weight for an item nobody claimed.
@@ -288,7 +291,58 @@ func (s *Store) GetClaimSession(ctx context.Context, sid string) (*ClaimSession,
 		return nil, err
 	}
 	cs.Claims = claims
+
+	ready, err := s.readyFor(ctx, sid)
+	if err != nil {
+		return nil, err
+	}
+	cs.Ready = ready
 	return &cs, nil
+}
+
+// readyFor loads the sorted list of participant ids who have marked themselves "ready" on a session.
+func (s *Store) readyFor(ctx context.Context, sid string) ([]string, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT participant_id FROM claim_ready WHERE session_id=$1 ORDER BY participant_id`, sid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		out = append(out, pid)
+	}
+	return out, rows.Err()
+}
+
+// SetReady toggles a participant's advisory "ready" (done claiming) flag on a session. It is only
+// permitted while the session is open (ErrClaimLocked otherwise). ready=true upserts the row (a no-op
+// if already set); ready=false removes it.
+func (s *Store) SetReady(ctx context.Context, sid, participantID string, ready bool) error {
+	var status string
+	err := s.pool.QueryRow(ctx, `SELECT status FROM claim_sessions WHERE id=$1`, sid).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrClaimLocked
+	}
+	if err != nil {
+		return err
+	}
+	if status != "open" {
+		return ErrClaimLocked
+	}
+	if ready {
+		_, err = s.pool.Exec(ctx,
+			`INSERT INTO claim_ready (session_id, participant_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+			sid, participantID)
+		return err
+	}
+	_, err = s.pool.Exec(ctx,
+		`DELETE FROM claim_ready WHERE session_id=$1 AND participant_id=$2`, sid, participantID)
+	return err
 }
 
 // UpsertClaims replaces one participant's claim rows on a session: inside a row-locked tx, the

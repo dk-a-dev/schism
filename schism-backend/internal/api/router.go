@@ -69,6 +69,7 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 			r.Put("/claims", h.putClaims)
 			r.Post("/finalize", h.finalizeClaimSession)
 			r.Post("/cancel", h.cancelClaimSession)
+			r.Put("/ready", h.setReady)
 			r.Patch("/items", h.editClaimItems)
 		})
 	})

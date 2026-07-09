@@ -291,6 +291,48 @@ func TestFinalizeDropsClaimsOfRemovedParticipant(t *testing.T) {
 	}
 }
 
+// TestSetReadyTogglesAndGuardsStatus proves the advisory "ready" signal is listed by GetClaimSession,
+// can be toggled off, and is refused once the session is no longer open.
+func TestSetReadyTogglesAndGuardsStatus(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	dev, ru := g.Participants[0].ID, g.Participants[1].ID
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: dev,
+		Items: []ClaimItem{{Idx: 0, Name: "X", Qty: 1, AmountMinor: 1000}}})
+
+	// Mark ru ready → listed by GetClaimSession.
+	if err := st.SetReady(ctx, cs.ID, ru, true); err != nil {
+		t.Fatal(err)
+	}
+	// Idempotent upsert.
+	if err := st.SetReady(ctx, cs.ID, ru, true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.GetClaimSession(ctx, cs.ID)
+	if len(got.Ready) != 1 || got.Ready[0] != ru {
+		t.Fatalf("ready %+v", got.Ready)
+	}
+
+	// Toggle off → removed.
+	if err := st.SetReady(ctx, cs.ID, ru, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = st.GetClaimSession(ctx, cs.ID)
+	if len(got.Ready) != 0 {
+		t.Fatalf("ready should be empty: %+v", got.Ready)
+	}
+
+	// Once finalized (via cancel here, any non-open status), SetReady is locked out.
+	if err := st.CancelClaimSession(ctx, cs.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetReady(ctx, cs.ID, ru, true); err != ErrClaimLocked {
+		t.Fatalf("want ErrClaimLocked, got %v", err)
+	}
+}
+
 // TestComputeClaimSplitPotSurvivesZeroClaimedSubtotal proves the charge pot (tax/fees/discount/roundoff)
 // is still distributed when the claimed items happen to sum to zero minor units, instead of vanishing.
 func TestComputeClaimSplitPotSurvivesZeroClaimedSubtotal(t *testing.T) {
