@@ -63,6 +63,7 @@ fun ClaimScreen(
     viewModel: ClaimSessionViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var showFinalizeSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -89,9 +90,15 @@ fun ClaimScreen(
                     owesMinor = state.myOwes,
                     currency = state.session?.currency ?: "₹",
                     isCreator = state.isCreator,
-                    // A creator with unclaimed items resolves them via FinalizeSheet (Task 14); with
-                    // nothing left unclaimed, finalize directly.
-                    onFinalize = { viewModel.finalize(emptyList()) { onFinalized() } },
+                    // A creator with unclaimed items resolves them via FinalizeSheet; with nothing
+                    // left unclaimed, finalize directly.
+                    onFinalize = {
+                        if (state.unclaimedItemIndices.isEmpty()) {
+                            viewModel.finalize(emptyList()) { onFinalized() }
+                        } else {
+                            showFinalizeSheet = true
+                        }
+                    },
                 )
             }
         },
@@ -130,6 +137,21 @@ fun ClaimScreen(
                     }
                 }
             }
+        }
+    }
+
+    if (showFinalizeSheet) {
+        val session = state.session
+        if (session != null) {
+            FinalizeSheet(
+                session = session,
+                participants = state.participants,
+                unclaimedItemIndices = state.unclaimedItemIndices,
+                onResolveFinalize = { resolutions ->
+                    viewModel.finalize(resolutions) { showFinalizeSheet = false; onFinalized() }
+                },
+                onDismiss = { showFinalizeSheet = false },
+            )
         }
     }
 }
