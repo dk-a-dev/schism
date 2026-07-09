@@ -184,8 +184,12 @@ fun parseBill(rows: List<Row>): ReceiptDraft? {
 
     val merchant = norm.firstNotNullOfOrNull { row ->
         val text = row.text.trim()
+        // A row with a trailing money cell is a would-be line item (or a totals line), not a
+        // merchant-name preamble line — a real merchant header never prices anything on itself.
+        val hasTrailingMoneyCell = row.cells.lastOrNull()?.let { isMoneyToken(it.text) } == true
         text.takeIf {
-            it.isNotEmpty() && it.count { ch -> ch.isLetter() } >= 3 &&
+            it.isNotEmpty() && !hasTrailingMoneyCell &&
+                it.count { ch -> ch.isLetter() } >= 3 &&
                 it.count { ch -> ch.isLetter() } > it.count { ch -> ch.isDigit() } &&
                 !isMetadataRow(it)
         }

@@ -13,14 +13,27 @@ enum class Source { PAPER, GROCERY, SWIGGY, ZOMATO, BLINKIT, GENERIC }
 private val ZOMATO_TEXT = Regex("""\bzomato\b""", RegexOption.IGNORE_CASE)
 private val SWIGGY_TEXT = Regex("""\bswiggy\b""", RegexOption.IGNORE_CASE)
 
-/** Food-delivery bill-shape keywords common to Swiggy/Zomato-style receipts. */
-private val FOOD_DELIVERY_KEYWORDS = Regex(
-    """bill\s*details|item\s*total|restaurant\s*packaging|platform\s*fee""",
+/**
+ * Food-delivery bill-shape keywords common to Swiggy/Zomato-style receipts. A plain POS bill can
+ * carry "Bill Details" on its own (e.g. a generic paper receipt's section title), so that phrase
+ * alone is not a reliable food-delivery signal. Requiring the items-subtotal label ("Item Total")
+ * together with the delivery-fee structure that only a food-delivery bill has (packaging/platform/
+ * delivery fee line) narrows this to the genuine shared shape.
+ */
+private val FOOD_DELIVERY_ITEM_TOTAL = Regex("""item\s*total""", RegexOption.IGNORE_CASE)
+private val FOOD_DELIVERY_FEE_STRUCTURE = Regex(
+    """restaurant\s*packaging|packaging\s*charges?|platform\s*fee|delivery\s*(fee|charges?)""",
     RegexOption.IGNORE_CASE,
 )
 
-/** Quick-commerce bill-shape keywords common to Blinkit-style receipts. */
-private val BLINKIT_KEYWORDS = Regex("""items?\s*in\s*this\s*order|\bmrp\b""", RegexOption.IGNORE_CASE)
+/**
+ * Quick-commerce bill-shape keywords common to Blinkit-style receipts. Bare "MRP" is deliberately
+ * NOT included here: it appears on nearly every Indian retail/grocery bill (any GROCERY-shaped
+ * Rate/Amount table routinely prints "MRP" in its header), so keying off it alone would misroute
+ * ordinary bills into this template. A genuine quick-commerce signal — the app's own name, or its
+ * "N items in this order" preamble phrasing — is required instead.
+ */
+private val BLINKIT_KEYWORDS = Regex("""\bblinkit\b|items?\s*in\s*this\s*order""", RegexOption.IGNORE_CASE)
 
 private val GROCERY_HSN = Regex("""\bhsn\b""", RegexOption.IGNORE_CASE)
 private val GROCERY_GSTIN = Regex("""\bgstin\b""", RegexOption.IGNORE_CASE)
@@ -31,8 +44,9 @@ private val GROCERY_RATE = Regex("""\brate\b""", RegexOption.IGNORE_CASE)
  * only generic keyword classes seen anywhere on the bill — never a specific merchant name or
  * fixture value. Literal brand words ("Swiggy"/"Zomato") are themselves a generic structural
  * signal (the app that rendered the bill), not a fixture branch; a bill carrying neither brand
- * word but showing the shared food-delivery keyword shape ("Bill Details"/"Item Total"/...)
- * still resolves to the same [SWIGGY] template family, since Swiggy and Zomato bills share it.
+ * word but showing the shared food-delivery keyword shape ("Item Total" plus a packaging/
+ * platform/delivery fee line) still resolves to the same [SWIGGY] template family, since Swiggy
+ * and Zomato bills share it.
  */
 fun detectSource(rows: List<Row>): Source {
     val text = rows.joinToString(" ") { it.text }
@@ -40,7 +54,8 @@ fun detectSource(rows: List<Row>): Source {
         ZOMATO_TEXT.containsMatchIn(text) -> Source.ZOMATO
         SWIGGY_TEXT.containsMatchIn(text) -> Source.SWIGGY
         BLINKIT_KEYWORDS.containsMatchIn(text) -> Source.BLINKIT
-        FOOD_DELIVERY_KEYWORDS.containsMatchIn(text) -> Source.SWIGGY
+        FOOD_DELIVERY_ITEM_TOTAL.containsMatchIn(text) && FOOD_DELIVERY_FEE_STRUCTURE.containsMatchIn(text) ->
+            Source.SWIGGY
         GROCERY_HSN.containsMatchIn(text) || (GROCERY_GSTIN.containsMatchIn(text) && GROCERY_RATE.containsMatchIn(text)) ->
             Source.GROCERY
         else -> Source.PAPER
@@ -87,11 +102,29 @@ private fun stripQtySuffix(rows: List<Row>): List<Row> = rows.map { row ->
 }
 
 /**
+ * Totals/tax/fee keyword class: when a would-be subline's text contains one of these, it's a
+ * genuine (mis-split) totals-label row rather than an item's option/customisation line, so
+ * [foldOptionSublines] must not fold it away.
+ */
+private val TOTALS_OR_FEE_KEYWORD = Regex(
+    """total|tax|gst|cgst|sgst|amount|subtotal|discount|charge|payable""",
+    RegexOption.IGNORE_CASE,
+)
+
+/**
  * Folds an option/customisation subline into the previous row's name cell: a subline is a single,
  * letters-only, moneyless cell indented (its xLeft further right) relative to the previous row's
  * leftmost cell — the generic structural shape of a Swiggy/Zomato item's option line ("Cilantro
  * Lime Rice" under "Crispy Peri Peri Chicken Rice Bowl"), never a merchant- or item-specific check.
  * The subline row is dropped entirely (folded away), not emitted as its own row/item.
+ *
+ * Two additional guards keep this from misfiring on a totals row that happens to have been split
+ * across two lines: (a) the previous row must be a genuine priced item — i.e. carry at least one
+ * money cell of its own — since a totals *label* line (e.g. "Grand" wrapped onto its own line
+ * before "Total | 552.00") never has a preceding priced row to fold into by coincidence the way an
+ * item's option subline does; and (b) the subline's own text must not contain a totals/tax/fee
+ * keyword ([TOTALS_OR_FEE_KEYWORD]), since a genuine item-option word ("Cilantro Lime Rice") never
+ * does, while a split totals label ("Grand Total", "CGST", ...) always does.
  */
 private fun foldOptionSublines(rows: List<Row>): List<Row> {
     val out = mutableListOf<Row>()
@@ -101,9 +134,12 @@ private fun foldOptionSublines(rows: List<Row>): List<Row> {
         val lettersOnly = text.isNotEmpty() && text.none { it.isDigit() } && looksLikeNameText(text)
         val singleCell = row.cells.size == 1
         val prevLeft = prev?.cells?.minOfOrNull { it.xLeft }
+        val prevHasMoney = prev?.cells?.any { isMoneyToken(it.text) } == true
+        val sublineIsTotalsLike = TOTALS_OR_FEE_KEYWORD.containsMatchIn(text)
 
         val isSubline = prev != null && singleCell && lettersOnly &&
-            prevLeft != null && row.cells[0].xLeft > prevLeft
+            prevLeft != null && row.cells[0].xLeft > prevLeft &&
+            prevHasMoney && !sublineIsTotalsLike
 
         if (isSubline) {
             val prevRow = out[out.lastIndex]
@@ -122,17 +158,23 @@ private fun foldOptionSublines(rows: List<Row>): List<Row> {
 /**
  * Collapses a two-money-token item cell — Blinkit's strikethrough MRP immediately followed by the
  * paid price — down to just the LAST (paid) token: when a row's last two cells (by position) are
- * both money-shaped, the second-to-last is dropped. This is a structural, position-only rule
- * (never a specific amount), scoped to Blinkit-shaped bills where a plain item row is "name +
- * price(s)" rather than a multi-column Name/Rate/Qty/Amount table (where a narrow QTY cell and a
- * wide AMOUNT cell can otherwise both look money-shaped).
+ * both money-shaped, the second-to-last is dropped, but ONLY when it's arithmetically consistent
+ * with actually being a struck MRP: a struck MRP is always strictly greater than the paid price
+ * that follows it (`parseMinor(secondLast) > parseMinor(last)`), whereas a normal Rate|Amount pair
+ * always has `rate <= amount`. Gating on that inequality (rather than position alone) keeps this
+ * rule from firing on an ordinary Name/Rate/Qty/Amount table row whose last two cells both happen
+ * to be money-shaped (e.g. a plain "Rate | Amount" pair, or a small qty token that is never
+ * greater than the paid amount) — never a specific amount or merchant, just the universal fact
+ * that a discount always strikes a *higher* price than what's actually charged.
  */
 private fun collapseStrikethroughPrice(rows: List<Row>): List<Row> = rows.map { row ->
     val sorted = row.cells.sortedBy { it.xLeft }
     if (sorted.size < 2) return@map row
     val last = sorted.last()
     val secondLast = sorted[sorted.size - 2]
-    if (isMoneyToken(last.text) && isMoneyToken(secondLast.text)) {
+    val lastMinor = parseMinor(last.text)
+    val secondLastMinor = parseMinor(secondLast.text)
+    if (lastMinor != null && secondLastMinor != null && secondLastMinor > lastMinor) {
         row.copy(cells = sorted.filterNot { it === secondLast })
     } else {
         row
