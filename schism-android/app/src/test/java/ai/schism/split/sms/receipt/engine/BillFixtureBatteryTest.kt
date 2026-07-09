@@ -631,4 +631,130 @@ class BillFixtureBatteryTest {
         assertEquals(36000L, draft.subtotalMinor)
         assertTrue(draft.verified)
     }
+
+    // ======================================================================================
+    // Group E — Number / decimal styles
+    // ======================================================================================
+
+    /**
+     * ONE dropped decimal: OCR read a faint "99.00" thermal decimal as whole rupees "9900" (100× too
+     * large). The solver-corrector must rescale exactly that line so the bill reconciles to a known
+     * subtotal.
+     */
+    @Test fun droppedDecimal_singleOutlier_rescaledByCorrector() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                THELA CHAAT|60|360|20
+
+                Item|60|140|90
+                Amount|480|560|90
+
+                Veg Roll|60|200|140
+                149.00|480|560|140
+
+                Cheese Roll|60|230|180
+                9900|480|560|180
+
+                Lassi|60|180|220
+                55.00|480|560|220
+
+                Sub Total|300|455|280
+                303.00|480|560|280
+
+                Grand Total|60|300|320
+                303.00|480|560|320
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Veg Roll", "Cheese Roll", "Lassi"), draft.lineItems.map { it.name })
+        assertEquals(listOf(14900L, 9900L, 5500L), draft.lineItems.map { it.amountMinor })
+        assertEquals(9900L, draft.lineItems[1].unitPriceMinor)
+        assertEquals(30300L, draft.subtotalMinor)
+        assertEquals(30300L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * TWO dropped decimals in one bill (99.00→"9900" and 55.00→"5500"). The corrector must rescale
+     * BOTH offending lines (largest-first, guarded so a legit line is never divided) to reconcile.
+     */
+    @Test fun droppedDecimal_twoOutliers_rescaledByCorrector() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                STREET GRILL|60|360|20
+
+                Item|60|140|90
+                Amount|480|560|90
+
+                Egg Roll|60|200|140
+                149.00|480|560|140
+
+                Paneer Roll|60|230|180
+                9900|480|560|180
+
+                Melon Juice|60|230|220
+                5500|480|560|220
+
+                Sub Total|300|455|280
+                303.00|480|560|280
+
+                Grand Total|60|300|320
+                303.00|480|560|320
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Egg Roll", "Paneer Roll", "Melon Juice"), draft.lineItems.map { it.name })
+        assertEquals(listOf(14900L, 9900L, 5500L), draft.lineItems.map { it.amountMinor })
+        assertEquals(30300L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Mixed number styles in one bill: comma-thousands `1,234.00`, a large catering line `12500.00`,
+     * bare `₹149` and the Indian `149/-` flat notation, and a `0.00` free item (which must be dropped,
+     * not listed).
+     */
+    @Test fun mixedNumberStyles_commaLargeBareSlashAndFreeItem() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                PARTY CATERERS|60|360|20
+
+                Item|60|140|90
+                Amount|480|560|90
+
+                Catering Platter|60|280|140
+                1,234.00|470|560|140
+
+                Bulk Order Box|60|280|180
+                12500.00|470|560|180
+
+                Veg Cutlet|60|230|220
+                ₹149|480|560|220
+
+                Samosa Plate|60|240|260
+                149/-|480|560|260
+
+                Welcome Drink|60|250|300
+                0.00|480|560|300
+
+                Sub Total|300|455|360
+                14032.00|460|560|360
+
+                Grand Total|60|300|400
+                14032.00|460|560|400
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Catering Platter", "Bulk Order Box", "Veg Cutlet", "Samosa Plate"), draft.lineItems.map { it.name })
+        assertEquals(listOf(123400L, 1250000L, 14900L, 14900L), draft.lineItems.map { it.amountMinor })
+        assertEquals(1403200L, draft.subtotalMinor)
+        assertEquals(1403200L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
 }

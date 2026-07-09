@@ -25,4 +25,16 @@ class NumbersTest {
         assertEquals(2360L, parseMinor("23.60"))
         assertTrue(isMoneyToken("23.60"))
     }
+
+    @Test fun rupeeSlashDashAndMidDotStyles() {
+        // "149/-" (Indian "₹149 flat" notation) parses as ₹149, not null.
+        assertEquals(14900L, parseMinor("149/-"))
+        assertEquals(14900L, parseMinor("₹149"))
+        // Mid-dot decimal separator normalizes to a real decimal point.
+        assertEquals(14900L, parseMinor("149·00"))
+        // A genuine leading-minus negative is preserved.
+        assertEquals(-20L, parseMinor("-0.20"))
+        // Comma thousands still parse.
+        assertEquals(123400L, parseMinor("1,234.00"))
+    }
 }

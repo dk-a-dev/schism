@@ -8,9 +8,17 @@ private val PLAIN_NUMBER = Regex("-?\\d+(\\.\\d{1,2})?")
 /**
  * Strips currency symbols, thousands separators and whitespace from [raw], leaving only the
  * characters that make up a plain signed decimal number.
+ *
+ * A mid-dot decimal separator (`149·00`, common on some thermal printers) is normalized to a real
+ * `.`. A minus sign is kept ONLY when it leads the token (a genuine negative like `-0.20`); a
+ * trailing dash — as in the Indian rupee notation `149/-` ("₹149 flat") — is dropped, along with the
+ * slash, so the token parses as the whole amount it denotes rather than failing to parse at all.
  */
-private fun cleanNumeric(raw: String): String =
-    raw.trim().filter { it.isDigit() || it == '.' || it == '-' }
+private fun cleanNumeric(raw: String): String {
+    val t = raw.trim().replace('·', '.')
+    val digits = t.filter { it.isDigit() || it == '.' }
+    return if (t.startsWith('-')) "-$digits" else digits
+}
 
 /**
  * Parses a money-shaped token (grouped digits with an optional 2-decimal fraction, e.g. "2,532",

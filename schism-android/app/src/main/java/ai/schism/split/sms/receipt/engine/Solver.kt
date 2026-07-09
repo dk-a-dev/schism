@@ -29,27 +29,38 @@ private fun approx(value: Long, reference: Long): Boolean = abs(value - referenc
 
 /**
  * Corrector for the dropped-decimal defect (c): OCR reads a faint thermal decimal as a whole number,
- * so a single "99.00" line becomes "9900" and parses 100× too large. When the item sum overshoots a
- * KNOWN subtotal and dividing exactly one item's amount by 100 brings the sum back within tolerance
- * of that subtotal, that one item is rescaled (amount and unit price ÷100). Deliberately general and
- * conservative: it fires only for a single outlier that arithmetically explains the whole overshoot,
- * so a genuinely-correct bill (already summing to subtotal) is never touched. Returns the input
- * unchanged when no single-outlier rescale reconciles the sum.
+ * so a "99.00" line becomes "9900" and parses 100× too large. When the item sum OVERSHOOTS a KNOWN
+ * subtotal, this rescales the offending line(s) by ÷100 (amount and unit price) until the sum lands
+ * back within tolerance of the subtotal — handling ONE dropped decimal or SEVERAL in the same bill.
+ *
+ * Deliberately general and conservative: it only ever divides down (a dropped decimal always reads
+ * TOO large), only lines whose amount is an exact whole-rupee multiple (`% 100 == 0`, the fingerprint
+ * of a lost `.00`), and — critically — only when a candidate rescale does NOT push the sum below the
+ * subtotal (the guard), so it can never "correct" a genuinely-correct amount into a wrong one. It
+ * rescales the largest guarded outlier first (a dropped decimal is 100× its true value, so it is the
+ * biggest overshoot) and stops the instant the sum reconciles; an already-consistent bill returns
+ * untouched. Returns the input unchanged when no guarded rescale sequence reconciles the sum.
  */
 private fun correctDroppedDecimal(items: List<ReceiptLineItem>, subtotal: Long): List<ReceiptLineItem> {
-    if (items.isEmpty() || approx(items.sumOf { it.amountMinor }, subtotal)) return items
-    val sum = items.sumOf { it.amountMinor }
-    val outlier = items.indices.firstOrNull { i ->
-        val item = items[i]
-        item.amountMinor % 100 == 0L && approx(sum - item.amountMinor + item.amountMinor / 100, subtotal)
-    } ?: return items
-    return items.mapIndexed { i, item ->
-        if (i == outlier) {
-            item.copy(amountMinor = item.amountMinor / 100, unitPriceMinor = item.unitPriceMinor / 100)
-        } else {
-            item
+    if (items.isEmpty()) return items
+    var current = items
+    val scaled = BooleanArray(items.size)
+    // At most one rescale per item; the loop bound caps the work and guarantees termination.
+    repeat(items.size) {
+        val sum = current.sumOf { it.amountMinor }
+        if (approx(sum, subtotal) || sum <= subtotal) return current
+        // Guarded candidates: a whole-rupee outlier whose ÷100 rescale keeps the sum from dropping
+        // below the subtotal (within tolerance) — so a legit line is never mistaken for an outlier.
+        val idx = current.indices.filter { i ->
+            !scaled[i] && current[i].amountMinor > 0 && current[i].amountMinor % 100 == 0L &&
+                (sum - current[i].amountMinor + current[i].amountMinor / 100) >= subtotal - tolerance(subtotal)
+        }.maxByOrNull { current[it].amountMinor } ?: return current
+        scaled[idx] = true
+        current = current.mapIndexed { i, item ->
+            if (i == idx) item.copy(amountMinor = item.amountMinor / 100, unitPriceMinor = item.unitPriceMinor / 100) else item
         }
     }
+    return current
 }
 
 /**
