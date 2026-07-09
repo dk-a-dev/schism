@@ -204,4 +204,81 @@ class ReceiptParserTest {
         // "MacBook" has no trailing amount, so there are no assignable item lines.
         assertEquals(emptyList<Any>(), draft.lineItems)
     }
+
+    // ---- Fixture battery: flat-string (pre-geometry / LLM-string) route coverage ----
+
+    @Test
+    fun flatString_sgstCgstSummedAsTax() {
+        // Split SGST + CGST with no combined GST row: the two sublines sum into the tax figure.
+        val draft = parseReceipt(
+            listOf(
+                "Restaurant Bhavan",
+                "Paneer Tikka 200.00",
+                "Butter Naan 100.00",
+                "SGST 2.5% 7.50",
+                "CGST 2.5% 7.50",
+                "Grand Total 315.00",
+            ),
+        )!!
+        assertEquals(listOf("Paneer Tikka", "Butter Naan"), draft.lineItems.map { it.name })
+        assertEquals(listOf(20000L, 10000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(1500L, draft.taxMinor) // 7.50 + 7.50
+        assertEquals(31500L, draft.totalMinor)
+    }
+
+    @Test
+    fun flatString_commaThousandsItemsAndTotal() {
+        // Comma-grouped thousands in both item lines and the grand total must parse exactly.
+        val draft = parseReceipt(
+            listOf(
+                "Furniture World",
+                "Leather Sofa 12,999.00",
+                "Wooden Cabinet 5,499.00",
+                "Grand Total 18,498.00",
+            ),
+        )!!
+        assertEquals(listOf("Leather Sofa", "Wooden Cabinet"), draft.lineItems.map { it.name })
+        assertEquals(listOf(1299900L, 549900L), draft.lineItems.map { it.amountMinor })
+        assertEquals(1849800L, draft.totalMinor)
+    }
+
+    @Test
+    fun flatString_leadingQtyWithTax() {
+        // "N x Item" leading-qty style, plus a single combined GST line.
+        val draft = parseReceipt(
+            listOf(
+                "Barista",
+                "2 x Espresso 180.00",
+                "1 x Muffin 120.00",
+                "GST 5% 15.00",
+                "Total 315.00",
+            ),
+        )!!
+        assertEquals(listOf("Espresso", "Muffin"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(18000L, 12000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(1500L, draft.taxMinor)
+        assertEquals(31500L, draft.totalMinor)
+    }
+
+    @Test
+    fun flatString_droppedDecimalLineSkippedConservatively() {
+        // The flat/LLM-string route has NO geometry to run the dropped-decimal corrector against, so a
+        // line whose decimal was lost ("9900", no two-decimal money shape) is conservatively skipped
+        // rather than guessed — a missed item (user re-adds) beats inventing a ₹9,900 dish. Correcting
+        // this case needs the geometry engine (Solver) or the AI layer; documented, not @Ignored,
+        // because the conservative behaviour here is the intended fallback contract.
+        val draft = parseReceipt(
+            listOf(
+                "Roll Corner",
+                "Veg Roll 149.00",
+                "Cheese Roll 9900",
+                "Lassi 55.00",
+                "Grand Total 303.00",
+            ),
+        )!!
+        assertEquals(listOf("Veg Roll", "Lassi"), draft.lineItems.map { it.name })
+        assertEquals(listOf(14900L, 5500L), draft.lineItems.map { it.amountMinor })
+        assertEquals(30300L, draft.totalMinor) // labelled grand total is still read correctly
+    }
 }
