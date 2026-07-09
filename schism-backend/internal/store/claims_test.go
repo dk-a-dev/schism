@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/schism/schism-backend/internal/id"
 )
 
 func TestCreateAndGetClaimSession(t *testing.T) {
@@ -142,5 +144,49 @@ func TestFinalizeClaimSessionBuildsExpenseAndIsIdempotent(t *testing.T) {
 	eid2, err := st.FinalizeClaimSession(ctx, cs.ID, 999, nil)
 	if err != nil || eid2 != eid {
 		t.Fatalf("second finalize: eid=%q err=%v", eid2, err)
+	}
+}
+
+func TestCancelClaimSessionAndParticipantLookup(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _, err := st.CreateUser(ctx, "Dev", "dev-"+id.New()+"@example.com", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev", UserID: &u.ID}, {Name: "Ru"}}})
+	var devPid string
+	for _, p := range g.Participants {
+		if p.UserID != nil && *p.UserID == u.ID {
+			devPid = p.ID
+		}
+	}
+	if devPid == "" {
+		t.Fatal("dev participant not linked")
+	}
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: devPid,
+		Items: []ClaimItem{{Idx: 0, Name: "X", Qty: 1, AmountMinor: 1000}}})
+
+	// ParticipantForUserInGroup returns the linked participant id, "" when no link.
+	got, err := st.ParticipantForUserInGroup(ctx, u.ID, g.ID)
+	if err != nil || got != devPid {
+		t.Fatalf("participant lookup got=%q err=%v", got, err)
+	}
+	none, err := st.ParticipantForUserInGroup(ctx, "nobody", g.ID)
+	if err != nil || none != "" {
+		t.Fatalf("expected empty, got=%q err=%v", none, err)
+	}
+
+	// Cancel flips status; a claim after cancel is locked out.
+	if err := st.CancelClaimSession(ctx, cs.ID); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := st.GetClaimSession(ctx, cs.ID)
+	if after.Status != "cancelled" {
+		t.Fatalf("status %q", after.Status)
+	}
+	if err := st.UpsertClaims(ctx, cs.ID, devPid, 1, map[int]float64{0: 1}); err != ErrClaimLocked {
+		t.Fatalf("want ErrClaimLocked, got %v", err)
 	}
 }

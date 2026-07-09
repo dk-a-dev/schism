@@ -503,6 +503,28 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 	return eid, nil
 }
 
+// CancelClaimSession marks an open session cancelled (a no-op if it isn't open).
+func (s *Store) CancelClaimSession(ctx context.Context, sid string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE claim_sessions SET status='cancelled' WHERE id=$1 AND status='open'`, sid)
+	return err
+}
+
+// ParticipantForUserInGroup returns the participant id linked to userID within groupID, or "" when no
+// participant in that group is linked to the user. Used for auth: a caller may act only as their own
+// participant.
+func (s *Store) ParticipantForUserInGroup(ctx context.Context, userID, groupID string) (string, error) {
+	var pid string
+	err := s.pool.QueryRow(ctx,
+		`SELECT id FROM participants WHERE group_id=$1 AND user_id=$2 LIMIT 1`, groupID, userID).Scan(&pid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return pid, nil
+}
+
 func (s *Store) claimsFor(ctx context.Context, sid string) ([]Claim, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT item_idx, participant_id, weight FROM claims WHERE session_id=$1 ORDER BY item_idx, participant_id`, sid)
