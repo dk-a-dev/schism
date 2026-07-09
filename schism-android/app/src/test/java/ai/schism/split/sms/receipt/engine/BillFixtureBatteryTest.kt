@@ -757,4 +757,63 @@ class BillFixtureBatteryTest {
         assertEquals(1403200L, draft.totalMinor)
         assertTrue(draft.verified)
     }
+
+    // ======================================================================================
+    // Group F — Quantity styles
+    // ======================================================================================
+
+    /**
+     * Mixed quantity styles in one bill: `x3` multiplier, `3 Nos` unit suffix, `3.000` grocery
+     * integer, and a missing qty cell (defaults to 1). Each must resolve to the right integer count,
+     * and the Σqty cross-check against Total Qty must hold.
+     */
+    @Test fun quantityStyles_xN_nosSuffix_groceryDecimal_missing() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                FRESH MART|60|360|20
+
+                Item|60|140|90
+                Qty|300|350|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                Apple|60|180|140
+                x3|305|335|140
+                20.00|380|440|140
+                60.00|480|560|140
+
+                Orange|60|200|180
+                3 Nos|300|350|180
+                30.00|380|440|180
+                90.00|480|560|180
+
+                Sugar 1kg|60|230|220
+                3.000|300|350|220
+                45.00|380|440|220
+                135.00|480|560|220
+
+                Bread|60|180|260
+                40.00|380|440|260
+                40.00|480|560|260
+
+                Total Qty: 10|60|300|320
+
+                Sub Total|300|455|360
+                325.00|480|560|360
+
+                Grand Total|60|300|400
+                325.00|480|560|400
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Apple", "Orange", "Sugar 1kg", "Bread"), draft.lineItems.map { it.name })
+        assertEquals(listOf(3, 3, 3, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(2000L, 3000L, 4500L, 4000L), draft.lineItems.map { it.unitPriceMinor })
+        assertEquals(listOf(6000L, 9000L, 13500L, 4000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(10, draft.lineItems.sumOf { it.qty })
+        assertEquals(32500L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
 }

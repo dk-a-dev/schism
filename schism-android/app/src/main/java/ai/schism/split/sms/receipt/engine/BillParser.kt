@@ -25,6 +25,33 @@ private fun looksLikeName(text: String): Boolean = text.count { it.isLetter() } 
  */
 private fun parseQty(raw: String): Int? = raw.trim().takeIf { isSmallInt(it) }?.toIntOrNull()
 
+/** Trailing unit-of-count words a qty cell may carry ("3 Nos", "2 pcs"). */
+private val QTY_UNIT_SUFFIXES = listOf("nos", "no", "pcs", "pc", "qty")
+
+/**
+ * Parses the text of a cell KNOWN to sit in the QTY column into an integer count. Because the column
+ * role already vouches that this cell is a quantity (not a rate/amount), it can be normalized more
+ * aggressively than the strict [parseQty] used by the arithmetic remap: a leading `x`/`×` multiplier
+ * (`x3`, `×3`), a trailing unit word (`3 Nos`, `2 pcs`), and a grocery all-zero fraction (`3.000` → 3)
+ * are all stripped. A genuinely fractional weight (`1.5`) returns null — an Int count can't represent
+ * it, so the caller falls back to qty 1 and reads the line amount directly.
+ *
+ * This normalization is deliberately NOT folded into [parseQty]: the remap search trial-fits every
+ * cell into the qty slot, and there a money rate like `40.00` must stay a non-qty (returning 40 would
+ * let a rate masquerade as a quantity).
+ */
+private fun parseQtyCell(raw: String): Int? {
+    var s = raw.trim().lowercase()
+    s = s.removePrefix("x").removePrefix("×").trim()
+    QTY_UNIT_SUFFIXES.firstOrNull { s.endsWith(it) }?.let { s = s.dropLast(it.length).trim() }
+    val dot = s.indexOf('.')
+    if (dot >= 0) {
+        val frac = s.substring(dot + 1)
+        s = if (frac.isNotEmpty() && frac.all { it == '0' }) s.substring(0, dot) else return null
+    }
+    return parseQty(s)
+}
+
 /** Tolerance (minor units) for the rate*qty≈amount invariant: 1% of the amount, floored at 200. */
 private fun tolerance(amountMinor: Long): Long = maxOf(ceil(amountMinor * 0.01).toLong(), 200L)
 
@@ -48,7 +75,7 @@ private fun invariantHolds(rateMinor: Long, qty: Int, amountMinor: Long): Boolea
  * Returns null when no amount can be derived at all (no AMOUNT cell and no RATE to multiply).
  */
 private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: String?): Pair<Int, Long>? {
-    val qtyFromCell = qtyRaw?.let { parseQty(it) }
+    val qtyFromCell = qtyRaw?.let { parseQtyCell(it) }
     val rateMinor = rateRaw?.let { parseMinor(it) }
     val amountMinor = amountRaw?.let { parseMinor(it) }
 
@@ -146,7 +173,7 @@ private fun resolveRow(
     amountCell: Cell?,
     moneyLeftBound: Int,
 ): Triple<Int, Long, Long>? {
-    val qtyFromCell = qtyCell?.text?.let { parseQty(it) }
+    val qtyFromCell = qtyCell?.text?.let { parseQtyCell(it) }
     val moneyCells = row.cells
         .filter { it.xCenter >= moneyLeftBound && isMoneyToken(it.text) }
         .sortedBy { it.xCenter }
