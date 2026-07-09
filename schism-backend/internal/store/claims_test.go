@@ -61,3 +61,21 @@ func TestUpsertClaimsReplacesAndGuards(t *testing.T) {
 		t.Fatalf("want ErrClaimStale, got %v", err)
 	}
 }
+
+func TestEditItemsDropsChangedItemClaims(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹", Participants: []ParticipantInput{{Name: "Dev"}}})
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: g.Participants[0].ID,
+		Items: []ClaimItem{{Idx: 0, Name: "X", Qty: 1, AmountMinor: 1000}}})
+	_ = st.UpsertClaims(ctx, cs.ID, g.Participants[0].ID, 1, map[int]float64{0: 1})
+
+	v, err := st.EditItems(ctx, cs.ID, []ClaimItem{{Idx: 0, Name: "X", Qty: 1, AmountMinor: 2000}})
+	if err != nil || v != 2 {
+		t.Fatalf("v=%d err=%v", v, err)
+	}
+	got, _ := st.GetClaimSession(ctx, cs.ID)
+	if len(got.Claims) != 0 {
+		t.Fatalf("claims should be dropped: %+v", got.Claims)
+	}
+}

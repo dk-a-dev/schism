@@ -167,6 +167,73 @@ func (s *Store) UpsertClaims(ctx context.Context, sid, participantID string, exp
 	return tx.Commit(ctx)
 }
 
+// EditItems replaces a session's items (creator-only edit), dropping claims on any item whose
+// idx/name/qty/amount changed or that was removed entirely (a stale claim on a re-priced item would
+// otherwise silently misrepresent what the person agreed to), and bumps the version so pollers refetch.
+// Returns ErrClaimLocked if the session isn't open. Returns the new version.
+func (s *Store) EditItems(ctx context.Context, sid string, items []ClaimItem) (int, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	var version int
+	var oldItemsJSON []byte
+	err = tx.QueryRow(ctx, `SELECT status, version, items FROM claim_sessions WHERE id=$1 FOR UPDATE`, sid).
+		Scan(&status, &version, &oldItemsJSON)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrClaimLocked
+	}
+	if err != nil {
+		return 0, err
+	}
+	if status != "open" {
+		return 0, ErrClaimLocked
+	}
+
+	var oldItems []ClaimItem
+	if err := json.Unmarshal(oldItemsJSON, &oldItems); err != nil {
+		return 0, err
+	}
+	oldByIdx := make(map[int]ClaimItem, len(oldItems))
+	for _, it := range oldItems {
+		oldByIdx[it.Idx] = it
+	}
+	newByIdx := make(map[int]ClaimItem, len(items))
+	for _, it := range items {
+		newByIdx[it.Idx] = it
+	}
+
+	var changed []int
+	for idx, old := range oldByIdx {
+		nw, stillPresent := newByIdx[idx]
+		if !stillPresent || nw != old {
+			changed = append(changed, idx)
+		}
+	}
+
+	if len(changed) > 0 {
+		if _, err := tx.Exec(ctx, `DELETE FROM claims WHERE session_id=$1 AND item_idx = ANY($2)`, sid, changed); err != nil {
+			return 0, err
+		}
+	}
+
+	newItemsJSON, err := json.Marshal(items)
+	if err != nil {
+		return 0, err
+	}
+	newVersion := version + 1
+	if _, err := tx.Exec(ctx, `UPDATE claim_sessions SET items=$2, version=$3 WHERE id=$1`, sid, newItemsJSON, newVersion); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return newVersion, nil
+}
+
 func (s *Store) claimsFor(ctx context.Context, sid string) ([]Claim, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT item_idx, participant_id, weight FROM claims WHERE session_id=$1 ORDER BY item_idx, participant_id`, sid)
