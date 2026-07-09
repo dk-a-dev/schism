@@ -123,6 +123,50 @@ func (s *Store) GetClaimSession(ctx context.Context, sid string) (*ClaimSession,
 	return &cs, nil
 }
 
+// UpsertClaims replaces one participant's claim rows on a session: inside a row-locked tx, the
+// session's status/version are checked (ErrClaimLocked if not open, ErrClaimStale if the caller's
+// expectedVersion is behind), then the participant's existing rows are deleted and replaced with one
+// row per weight > 0 (a weight of 0 means "no claim").
+func (s *Store) UpsertClaims(ctx context.Context, sid, participantID string, expectedVersion int, weights map[int]float64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	var version int
+	err = tx.QueryRow(ctx, `SELECT status, version FROM claim_sessions WHERE id=$1 FOR UPDATE`, sid).
+		Scan(&status, &version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrClaimLocked
+	}
+	if err != nil {
+		return err
+	}
+	if status != "open" {
+		return ErrClaimLocked
+	}
+	if version != expectedVersion {
+		return ErrClaimStale
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM claims WHERE session_id=$1 AND participant_id=$2`, sid, participantID); err != nil {
+		return err
+	}
+	for itemIdx, weight := range weights {
+		if weight <= 0 {
+			continue
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO claims (session_id, item_idx, participant_id, weight) VALUES ($1,$2,$3,$4)`,
+			sid, itemIdx, participantID, weight); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Store) claimsFor(ctx context.Context, sid string) ([]Claim, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT item_idx, participant_id, weight FROM claims WHERE session_id=$1 ORDER BY item_idx, participant_id`, sid)

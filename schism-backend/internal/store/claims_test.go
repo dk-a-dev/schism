@@ -38,3 +38,26 @@ func TestCreateAndGetClaimSession(t *testing.T) {
 		t.Fatalf("tax %d", got.TaxMinor)
 	}
 }
+
+func TestUpsertClaimsReplacesAndGuards(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID,
+		CreatorParticipantID: g.Participants[0].ID, Items: []ClaimItem{{Idx: 0, Name: "X", Qty: 1, AmountMinor: 1000}}})
+	ru := g.Participants[1].ID
+
+	if err := st.UpsertClaims(ctx, cs.ID, ru, 1, map[int]float64{0: 2}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.GetClaimSession(ctx, cs.ID)
+	if len(got.Claims) != 1 || got.Claims[0].Weight != 2 {
+		t.Fatalf("claims %+v", got.Claims)
+	}
+
+	// stale version rejected
+	if err := st.UpsertClaims(ctx, cs.ID, ru, 99, map[int]float64{0: 1}); err != ErrClaimStale {
+		t.Fatalf("want ErrClaimStale, got %v", err)
+	}
+}
