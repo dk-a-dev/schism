@@ -42,7 +42,13 @@ data class Totals(
     val discount: Long = 0,
     val grandTotal: Long? = null,
     val roundoff: Long = 0,
+    /** The printed "Total Qty" count, when present — a cross-check on the number of item units read. */
+    val totalQty: Int? = null,
 )
+
+/** A "Total Qty: N" / "Total Quantity N" line: a units count, never a money amount. */
+private val TOTAL_QTY_RE = Regex("""\b(qty|quantity)\b""", RegexOption.IGNORE_CASE)
+private val INT_TOKEN = Regex("""\d+""")
 
 /** Which GST family a tax-labelled row belongs to — used to sum CGST+SGST unless a combined GST row wins. */
 private enum class TaxBucket { CGST, SGST, IGST, GST, VAT, GENERIC }
@@ -114,6 +120,7 @@ fun readTotals(regions: Regions): Totals {
     var discount = 0L
     var roundoff = 0L
     var grandTotal: Long? = null
+    var totalQty: Int? = null
     val taxByBucket = mutableMapOf<TaxBucket, Long>()
 
     for (row in regions.totals) {
@@ -122,6 +129,10 @@ fun readTotals(regions: Regions): Totals {
         val bucket = taxBucketOf(label)
 
         when {
+            // A "Total Qty: N" line is a units count, not money — captured first so its "Total"
+            // keyword never leaks into the grand-total classification below.
+            TOTAL_QTY_RE.containsMatchIn(label) ->
+                totalQty = INT_TOKEN.find(row.text)?.value?.toIntOrNull() ?: totalQty
             // Sub-total gets first refusal so a bare "Total" (below) never captures "Sub Total".
             SUBTOTAL_RE.containsMatchIn(label) -> if (subtotal == null) subtotal = amount
             ROUND_RE.containsMatchIn(label) -> roundoff += amount
@@ -148,5 +159,6 @@ fun readTotals(regions: Regions): Totals {
         discount = discount,
         grandTotal = grandTotal,
         roundoff = roundoff,
+        totalQty = totalQty,
     )
 }

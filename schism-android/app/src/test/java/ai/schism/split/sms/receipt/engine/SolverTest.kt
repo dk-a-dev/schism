@@ -187,4 +187,68 @@ class SolverTest {
         val v = reconcile(items, totals)
         assertFalse(v.verified)
     }
+
+    // --- Fix #3: reconcile as CORRECTOR (single-outlier rescale, qty shortfall, %-token totals) ---
+
+    @Test fun reconcileRescalesSingleDroppedDecimalOutlier() {
+        // OCR dropped the decimal on one line: a "99.00" (9900 minor) item was read as "9900" whole
+        // rupees → 990000 minor, 100× too large. Dividing exactly that one item by 100 makes the item
+        // sum match the known subtotal, so the corrector rescales it and the bill then verifies.
+        val items = listOf(
+            ReceiptLineItem("Egg Roll", amountMinor = 14900, qty = 1, unitPriceMinor = 14900),
+            ReceiptLineItem("Parotta", amountMinor = 990000, qty = 1, unitPriceMinor = 990000),
+        )
+        val totals = Totals(subtotal = 24800, tax = 0, fees = 0, discount = 0, grandTotal = 24800)
+        val v = reconcile(items, totals)
+        assertEquals(9900L, v.items[1].amountMinor)
+        assertEquals(9900L, v.items[1].unitPriceMinor)
+        assertEquals(24800L, v.items.sumOf { it.amountMinor })
+        assertTrue("verified becomes true after the dropped-decimal correction", v.verified)
+    }
+
+    @Test fun reconcileDoesNotRescaleAnAlreadyConsistentBill() {
+        // Items already sum to subtotal — the corrector must leave every amount untouched.
+        val totals = Totals(subtotal = 38500, tax = 0, fees = 0, discount = 0, grandTotal = 38500)
+        val v = reconcile(anandha, totals)
+        assertEquals(anandha.map { it.amountMinor }, v.items.map { it.amountMinor })
+        assertTrue(v.verified)
+    }
+
+    @Test fun reconcileFlagsQtyShortfallAgainstTotalQty() {
+        // The two items sum exactly to subtotal and the grand-total arithmetic holds, but the printed
+        // "Total Qty" is 3 while the items account for only 2 units — a row was missed. The qty
+        // cross-check must refuse to mark this bill verified.
+        val items = listOf(ReceiptLineItem("A", 5000, 1), ReceiptLineItem("B", 5000, 1))
+        val totals = Totals(subtotal = 10000, tax = 0, fees = 0, discount = 0, grandTotal = 10000, totalQty = 3)
+        val v = reconcile(items, totals)
+        assertFalse("undercounted units (Σqty=2 vs Total Qty=3) must not verify", v.verified)
+    }
+
+    @Test fun readTotalsCapturesGstAmountDespitePercentToken() {
+        // "SGST 2.5% 23.60": the "2.5%" percentage token must be ignored and the 23.60 amount read.
+        val totals = regionsOf(
+            listOf(
+                row("Sub Total" to 0, "944.00" to 400),
+                row("SGST" to 0, "2.5%" to 200, "23.60" to 400),
+                row("CGST" to 0, "2.5%" to 200, "23.60" to 400),
+                row("Grand Total" to 0, "991.00" to 400),
+            ),
+        )
+        val t = readTotals(totals)
+        assertEquals(4720L, t.tax) // 23.60 + 23.60, not the 2.5% tokens
+        assertEquals(94400L, t.subtotal)
+    }
+
+    @Test fun readTotalsParsesTotalQtyAsUnitsNotMoney() {
+        val totals = regionsOf(
+            listOf(
+                row("Total Qty:" to 0, "10" to 200),
+                row("Sub Total" to 0, "944.00" to 200),
+                row("Grand Total" to 0, "944.00" to 200),
+            ),
+        )
+        val t = readTotals(totals)
+        assertEquals(10, t.totalQty)
+        assertEquals(94400L, t.grandTotal) // the "10" must not leak in as a money total
+    }
 }
