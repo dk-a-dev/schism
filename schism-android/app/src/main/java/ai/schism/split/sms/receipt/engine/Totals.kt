@@ -24,6 +24,9 @@ private val SGST_RE = Regex("""\bsgst\b""", RegexOption.IGNORE_CASE)
 private val IGST_RE = Regex("""\bigst\b""", RegexOption.IGNORE_CASE)
 private val GST_RE = Regex("""\bgst\b""", RegexOption.IGNORE_CASE)
 private val VAT_RE = Regex("""\bvat\b""", RegexOption.IGNORE_CASE)
+// A compensation "cess" is a distinct levy that rides ON TOP of the GST it accompanies, so it maps
+// to the GENERIC tax bucket (which always adds, even when a combined "GST" row is present).
+private val CESS_RE = Regex("""\bcess\b""", RegexOption.IGNORE_CASE)
 private val TAX_RE = Regex("""\btax\b""", RegexOption.IGNORE_CASE)
 
 /** A bare money-shaped token, used to pull an amount out of a row's joined text as a fallback. */
@@ -89,6 +92,7 @@ private fun taxBucketOf(label: String): TaxBucket? = when {
     IGST_RE.containsMatchIn(label) -> TaxBucket.IGST
     GST_RE.containsMatchIn(label) -> TaxBucket.GST
     VAT_RE.containsMatchIn(label) -> TaxBucket.VAT
+    CESS_RE.containsMatchIn(label) -> TaxBucket.GENERIC
     TAX_RE.containsMatchIn(label) -> TaxBucket.GENERIC
     else -> null
 }

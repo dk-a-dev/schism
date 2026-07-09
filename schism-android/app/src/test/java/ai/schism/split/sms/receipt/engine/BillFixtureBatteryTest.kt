@@ -816,4 +816,205 @@ class BillFixtureBatteryTest {
         assertEquals(32500L, draft.subtotalMinor)
         assertTrue(draft.verified)
     }
+
+    // ======================================================================================
+    // Group G — Tax / totals variety
+    // ======================================================================================
+
+    /**
+     * Service Charge 10% (a fee) + GST (a tax) + a positive round-off, closed by an "Amount Payable"
+     * grand-total label. The `10%`/`5%` percentage tokens on those rows must be ignored.
+     */
+    @Test fun serviceChargePlusGstPlusRoundoff_amountPayable() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                TRATTORIA|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                Pasta Alfredo|60|260|140
+                1|310|330|140
+                200.00|380|440|140
+                200.00|480|560|140
+
+                Garlic Bread|60|240|180
+                2|310|330|180
+                100.00|380|440|180
+                200.00|480|560|180
+
+                Sub Total|300|455|240
+                400.00|480|560|240
+
+                Service Charge|60|260|280
+                10%|300|340|280
+                40.00|480|560|280
+
+                GST|60|140|320
+                5%|300|340|320
+                22.00|480|560|320
+
+                Round Off|60|300|360
+                0.20|480|560|360
+
+                Amount Payable|60|340|400
+                462.20|480|560|400
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Pasta Alfredo", "Garlic Bread"), draft.lineItems.map { it.name })
+        assertEquals(listOf(20000L, 20000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(40000L, draft.subtotalMinor)
+        assertEquals(4000L, draft.feesMinor)
+        // charge pot = GST 22.00 + service 40.00 + round-off 0.20 = 62.20
+        assertEquals(6220L, draft.taxMinor)
+        assertEquals(46220L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Multi-tax stack CGST + SGST + CESS (the compensation cess rides on top), closed by a "TOTAL DUE"
+     * label (a bare-total variant).
+     */
+    @Test fun cgstSgstCess_totalDue() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                THE BAR HOUSE|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                Whisky 60ml|60|240|140
+                2|310|330|140
+                300.00|380|440|140
+                600.00|480|560|140
+
+                Soda|60|180|180
+                1|310|330|180
+                40.00|380|440|180
+                40.00|480|560|180
+
+                Sub Total|300|455|240
+                640.00|480|560|240
+
+                CGST|60|140|280
+                100.00|480|560|280
+
+                SGST|60|140|320
+                100.00|480|560|320
+
+                CESS|60|140|360
+                20.00|480|560|360
+
+                TOTAL DUE|60|300|400
+                860.00|480|560|400
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Whisky 60ml", "Soda"), draft.lineItems.map { it.name })
+        assertEquals(listOf(60000L, 4000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(64000L, draft.subtotalMinor)
+        // CGST 100 + SGST 100 + CESS 20 = 220.00
+        assertEquals(22000L, draft.taxMinor)
+        assertEquals(86000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Bill-level discount + delivery fee, closed by a "Net Amount" label; no tax line. The discount
+     * subtracts and the fee adds, and the signed charge pot reflects both.
+     */
+    @Test fun billDiscountPlusDeliveryFee_netAmount() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                URBAN THREADS|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                Cotton T-Shirt|60|260|140
+                2|310|330|140
+                500.00|380|440|140
+                1000.00|470|560|140
+
+                Baseball Cap|60|250|180
+                1|310|330|180
+                300.00|380|440|180
+                300.00|470|560|180
+
+                Sub Total|300|455|240
+                1300.00|470|560|240
+
+                Discount 10%|60|300|280
+                130.00|470|560|280
+
+                Delivery Fee|60|260|320
+                50.00|480|560|320
+
+                Net Amount|60|300|360
+                1220.00|470|560|360
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Cotton T-Shirt", "Baseball Cap"), draft.lineItems.map { it.name })
+        assertEquals(listOf(100000L, 30000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(130000L, draft.subtotalMinor)
+        assertEquals(13000L, draft.discountMinor)
+        assertEquals(5000L, draft.feesMinor)
+        // charge pot = fees 50 − discount 130 = −80.00
+        assertEquals(-8000L, draft.taxMinor)
+        assertEquals(122000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Tax-INCLUSIVE bill: item prices already include tax, so there is no separate tax line — only a
+     * grand total — plus a footer disclaimer that must be ignored as noise.
+     */
+    @Test fun taxInclusive_noSeparateTaxLine() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                CLOUD KITCHEN|60|360|20
+
+                Item|60|140|90
+                Amount|480|560|90
+
+                Combo Meal|60|230|140
+                250.00|480|560|140
+
+                Choco Lava Cake|60|280|180
+                150.00|480|560|180
+
+                Sub Total|300|455|240
+                400.00|480|560|240
+
+                Grand Total|60|300|280
+                400.00|480|560|280
+
+                Prices inclusive of all taxes|60|400|320
+                Thank You Visit Again|60|400|360
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Combo Meal", "Choco Lava Cake"), draft.lineItems.map { it.name })
+        assertEquals(listOf(25000L, 15000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(40000L, draft.subtotalMinor)
+        assertEquals(0L, draft.taxMinor)
+        assertEquals(40000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
 }
