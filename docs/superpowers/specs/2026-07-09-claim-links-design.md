@@ -40,22 +40,25 @@ via the existing proportional weighted math.
 - **`claim_sessions`**: `id TEXT PK`, `group_id TEXT`, `creator_participant_id TEXT`, `title TEXT`,
   `currency TEXT`, `items JSONB` (snapshot `[{idx:int, name:string, qty:int, amountMinor:int}]`),
   `tax_minor BIGINT`, `fees_minor BIGINT`, `discount_minor BIGINT`, `roundoff_minor BIGINT`,
-  `status TEXT` (`open`|`finalized`|`cancelled`), `expense_id TEXT NULL` (set on finalize),
-  `created_at TIMESTAMPTZ`. Items are **immutable once the session is created** (the creator edits
-  items on the itemised screen *before* sharing; to change them after, cancel + recreate).
+  `status TEXT` (`open`|`finalized`|`cancelled`), `version INT NOT NULL DEFAULT 1`,
+  `expense_id TEXT NULL` (set on finalize), `created_at TIMESTAMPTZ`. The creator can edit items
+  while `open`; **editing or removing an item drops all claims on that item** (its claimers see it
+  cleared on the next poll and re-claim), and bumps `version`.
 - **`claims`**: `session_id TEXT`, `item_idx INT`, `participant_id TEXT`, `weight NUMERIC(6,2)` (> 0;
   a 0 weight deletes the row). PK `(session_id, item_idx, participant_id)`. FK `session_id` →
   `claim_sessions(id)` ON DELETE CASCADE.
 
 ### Endpoints (all require a bearer token for a linked member of the session's group)
 - `POST /v1/groups/{id}/claim-sessions` → create from an items+totals payload; returns `{sid, …}`.
-- `GET /v1/claim-sessions/{sid}` → poll: session (items, totals, status, expense_id) + all claims
-  (participant_id, item_idx, weight) + a computed per-participant "owes" preview.
+- `GET /v1/claim-sessions/{sid}` → poll: session (items, totals, status, version, expense_id) + all
+  claims (participant_id, item_idx, weight) + a computed per-participant "owes" preview.
 - `PUT /v1/claim-sessions/{sid}/claims` → upsert the CALLER's weights `[{item_idx, weight}]`
-  (idempotent full-replace of that caller's rows).
+  (idempotent full-replace of that caller's rows); body carries `expectedVersion`.
 - `POST /v1/claim-sessions/{sid}/finalize` → creator only; body carries the resolution for each
-  unclaimed item; builds the expense server-side and locks (see below).
+  unclaimed item + `expectedVersion`; builds the expense server-side and locks (see below).
 - `POST /v1/claim-sessions/{sid}/cancel` → creator only; sets `status='cancelled'`.
+- `PATCH /v1/claim-sessions/{sid}/items` → creator only; edit the item snapshot (add/remove/rename/
+  amount); drops claims on any edited/removed item, bumps `version`.
 
 ## Concurrency & locking (the core correctness story)
 
@@ -67,9 +70,10 @@ Finalize and claim both take `SELECT … FOR UPDATE` on the session row, so they
 ```
 -- FINALIZE (creator)
 BEGIN
-  SELECT status FROM claim_sessions WHERE id=$sid FOR UPDATE
+  SELECT status, version FROM claim_sessions WHERE id=$sid FOR UPDATE
   if status = 'finalized': COMMIT; return existing expense_id      -- idempotent
   if status = 'cancelled': 409
+  if body.expectedVersion != version: 409 VERSION_STALE
   read all claims; apply the creator's unclaimed-item resolutions
   build expense (weighted split + proportional tax/fees/discount/roundoff, exact rounding)
   INSERT expense
@@ -78,9 +82,18 @@ COMMIT
 
 -- CLAIM (anyone) — PUT my weights
 BEGIN
+  SELECT status, version FROM claim_sessions WHERE id=$sid FOR UPDATE
+  if status != 'open': 409 LOCKED
+  if body.expectedVersion != version: 409 VERSION_STALE   -- an item changed under you
+  upsert (delete+insert) THIS caller's claim rows
+COMMIT
+
+-- EDIT ITEMS (creator) — PATCH /items
+BEGIN
   SELECT status FROM claim_sessions WHERE id=$sid FOR UPDATE
   if status != 'open': 409 LOCKED
-  upsert (delete+insert) THIS caller's claim rows
+  apply item edits; DELETE claims for any changed/removed item_idx
+  UPDATE claim_sessions SET items=$new, version=version+1 WHERE id=$sid
 COMMIT
 ```
 
@@ -89,8 +102,10 @@ Exactly one interleaving happens per the row lock:
 - **Finalize commits first** → the claim then sees `status='finalized'` → **409 LOCKED**, cleanly
   rejected. The claimer's screen flips to the read-only "creator locked this split" view.
 
-Finalize is idempotent on `status`; a duplicate finalize returns the same `expense_id`. Because
-items are immutable once shared, there's no "bill changed under me" race to guard.
+`version` guards item edits: if the creator edits items between a claimer's read and their PUT, the
+PUT is **409 VERSION_STALE** ("the bill changed — refresh"); the client refetches (seeing the edited
+items + its dropped claims) and re-claims. Finalize is idempotent on `status`; a duplicate returns
+the same `expense_id`.
 
 ## App components
 
@@ -112,8 +127,10 @@ items are immutable once shared, there's no "bill changed under me" race to guar
 - **Over/under claim:** impossible (independent proportional weights, not scarce units).
 - **Concurrent claims:** separate rows per person; a PUT only replaces the caller's own rows — no
   cross-user conflict. Finalize vs claim serialized by the row lock (above).
-- **Creator edits items mid-session:** not in v1 — items are fixed once shared. The creator edits
-  items on the itemised screen *before* creating the session; to fix them after, cancel + recreate.
+- **Creator edits items mid-session:** allowed via `PATCH …/items`; **editing or removing an item
+  drops that item's claims** (its claimers re-claim), bumps `version`; a claim/finalize sent against
+  the old version → 409 VERSION_STALE → client refetches + re-claims. Other clients see the change
+  next poll.
 - **Person claims then leaves the group before finalize:** their claims are dropped (participant
   removed); their weight no longer counts.
 - **Tax/fees/discount/round-off:** split proportionally to each person's claimed item subtotal
@@ -133,10 +150,19 @@ items are immutable once shared, there's no "bill changed under me" race to guar
 - Backend concurrency test: interleave a `PUT /claims` and `POST /finalize` on the same session;
   assert either the claim is included OR it gets 409 LOCKED — never lost, and the expense is built
   exactly once.
+- `version` guard test: creator edits an item (its claims dropped), then a stale claim/finalize →
+  409 VERSION_STALE; a fresh claim after refetch succeeds.
 - Pure-Kotlin test for the client-side "you owe" preview matching the server's math.
 
 ## Out of scope (v1)
 
-Websockets/SSE realtime; web (non-app) claiming; offline claiming; session auto-expiry; **editing a
-session's items after it's shared** (cancel + recreate instead); editing a *finalized* split;
-weighting a single unit fractionally beyond the proportional model.
+Websockets/SSE realtime; web (non-app) claiming; offline claiming; session auto-expiry; editing a
+*finalized* split; weighting a single unit fractionally beyond the proportional model.
+
+## Release: alpha, opt-in
+
+Ships as an **alpha** feature gated by a Settings › **Labs** toggle "Claim links (alpha)" (a
+DataStore flag, default OFF). The "Let everyone claim" entry point appears on the itemised screen
+only when the flag is on, and the claim screen carries a small **ALPHA** badge. This lets us ship it
+in a normal release for opt-in testing without exposing it to everyone. Backend endpoints are live
+regardless (harmless if unused). Graduating out of alpha = flip the default / drop the gate.
