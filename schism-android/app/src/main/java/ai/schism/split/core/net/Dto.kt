@@ -261,3 +261,90 @@ data class PersonalDashboardDto(
     val groups: List<PersonalGroupSliceDto> = emptyList(),
     val totals: List<CurrencyTotalDto> = emptyList(),
 )
+
+// ---- claim links (alpha) ----
+
+@Serializable
+data class ClaimItemDto(
+    val idx: Int,
+    val name: String,
+    val qty: Int,
+    val amountMinor: Long,
+)
+
+@Serializable
+data class ClaimDto(
+    val itemIdx: Int,
+    val participantId: String,
+    val weight: Double,
+)
+
+@Serializable
+data class ClaimSessionDto(
+    val id: String,
+    val groupId: String = "",
+    val creatorParticipantId: String = "",
+    val title: String = "",
+    val currency: String = "",
+    val status: String = "open",
+    val items: List<ClaimItemDto> = emptyList(),
+    val taxMinor: Long = 0,
+    val feesMinor: Long = 0,
+    val discountMinor: Long = 0,
+    val roundoffMinor: Long = 0,
+    val version: Int = 1,
+    val expenseId: String? = null,
+    val claims: List<ClaimDto> = emptyList(),
+    val owesPreview: Map<String, Long> = emptyMap(),
+)
+
+@Serializable
+data class CreateClaimSessionRequest(
+    val title: String,
+    val currency: String,
+    val items: List<ClaimItemDto>,
+    val taxMinor: Long = 0,
+    val feesMinor: Long = 0,
+    val discountMinor: Long = 0,
+    val roundoffMinor: Long = 0,
+)
+
+@Serializable
+data class ClaimWeightDto(
+    val itemIdx: Int,
+    val weight: Double,
+)
+
+@Serializable
+data class PutClaimsRequest(
+    val expectedVersion: Int,
+    val weights: List<ClaimWeightDto>,
+)
+
+@Serializable
+data class ResolutionDto(
+    val itemIdx: Int,
+    val mode: String,
+    val participantId: String? = null,
+)
+
+@Serializable
+data class FinalizeRequest(
+    val expectedVersion: Int,
+    val resolutions: List<ResolutionDto>,
+)
+
+@Serializable
+data class FinalizeResponse(
+    val expenseId: String,
+)
+
+@Serializable
+data class EditItemsRequest(
+    val items: List<ClaimItemDto>,
+)
+
+@Serializable
+data class VersionResponse(
+    val version: Int,
+)

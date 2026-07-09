@@ -5,6 +5,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -88,4 +89,36 @@ interface ApiService {
         @Query("participant") participant: String,
         @Query("groupIds") groupIds: String,
     ): PersonalDashboardDto
+
+    // ---- claim links (alpha) ----
+
+    @POST("v1/groups/{id}/claim-sessions")
+    suspend fun createClaimSession(
+        @Path("id") groupId: String,
+        @Body body: CreateClaimSessionRequest,
+    ): ClaimSessionDto
+
+    @GET("v1/claim-sessions/{sid}")
+    suspend fun getClaimSession(@Path("sid") sid: String): ClaimSessionDto
+
+    @PUT("v1/claim-sessions/{sid}/claims")
+    suspend fun putClaims(
+        @Path("sid") sid: String,
+        @Body body: PutClaimsRequest,
+    ): Response<Unit>
+
+    @POST("v1/claim-sessions/{sid}/finalize")
+    suspend fun finalizeClaimSession(
+        @Path("sid") sid: String,
+        @Body body: FinalizeRequest,
+    ): FinalizeResponse
+
+    @POST("v1/claim-sessions/{sid}/cancel")
+    suspend fun cancelClaimSession(@Path("sid") sid: String): Response<Unit>
+
+    @PATCH("v1/claim-sessions/{sid}/items")
+    suspend fun editClaimItems(
+        @Path("sid") sid: String,
+        @Body body: EditItemsRequest,
+    ): VersionResponse
 }
