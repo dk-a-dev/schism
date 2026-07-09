@@ -1017,4 +1017,201 @@ class BillFixtureBatteryTest {
         assertEquals(40000L, draft.totalMinor)
         assertTrue(draft.verified)
     }
+
+    // ======================================================================================
+    // Group H — Sources (Swiggy / Blinkit / grocery / thermal)
+    // ======================================================================================
+
+    /**
+     * Swiggy-style screenshot layout, detected structurally (Item Total + a packaging/platform fee).
+     * Exercises: `xN` qty suffix, an indented option subline folded into the name, the "Bill Details"
+     * marker synthesized into a header, "Item Total" renamed to the subtotal, packaging + platform
+     * fees, and whole-rupee (decimal-less) amounts.
+     */
+    @Test fun swiggyStyleScreenshotLayout() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                Bill Details|20|160|20
+
+                Chicken Biryani (Regular) x2|20|500|80
+                440|560|610|80
+
+                Extra Raita|40|260|110
+
+                Paneer Wrap x1|20|400|160
+                180|560|610|160
+
+                Item Total|20|160|220
+                620|560|610|220
+
+                Restaurant Packaging Charges|20|300|260
+                25|560|610|260
+
+                Platform fee|20|200|300
+                6|560|610|300
+
+                GST|20|120|340
+                31|560|610|340
+
+                Grand Total|20|160|380
+                682|560|610|380
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Chicken Biryani (Regular) Extra Raita", "Paneer Wrap"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(44000L, 18000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(62000L, draft.subtotalMinor)
+        assertEquals(3100L, draft.feesMinor)
+        // charge pot = GST 31 + packaging 25 + platform 6 = 62.00
+        assertEquals(6200L, draft.taxMinor)
+        assertEquals(68200L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Blinkit-style quick-commerce: an item printing a struck-through MRP immediately before the paid
+     * price (MRP > paid). The engine must keep the PAID price. Detected via the "items in this order"
+     * marker.
+     */
+    @Test fun blinkitStrikethroughMrpKeepsPaidPrice() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                Items in this order|20|300|20
+
+                Lays Chips Pack of 2|20|400|80
+                96|480|520|80
+                72|540|580|80
+
+                Amul Milk 1L|20|400|120
+                70|540|580|120
+
+                Item Total|20|160|180
+                142|540|580|180
+
+                Handling Charge|20|250|220
+                10|540|580|220
+
+                Grand Total|20|160|260
+                152|540|580|260
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Lays Chips Pack of 2", "Amul Milk 1L"), draft.lineItems.map { it.name })
+        assertEquals(listOf(7200L, 7000L), draft.lineItems.map { it.amountMinor }) // paid 72, not MRP 96
+        assertEquals(14200L, draft.subtotalMinor)
+        assertEquals(1000L, draft.feesMinor)
+        assertEquals(15200L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Grocery weight-based bill (GROCERY source via GSTIN + Rate). One line is priced by fractional
+     * weight (1.5 kg). An Int qty cannot represent 1.5, so that line falls back to qty 1 with the
+     * printed line AMOUNT read directly (documented limitation) — the bill still reconciles. The
+     * `2.000` grocery-integer weight resolves cleanly to qty 2.
+     */
+    @Test fun groceryWeightBased_fractionalQtyFallsBackToAmount() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                BIG BASKET|60|360|20
+
+                GSTIN 29ABCDE1234F1Z5|60|320|60
+
+                Item|60|140|100
+                Qty|300|350|100
+                Rate|380|440|100
+                Amount|480|560|100
+
+                Tomato|60|180|140
+                1.5|300|350|140
+                40.00|380|440|140
+                60.00|480|560|140
+
+                Onion 2kg|60|220|180
+                2.000|300|350|180
+                30.00|380|440|180
+                60.00|480|560|180
+
+                Sub Total|300|455|240
+                120.00|480|560|240
+
+                Grand Total|60|300|280
+                120.00|480|560|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Tomato", "Onion 2kg"), draft.lineItems.map { it.name })
+        // Tomato: 1.5 kg can't be an Int qty → qty 1, amount read directly (60.00). Onion: 2.000 → 2.
+        assertEquals(listOf(1, 2), draft.lineItems.map { it.qty })
+        assertEquals(listOf(6000L, 6000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(3000L, draft.lineItems[1].unitPriceMinor)
+        assertEquals(12000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Thermal POS bill buried in header/footer noise that must all be ignored: GSTIN, a phone number
+     * that looks like a price (10 digits, no decimal → rejected), a Table No, a date, and a
+     * "Thank You" footer. Only the two real dishes become items; the date is still extracted.
+     */
+    @Test fun thermalBillWithHeaderFooterNoise() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                SHREE ANNAPURNA|60|360|20
+
+                GSTIN: 29AABCU9603R1ZM|60|360|50
+
+                M: 9940415250|60|300|80
+
+                Table No: 12|60|250|110
+
+                Date: 09/07/26|60|280|140
+
+                Item|60|140|180
+                Qty|300|340|180
+                Rate|380|440|180
+                Amount|480|560|180
+
+                Masala Dosa|60|230|220
+                2|310|330|220
+                80.00|380|440|220
+                160.00|480|560|220
+
+                Filter Coffee|60|240|260
+                1|310|330|260
+                40.00|380|440|260
+                40.00|480|560|260
+
+                Sub Total|300|455|320
+                200.00|480|560|320
+
+                GST 5%|60|300|360
+                10.00|480|560|360
+
+                Grand Total|60|300|400
+                210.00|480|560|400
+
+                Thank You Visit Again|60|360|440
+                """,
+            ),
+        )!!
+
+        assertEquals("SHREE ANNAPURNA", draft.merchant)
+        assertEquals("2026-07-09", draft.date)
+        assertEquals(listOf("Masala Dosa", "Filter Coffee"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(16000L, 4000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(20000L, draft.subtotalMinor)
+        assertEquals(1000L, draft.taxMinor)
+        assertEquals(21000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
 }
