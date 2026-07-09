@@ -6,6 +6,7 @@ import ai.schism.split.core.money.formatMinor
 import ai.schism.split.core.net.ClaimItemDto
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.ui.SplitLoader
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +91,10 @@ fun ClaimScreen(
                     owesMinor = state.myOwes,
                     currency = state.session?.currency ?: "₹",
                     isCreator = state.isCreator,
+                    myReady = state.myReady,
+                    readyCount = state.readyCount,
+                    memberCount = state.memberCount,
+                    onToggleReady = { viewModel.toggleReady() },
                     // A creator with unclaimed items resolves them via FinalizeSheet; with nothing
                     // left unclaimed, finalize directly.
                     onFinalize = {
@@ -106,6 +111,7 @@ fun ClaimScreen(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { SplitLoader() }
+                state.session == null && state.error != null -> LoadErrorState(message = state.error!!, onRetry = { viewModel.refresh() })
                 state.status != "open" -> LockedState(onDone = onFinalized)
                 else -> {
                     val session = state.session
@@ -118,6 +124,19 @@ fun ClaimScreen(
                                 formatMinor(sessionTotal(session), session.currency),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold,
+                            )
+                            val claimedCount = state.myClaimedItemCount
+                            if (claimedCount > 0) {
+                                Text(
+                                    "You've claimed $claimedCount item${if (claimedCount == 1) "" else "s"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                "Tap the number for halves like 0.5",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             state.error?.let {
                                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -198,7 +217,35 @@ private fun LockedState(onDone: () -> Unit) {
 }
 
 @Composable
-private fun OwesFooter(owesMinor: Long, currency: String, isCreator: Boolean, onFinalize: () -> Unit) {
+private fun LoadErrorState(message: String, onRetry: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "Couldn't load this split",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SchismPrimaryButton(onClick = onRetry) { Text("Retry") }
+        }
+    }
+}
+
+@Composable
+private fun OwesFooter(
+    owesMinor: Long,
+    currency: String,
+    isCreator: Boolean,
+    myReady: Boolean,
+    readyCount: Int,
+    memberCount: Int,
+    onToggleReady: () -> Unit,
+    onFinalize: () -> Unit,
+) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
@@ -212,9 +259,29 @@ private fun OwesFooter(owesMinor: Long, currency: String, isCreator: Boolean, on
             Column {
                 Text("You owe", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formatMinor(owesMinor, currency), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                if (isCreator && memberCount > 0) {
+                    Text(
+                        "$readyCount of $memberCount ready",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (isCreator) {
                 SchismPrimaryButton(onClick = onFinalize) { Text("Finalize") }
+            } else {
+                Column(horizontalAlignment = Alignment.End) {
+                    if (myReady) {
+                        SchismSecondaryButton(onClick = onToggleReady) { Text("Marked done — tap to undo") }
+                    } else {
+                        SchismPrimaryButton(onClick = onToggleReady) { Text("I'm done ✓") }
+                    }
+                    Text(
+                        "Waiting for the creator to finalize",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -256,6 +323,12 @@ private fun ClaimItemCard(
                 Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
                     claimants.forEach { p -> InitialAvatar(name = p.name, key = p.id, size = 28.dp) }
                 }
+            } else {
+                Text(
+                    "No one's claimed this yet",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

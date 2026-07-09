@@ -21,6 +21,9 @@ sealed class ClaimError(message: String) : Exception(message) {
     /** 409 `VERSION_STALE` — the caller's `expectedVersion` is behind the server's; refetch and retry. */
     data object Stale : ClaimError("Someone else changed this split — refreshing")
 
+    /** 409 `UNRESOLVED_ITEMS` — finalize refused because an item is neither claimed nor resolved. */
+    data object UnresolvedItems : ClaimError("Some items are still unclaimed")
+
     data class Other(val httpCode: Int, val body: String) : ClaimError("Couldn't save your claim (HTTP $httpCode)")
 }
 
@@ -50,7 +53,17 @@ class ClaimSessionRepository @Inject constructor(
         sid: String,
         expectedVersion: Int,
         resolutions: List<ResolutionDto>,
-    ): Result<FinalizeResponse> = runCatching { api.finalizeClaimSession(sid, FinalizeRequest(expectedVersion, resolutions)) }
+    ): Result<FinalizeResponse> = runCatching {
+        val response = api.finalizeClaimSession(sid, FinalizeRequest(expectedVersion, resolutions))
+        if (!response.isSuccessful) throw errorFor(response)
+        response.body() ?: throw ClaimError.Other(response.code(), "empty finalize body")
+    }
+
+    suspend fun setReady(sid: String, ready: Boolean): Result<ClaimSessionDto> = runCatching {
+        val response = api.setReady(sid, ai.schism.split.core.net.SetReadyRequest(ready))
+        if (!response.isSuccessful) throw errorFor(response)
+        response.body() ?: throw ClaimError.Other(response.code(), "empty ready body")
+    }
 
     suspend fun cancelSession(sid: String): Result<Unit> = runCatching {
         val response = api.cancelClaimSession(sid)
@@ -60,11 +73,12 @@ class ClaimSessionRepository @Inject constructor(
     suspend fun editItems(sid: String, items: List<ai.schism.split.core.net.ClaimItemDto>): Result<VersionResponse> =
         runCatching { api.editClaimItems(sid, ai.schism.split.core.net.EditItemsRequest(items)) }
 
-    private fun errorFor(response: Response<Unit>): ClaimError {
+    private fun errorFor(response: Response<*>): ClaimError {
         val body = response.errorBody()?.string().orEmpty()
         return when {
-            response.code() == 409 && body.contains("LOCKED") -> ClaimError.Locked
             response.code() == 409 && body.contains("VERSION_STALE") -> ClaimError.Stale
+            response.code() == 409 && body.contains("UNRESOLVED_ITEMS") -> ClaimError.UnresolvedItems
+            response.code() == 409 && body.contains("LOCKED") -> ClaimError.Locked
             else -> ClaimError.Other(response.code(), body)
         }
     }

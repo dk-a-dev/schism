@@ -111,10 +111,16 @@ interface ApiService {
     suspend fun finalizeClaimSession(
         @Path("sid") sid: String,
         @Body body: FinalizeRequest,
-    ): FinalizeResponse
+    ): Response<FinalizeResponse>
 
     @POST("v1/claim-sessions/{sid}/cancel")
     suspend fun cancelClaimSession(@Path("sid") sid: String): Response<Unit>
+
+    @PUT("v1/claim-sessions/{sid}/ready")
+    suspend fun setReady(
+        @Path("sid") sid: String,
+        @Body body: SetReadyRequest,
+    ): Response<ClaimSessionDto>
 
     @PATCH("v1/claim-sessions/{sid}/items")
     suspend fun editClaimItems(

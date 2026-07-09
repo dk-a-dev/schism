@@ -296,6 +296,8 @@ data class ClaimSessionDto(
     val expenseId: String? = null,
     val claims: List<ClaimDto> = emptyList(),
     val owesPreview: Map<String, Long> = emptyMap(),
+    /** Participant ids who marked themselves "done" claiming (advisory, not a finalize gate). */
+    val readyParticipantIds: List<String> = emptyList(),
 )
 
 @Serializable
@@ -337,6 +339,11 @@ data class FinalizeRequest(
 @Serializable
 data class FinalizeResponse(
     val expenseId: String,
+)
+
+@Serializable
+data class SetReadyRequest(
+    val ready: Boolean,
 )
 
 @Serializable

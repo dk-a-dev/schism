@@ -49,11 +49,24 @@ class ClaimSessionViewModelTest {
     private var putRequestCount = 0
     private var getRequestCount = 0
 
+    private var readyRequestCount = 0
+    // Mirrors the server: once someone marks ready, GET polls keep reporting them ready (the flag is
+    // persisted), so the poll doesn't clobber the optimistic ready state.
+    private var serverReady = false
+
     private val sessionBody = """
         {"id":"s1","groupId":"g1","creatorParticipantId":"p1","title":"Dinner","currency":"₹",
          "status":"open","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}],
          "taxMinor":0,"feesMinor":0,"discountMinor":0,"roundoffMinor":0,"version":1,
          "claims":[],"owesPreview":{}}
+    """.trimIndent()
+
+    // Response to PUT /ready — the server echoes the refreshed session with the caller now listed ready.
+    private val readySessionBody = """
+        {"id":"s1","groupId":"g1","creatorParticipantId":"p1","title":"Dinner","currency":"₹",
+         "status":"open","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}],
+         "taxMinor":0,"feesMinor":0,"discountMinor":0,"roundoffMinor":0,"version":1,
+         "claims":[],"owesPreview":{},"readyParticipantIds":["p1"]}
     """.trimIndent()
 
     @Before
@@ -64,6 +77,11 @@ class ClaimSessionViewModelTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.path ?: ""
                 return when {
+                    request.method == "PUT" && path.contains("/ready") -> {
+                        readyRequestCount++
+                        serverReady = request.body.readUtf8().contains("true")
+                        MockResponse().setBody(if (serverReady) readySessionBody else sessionBody)
+                    }
                     request.method == "PUT" && path.contains("/claims") -> {
                         putRequestCount++
                         when {
@@ -75,7 +93,7 @@ class ClaimSessionViewModelTest {
                     }
                     path.endsWith("/v1/claim-sessions/s1") -> {
                         getRequestCount++
-                        MockResponse().setBody(sessionBody)
+                        MockResponse().setBody(if (serverReady) readySessionBody else sessionBody)
                     }
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -121,6 +139,23 @@ class ClaimSessionViewModelTest {
         val owes = vm.state.first { it.myOwes > 0L }
         assertEquals("p1", owes.myParticipantId)
         assertEquals(10000L, owes.myOwes)
+    }
+
+    @Test
+    fun toggleReadyPostsAndReflectsReadyParticipantIds(): TestResult = runTest(dispatcher) {
+        val vm = vm()
+        vm.state.first { it.session != null && it.myParticipantId.isNotBlank() }
+
+        vm.toggleReady()
+
+        // Optimistic update reflects immediately.
+        val ready = vm.state.first { it.myReady }
+        assertTrue("caller should be listed ready", ready.session!!.readyParticipantIds.contains("p1"))
+        // The PUT lands on a MockWebServer thread; await it in real time (Default, not the virtual test clock).
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            kotlinx.coroutines.withTimeout(2_000) { while (readyRequestCount < 1) kotlinx.coroutines.delay(10) }
+        }
+        assertEquals(1, readyRequestCount)
     }
 
     @Test

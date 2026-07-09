@@ -77,6 +77,19 @@ data class ClaimUiState(
             val claimedIdx = session?.claims.orEmpty().filter { it.weight > 0 }.map { it.itemIdx }.toSet()
             return session?.items.orEmpty().map { it.idx }.filterNot { it in claimedIdx }
         }
+
+    /** Whether this device's participant has marked themselves "done" (advisory). */
+    val myReady: Boolean
+        get() = myParticipantId.isNotBlank() && myParticipantId in session?.readyParticipantIds.orEmpty()
+
+    /** How many participants have marked themselves ready. */
+    val readyCount: Int get() = session?.readyParticipantIds.orEmpty().size
+
+    /** How many participants are in the session's group (the "of M" in "N of M ready"). */
+    val memberCount: Int get() = participants.size
+
+    /** Count of the caller's own items with a positive weight — "You've claimed N item(s)". */
+    val myClaimedItemCount: Int get() = allMyWeights().count { it.value > 0 }
 }
 
 /**
@@ -103,9 +116,18 @@ class ClaimSessionViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            refresh()
+            reload()
             resolveMyParticipant()
             startPolling()
+        }
+    }
+
+    /** Public entry point for the UI's Retry button (used when the initial load failed). */
+    fun refresh() {
+        viewModelScope.launch {
+            reload()
+            if (_state.value.myParticipantId.isBlank()) resolveMyParticipant()
+            if (pollJob?.isActive != true && _state.value.status == STATUS_OPEN) startPolling()
         }
     }
 
@@ -127,7 +149,7 @@ class ClaimSessionViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refresh() {
+    private suspend fun reload() {
         repo.getSession(sid)
             .onSuccess { s -> _state.update { it.copy(loading = false, session = s, error = null) } }
             .onFailure { e -> _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load session") } }
@@ -139,7 +161,7 @@ class ClaimSessionViewModel @Inject constructor(
             while (true) {
                 delay(POLL_INTERVAL_MS)
                 if (_state.value.status != STATUS_OPEN) break
-                refresh()
+                reload()
                 if (_state.value.status != STATUS_OPEN) break
             }
         }
@@ -173,8 +195,10 @@ class ClaimSessionViewModel @Inject constructor(
         val dtos = s.allMyWeights().map { (idx, w) -> ClaimWeightDto(idx, w) }
         repo.putClaims(sid, session.version, dtos)
             .onSuccess {
+                // Refresh FIRST so the fresh server session is in hand before dropping the local
+                // in-flight weights — otherwise weightFor() briefly shows the stale server value.
+                reload()
                 _state.update { it.copy(myWeights = emptyMap()) }
-                refresh()
             }
             .onFailure { e -> handlePutClaimsFailure(e) }
     }
@@ -185,7 +209,7 @@ class ClaimSessionViewModel @Inject constructor(
                 // Keeps this device's in-flight myWeights; only the session is replaced. The stale PUT
                 // never landed, so re-issue it against the fresh version or the user's edits are
                 // silently lost.
-                refresh()
+                reload()
                 if (_state.value.myWeights.isNotEmpty()) submitWeights()
             }
             is ClaimError.Locked -> {
@@ -208,7 +232,53 @@ class ClaimSessionViewModel @Inject constructor(
                     _state.update { it.copy(session = it.session?.copy(status = "finalized", expenseId = resp.expenseId)) }
                     onDone(resp.expenseId)
                 }
-                .onFailure { e -> _state.update { it.copy(error = e.message ?: "Couldn't finalize") } }
+                .onFailure { e -> handleFinalizeFailure(e) }
+        }
+    }
+
+    private suspend fun handleFinalizeFailure(e: Throwable) {
+        when (e) {
+            is ClaimError.Locked -> {
+                pollJob?.cancel()
+                _state.update {
+                    it.copy(session = it.session?.copy(status = "finalized"), error = "Someone already locked this split")
+                }
+            }
+            is ClaimError.Stale -> {
+                // The bill changed under us: pull the fresh session so the next finalize uses its version.
+                reload()
+                _state.update { it.copy(error = "The bill changed, try again") }
+            }
+            is ClaimError.UnresolvedItems ->
+                _state.update { it.copy(error = "Resolve the unclaimed items first") }
+            else -> _state.update { it.copy(error = e.message ?: "Couldn't finalize") }
+        }
+    }
+
+    /** Toggle this device's advisory "done claiming" flag: optimistically flip, then reconcile with
+     * the server's authoritative readyParticipantIds on the response (or the next poll). */
+    fun toggleReady() {
+        val s = _state.value
+        val session = s.session ?: return
+        val pid = s.myParticipantId.takeIf { it.isNotBlank() } ?: return
+        val want = !s.myReady
+        // Optimistic: reflect the toggle immediately so the button doesn't lag the tap.
+        val optimistic = if (want) {
+            (session.readyParticipantIds + pid).distinct()
+        } else {
+            session.readyParticipantIds - pid
+        }
+        _state.update { it.copy(session = it.session?.copy(readyParticipantIds = optimistic)) }
+        viewModelScope.launch {
+            repo.setReady(sid, want)
+                .onSuccess { updated -> _state.update { it.copy(session = updated, error = null) } }
+                .onFailure { e ->
+                    // Reconcile by reloading the authoritative list; surface a message on hard failures.
+                    reload()
+                    if (e is ClaimError.Locked) {
+                        _state.update { it.copy(error = "This split was locked by the creator") }
+                    }
+                }
         }
     }
 
