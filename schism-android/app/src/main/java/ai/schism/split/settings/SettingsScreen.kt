@@ -4,6 +4,9 @@ import ai.schism.split.BuildConfig
 import ai.schism.split.core.theme.ThemeMode
 import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.update.GITHUB_REPO_URL
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +28,7 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
@@ -61,6 +67,8 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val updateState by viewModel.updateState.collectAsState()
+    val context = LocalContext.current
 
     // Local edit buffers seeded from the persisted state; re-seed when the source changes.
     var name by remember { mutableStateOf(state.profileName) }
@@ -193,6 +201,11 @@ fun SettingsScreen(
                         InfoRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                     }
                 }
+                OutlinedButton(
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL))) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Source code") }
+                UpdateSection(updateState, onCheck = viewModel::checkForUpdates)
             }
 
             // ── On-device AI ───────────────────────────────────────────────
@@ -354,6 +367,55 @@ private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
             if (ready && !downloading) {
                 OutlinedButton(onClick = viewModel::delete, modifier = Modifier.weight(1f)) { Text("Delete") }
             }
+        }
+    }
+}
+
+@Composable
+private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
+    val context = LocalContext.current
+    when (updateState) {
+        is UpdateState.Idle -> {
+            Button(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
+        }
+        is UpdateState.Checking -> {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text("Checking for updates…", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        is UpdateState.UpToDate -> {
+            Text(
+                "You're on the latest version ✓",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
+        }
+        is UpdateState.Available -> {
+            Text(
+                "Update available: ${updateState.release.versionName}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Button(
+                onClick = {
+                    val url = updateState.release.apkUrl ?: updateState.release.releaseUrl
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Download") }
+        }
+        is UpdateState.Failed -> {
+            Text(
+                "Couldn't check — try again",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            OutlinedButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
         }
     }
 }

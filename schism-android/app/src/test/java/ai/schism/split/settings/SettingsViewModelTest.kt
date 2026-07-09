@@ -1,6 +1,7 @@
 package ai.schism.split.settings
 
 import ai.schism.split.core.settings.SettingsRepository
+import ai.schism.split.core.update.UpdateChecker
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,6 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import okhttp3.OkHttpClient
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -25,6 +27,7 @@ import org.robolectric.annotation.Config
 class SettingsViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var settings: SettingsRepository
+    private val updateChecker = UpdateChecker(OkHttpClient())
 
     @Before
     fun setUp() {
@@ -40,7 +43,7 @@ class SettingsViewModelTest {
 
     @Test
     fun exposesDefaultsForFreshlyClearedRepo() = runTest(dispatcher) {
-        val vm = SettingsViewModel(settings)
+        val vm = SettingsViewModel(settings, updateChecker)
         backgroundScope.launch { vm.state.collect {} } // keep the WhileSubscribed flow hot
 
         val ui = vm.state.first { it.currencyCode == "INR" }
@@ -51,7 +54,7 @@ class SettingsViewModelTest {
 
     @Test
     fun savedValuesPersistAndSurfaceInState() = runTest(dispatcher) {
-        val vm = SettingsViewModel(settings)
+        val vm = SettingsViewModel(settings, updateChecker)
         backgroundScope.launch { vm.state.collect {} } // keep the WhileSubscribed flow hot
 
         vm.saveProfileName("  Dev  ") // setProfileName trims

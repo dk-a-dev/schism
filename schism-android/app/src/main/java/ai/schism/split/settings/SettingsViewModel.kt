@@ -1,15 +1,30 @@
 package ai.schism.split.settings
 
+import ai.schism.split.BuildConfig
 import ai.schism.split.core.settings.SettingsRepository
+import ai.schism.split.core.update.ReleaseInfo
+import ai.schism.split.core.update.UpdateChecker
+import ai.schism.split.core.update.isNewer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** Result of a "Check for updates" tap, surfaced by [SettingsViewModel.updateState]. */
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    data class Available(val release: ReleaseInfo) : UpdateState
+    data object Failed : UpdateState
+}
 
 /** Snapshot of the device-local settings surfaced by [SettingsScreen]. (Backend URL is build/env config.) */
 data class SettingsUi(
@@ -32,6 +47,7 @@ private data class Prefs(val symbol: String, val code: String, val theme: String
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
+    private val updateChecker: UpdateChecker,
 ) : ViewModel() {
 
     // combine() tops out at 5 typed flows, so fold the eight sources into two groups first.
@@ -88,5 +104,21 @@ class SettingsViewModel @Inject constructor(
     /** Wipe all device-local settings (profile, currency, theme, joined groups). */
     fun resetAll() {
         viewModelScope.launch { settings.clear() }
+    }
+
+    private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
+
+    /** Ask GitHub Releases for the latest tag and compare it to the running build. */
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            _updateState.value = UpdateState.Checking
+            val latest = updateChecker.latestRelease()
+            _updateState.value = when {
+                latest == null -> UpdateState.Failed
+                isNewer(latest.versionName, BuildConfig.VERSION_NAME) -> UpdateState.Available(latest)
+                else -> UpdateState.UpToDate
+            }
+        }
     }
 }
