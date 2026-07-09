@@ -18,6 +18,12 @@ data class ReceiptDraft(
     val subtotalMinor: Long = 0,
     /** True when the on-device LLM produced this draft (vs the heuristic fallback). */
     val parsedByAi: Boolean = false,
+    /** Packaging/platform/service/delivery charges (0 = none detected). */
+    val feesMinor: Long = 0,
+    /** Discount/offer/savings applied to the bill (0 = none detected). */
+    val discountMinor: Long = 0,
+    /** True when the engine's arithmetic constraint solver confirmed this draft's totals are internally consistent. */
+    val verified: Boolean = false,
 )
 
 /** A single purchased line item on a receipt: name, quantity, and its line amount in minor units. */
