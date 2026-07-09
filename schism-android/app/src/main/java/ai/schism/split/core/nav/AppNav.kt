@@ -14,6 +14,7 @@ import ai.schism.split.groups.qr.InviteQrScreen
 import ai.schism.split.settings.SettingsScreen
 import ai.schism.split.sms.inbox.InboxScreen
 import ai.schism.split.sms.itemized.ItemizedSplitScreen
+import ai.schism.split.sms.itemized.claim.ClaimScreen
 import ai.schism.split.sms.split.PushToSplitScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -269,6 +270,16 @@ fun AppNav() {
                             popUpTo(Routes.PUSH_SPLIT) { inclusive = true }
                         }
                     },
+                )
+            }
+            composable(
+                Routes.CLAIM,
+                arguments = listOf(navArgument("sid") { type = NavType.StringType }),
+                deepLinks = listOf(navDeepLink { uriPattern = "schism://claim/{sid}" }),
+            ) {
+                ClaimScreen(
+                    onBack = { navController.popBackStack() },
+                    onFinalized = { navController.popBackStack() },
                 )
             }
             composable(Routes.DASHBOARD) { PersonalDashboardScreen() }

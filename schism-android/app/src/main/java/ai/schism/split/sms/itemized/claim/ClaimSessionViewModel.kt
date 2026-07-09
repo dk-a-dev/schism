@@ -6,6 +6,7 @@ import ai.schism.split.core.net.ClaimWeightDto
 import ai.schism.split.core.net.ResolutionDto
 import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.groups.data.GroupRepository
+import ai.schism.split.groups.data.Participant
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -27,6 +28,8 @@ data class ClaimUiState(
     val loading: Boolean = true,
     val session: ClaimSessionDto? = null,
     val myParticipantId: String = "",
+    /** The session's group's participants, for names/avatars (the claims list is id-only). */
+    val participants: List<Participant> = emptyList(),
     /** This device's own in-flight weight edits (item index -> weight), applied optimistically. */
     val myWeights: Map<Int, Double> = emptyMap(),
     val error: String? = null,
@@ -58,6 +61,22 @@ data class ClaimUiState(
             .associate { it.itemIdx to it.weight }
         return fromServer + myWeights
     }
+
+    /** Participants with a positive claimed weight on [itemIdx], for a "claimed by" avatar row. */
+    fun claimantsFor(itemIdx: Int): List<Participant> {
+        val claimantIds = session?.claims.orEmpty()
+            .filter { it.itemIdx == itemIdx && it.weight > 0 }
+            .map { it.participantId }
+            .toSet()
+        return participants.filter { it.id in claimantIds }
+    }
+
+    /** Item indices nobody has claimed any weight on — the creator must resolve these to finalize. */
+    val unclaimedItemIndices: List<Int>
+        get() {
+            val claimedIdx = session?.claims.orEmpty().filter { it.weight > 0 }.map { it.itemIdx }.toSet()
+            return session?.items.orEmpty().map { it.idx }.filterNot { it in claimedIdx }
+        }
 }
 
 /**
@@ -100,7 +119,12 @@ class ClaimSessionViewModel @Inject constructor(
             ?.let { uid -> group.participants.firstOrNull { it.userId == uid } }
         val active = group.activeParticipantId?.let { id -> group.participants.firstOrNull { it.id == id } }
         val mine = byUser ?: active
-        if (mine != null) _state.update { it.copy(myParticipantId = mine.id) }
+        _state.update {
+            it.copy(
+                myParticipantId = mine?.id ?: it.myParticipantId,
+                participants = group.participants,
+            )
+        }
     }
 
     private suspend fun refresh() {

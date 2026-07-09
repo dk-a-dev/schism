@@ -15,6 +15,9 @@ object Routes {
     const val RECEIPT_ITEMIZED = "sms/itemized?groupId={groupId}"
     fun receiptItemized(groupId: String? = null) = if (groupId == null) "sms/itemized" else "sms/itemized?groupId=$groupId"
 
+    const val CLAIM = "claim/{sid}"
+    fun claim(sid: String) = "claim/$sid"
+
     const val OPEN_GROUP = "open_group/{groupId}"
     const val GROUP_DETAIL = "groups/detail/{groupId}"
     const val GROUP_DASHBOARD = "groups/detail/{groupId}/dashboard"
