@@ -23,8 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
@@ -101,6 +103,27 @@ fun ItemizedSplitScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    state.draft?.let { d ->
+                        val verified = d.verified
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                if (verified) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+                                contentDescription = null,
+                                tint = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                if (verified) "Totals verified — the items add up to the bill"
+                                else "Double-check the items — the totals didn't add up",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
 
                     if (!state.parsedByAi) {
                         AiTipCard(aiEnabled = state.aiActive)
