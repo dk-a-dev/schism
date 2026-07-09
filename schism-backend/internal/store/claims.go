@@ -34,6 +34,14 @@ type ClaimItem struct {
 	AmountMinor int64  `json:"amountMinor"`
 }
 
+// TaxLine is one labelled tax/charge amount on a claim session (e.g. "SGST 2.5%"), used to show and
+// split Indian-style multi-line tax breakdowns (SGST/CGST/service charge/cess) separately instead of
+// as a single opaque number. See ClaimSession.Taxes.
+type TaxLine struct {
+	Label       string `json:"label"`
+	AmountMinor int64  `json:"amountMinor"`
+}
+
 // ClaimSessionInput is the input to CreateClaimSession.
 type ClaimSessionInput struct {
 	GroupID              string
@@ -45,6 +53,10 @@ type ClaimSessionInput struct {
 	FeesMinor            int64
 	DiscountMinor        int64
 	RoundoffMinor        int64
+	// Taxes is an optional ordered labelled breakdown of TaxMinor (e.g. SGST + CGST). When non-empty,
+	// CreateClaimSession sets TaxMinor to the sum of these lines so ComputeClaimSplit's math is
+	// unchanged regardless of whether the caller sent a scalar or a labelled breakdown.
+	Taxes []TaxLine
 }
 
 // Claim is one participant's weighted claim on one item.
@@ -69,9 +81,12 @@ type ClaimSession struct {
 	FeesMinor            int64       `json:"feesMinor"`
 	DiscountMinor        int64       `json:"discountMinor"`
 	RoundoffMinor        int64       `json:"roundoffMinor"`
-	Version              int         `json:"version"`
-	ExpenseID            *string     `json:"expenseId"`
-	Claims               []Claim     `json:"claims"`
+	// Taxes is the labelled breakdown of TaxMinor (may be empty for sessions created without one, or
+	// legacy sessions predating this field). TaxMinor always equals the sum of these when non-empty.
+	Taxes     []TaxLine `json:"taxes"`
+	Version   int       `json:"version"`
+	ExpenseID *string   `json:"expenseId"`
+	Claims    []Claim   `json:"claims"`
 	// Ready is the participant ids who have marked themselves "done" (advisory signal, not a finalize
 	// gate). Kept sorted for deterministic responses.
 	Ready []string `json:"ready"`
@@ -248,13 +263,33 @@ func (s *Store) CreateClaimSession(ctx context.Context, in ClaimSessionInput) (C
 		return ClaimSession{}, err
 	}
 
+	taxes := in.Taxes
+	if taxes == nil {
+		taxes = []TaxLine{}
+	}
+	// The labelled breakdown, when given, is the source of truth for the scalar tax_minor: this keeps
+	// ComputeClaimSplit's math (which only ever reads the scalar) unchanged whether or not the caller
+	// sent a breakdown. Behaves exactly as today when taxes is empty.
+	taxMinor := in.TaxMinor
+	if len(taxes) > 0 {
+		var sum int64
+		for _, t := range taxes {
+			sum += t.AmountMinor
+		}
+		taxMinor = sum
+	}
+	taxesJSON, err := json.Marshal(taxes)
+	if err != nil {
+		return ClaimSession{}, err
+	}
+
 	sid := id.New()
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO claim_sessions (id, group_id, creator_participant_id, title, currency, items,
-		                              tax_minor, fees_minor, discount_minor, roundoff_minor)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		                              tax_minor, fees_minor, discount_minor, roundoff_minor, taxes)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		sid, in.GroupID, in.CreatorParticipantID, in.Title, in.Currency, itemsJSON,
-		in.TaxMinor, in.FeesMinor, in.DiscountMinor, in.RoundoffMinor)
+		taxMinor, in.FeesMinor, in.DiscountMinor, in.RoundoffMinor, taxesJSON)
 	if err != nil {
 		return ClaimSession{}, err
 	}
@@ -269,13 +304,13 @@ func (s *Store) CreateClaimSession(ctx context.Context, in ClaimSessionInput) (C
 // GetClaimSession loads a claim session and its claims, or (nil, nil) if it doesn't exist.
 func (s *Store) GetClaimSession(ctx context.Context, sid string) (*ClaimSession, error) {
 	var cs ClaimSession
-	var itemsJSON []byte
+	var itemsJSON, taxesJSON []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, group_id, creator_participant_id, title, currency, items,
-		        tax_minor, fees_minor, discount_minor, roundoff_minor, status, version, expense_id
+		        tax_minor, fees_minor, discount_minor, roundoff_minor, status, version, expense_id, taxes
 		 FROM claim_sessions WHERE id=$1`, sid).
 		Scan(&cs.ID, &cs.GroupID, &cs.CreatorParticipantID, &cs.Title, &cs.Currency, &itemsJSON,
-			&cs.TaxMinor, &cs.FeesMinor, &cs.DiscountMinor, &cs.RoundoffMinor, &cs.Status, &cs.Version, &cs.ExpenseID)
+			&cs.TaxMinor, &cs.FeesMinor, &cs.DiscountMinor, &cs.RoundoffMinor, &cs.Status, &cs.Version, &cs.ExpenseID, &taxesJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -283,6 +318,9 @@ func (s *Store) GetClaimSession(ctx context.Context, sid string) (*ClaimSession,
 		return nil, err
 	}
 	if err := json.Unmarshal(itemsJSON, &cs.Items); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(taxesJSON, &cs.Taxes); err != nil {
 		return nil, err
 	}
 

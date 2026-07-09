@@ -141,6 +141,9 @@ fun ClaimScreen(
                             state.error?.let {
                                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
+                            if (session.taxes.isNotEmpty()) {
+                                TaxesCard(taxes = session.taxes, currency = session.currency)
+                            }
                             session.items.forEach { item ->
                                 ClaimItemCard(
                                     item = item,
@@ -280,6 +283,38 @@ private fun OwesFooter(
                         "Waiting for the creator to finalize",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Small "Taxes" section listing each labelled tax/charge line (e.g. SGST/CGST) and its amount. Only
+ * shown when the session has a labelled breakdown (session.taxes non-empty). */
+@Composable
+private fun TaxesCard(taxes: List<ai.schism.split.core.net.TaxLineDto>, currency: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                "Taxes",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            taxes.forEach { tax ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(tax.label, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        formatMinor(tax.amountMinor, currency),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }

@@ -75,6 +75,7 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 		FeesMinor:     d.FeesMinor,
 		DiscountMinor: d.DiscountMinor,
 		RoundoffMinor: d.RoundoffMinor,
+		Taxes:         d.toStoreTaxes(),
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())

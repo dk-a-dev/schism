@@ -279,6 +279,13 @@ data class ClaimDto(
     val weight: Double,
 )
 
+/** One labelled tax/charge line on a claim session, e.g. `{label: "SGST 2.5%", amountMinor: 2360}`. */
+@Serializable
+data class TaxLineDto(
+    val label: String,
+    val amountMinor: Long,
+)
+
 @Serializable
 data class ClaimSessionDto(
     val id: String,
@@ -298,6 +305,8 @@ data class ClaimSessionDto(
     val owesPreview: Map<String, Long> = emptyMap(),
     /** Participant ids who marked themselves "done" claiming (advisory, not a finalize gate). */
     val readyParticipantIds: List<String> = emptyList(),
+    /** Labelled breakdown of taxMinor (e.g. SGST + CGST), empty when the session has none. */
+    val taxes: List<TaxLineDto> = emptyList(),
 )
 
 @Serializable
@@ -309,6 +318,7 @@ data class CreateClaimSessionRequest(
     val feesMinor: Long = 0,
     val discountMinor: Long = 0,
     val roundoffMinor: Long = 0,
+    val taxes: List<TaxLineDto> = emptyList(),
 )
 
 @Serializable

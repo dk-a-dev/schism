@@ -65,6 +65,19 @@ func toStoreItems(items []claimItemDTO) []store.ClaimItem {
 	return out
 }
 
+type taxLineDTO struct {
+	Label       string `json:"label"`
+	AmountMinor int64  `json:"amountMinor"`
+}
+
+func toStoreTaxes(taxes []taxLineDTO) []store.TaxLine {
+	out := make([]store.TaxLine, len(taxes))
+	for i, t := range taxes {
+		out[i] = store.TaxLine{Label: t.Label, AmountMinor: t.AmountMinor}
+	}
+	return out
+}
+
 type createClaimSessionDTO struct {
 	Title         string         `json:"title"`
 	Currency      string         `json:"currency"`
@@ -73,9 +86,11 @@ type createClaimSessionDTO struct {
 	FeesMinor     int64          `json:"feesMinor"`
 	DiscountMinor int64          `json:"discountMinor"`
 	RoundoffMinor int64          `json:"roundoffMinor"`
+	Taxes         []taxLineDTO   `json:"taxes"`
 }
 
 func (d createClaimSessionDTO) toStoreItems() []store.ClaimItem { return toStoreItems(d.Items) }
+func (d createClaimSessionDTO) toStoreTaxes() []store.TaxLine   { return toStoreTaxes(d.Taxes) }
 
 type claimWeightDTO struct {
 	ItemIdx int     `json:"itemIdx"`

@@ -43,6 +43,51 @@ func TestCreateAndGetClaimSession(t *testing.T) {
 	}
 }
 
+// TestCreateClaimSessionWithLabelledTaxes proves a session created with a labelled tax breakdown
+// (e.g. SGST + CGST) round-trips both lines through GetClaimSession, and that TaxMinor (the scalar
+// ComputeClaimSplit actually reads) is set to their sum so the split math is unaffected by the switch
+// from a scalar to a labelled breakdown.
+func TestCreateClaimSessionWithLabelledTaxes(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, err := st.CreateGroup(ctx, GroupInput{Name: "Trip", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	creator := g.Participants[0].ID
+
+	cs, err := st.CreateClaimSession(ctx, ClaimSessionInput{
+		GroupID: g.ID, CreatorParticipantID: creator, Title: "Dinner", Currency: "₹",
+		Items: []ClaimItem{{Idx: 0, Name: "Biryani", Qty: 2, AmountMinor: 94400}},
+		Taxes: []TaxLine{
+			{Label: "SGST 2.5%", AmountMinor: 2360},
+			{Label: "CGST 2.5%", AmountMinor: 2360},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cs.TaxMinor != 4720 {
+		t.Fatalf("tax minor %d, want sum of labelled taxes 4720", cs.TaxMinor)
+	}
+	if len(cs.Taxes) != 2 {
+		t.Fatalf("taxes %+v", cs.Taxes)
+	}
+
+	got, err := st.GetClaimSession(ctx, cs.ID)
+	if err != nil || got == nil {
+		t.Fatalf("get: %v %v", got, err)
+	}
+	if got.TaxMinor != 4720 {
+		t.Fatalf("got tax minor %d, want 4720", got.TaxMinor)
+	}
+	if len(got.Taxes) != 2 || got.Taxes[0].Label != "SGST 2.5%" || got.Taxes[0].AmountMinor != 2360 ||
+		got.Taxes[1].Label != "CGST 2.5%" || got.Taxes[1].AmountMinor != 2360 {
+		t.Fatalf("got taxes %+v", got.Taxes)
+	}
+}
+
 func TestUpsertClaimsReplacesAndGuards(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
