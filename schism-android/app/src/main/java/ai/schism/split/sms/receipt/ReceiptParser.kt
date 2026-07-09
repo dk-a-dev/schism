@@ -26,11 +26,17 @@ data class ReceiptDraft(
     val verified: Boolean = false,
 )
 
-/** A single purchased line item on a receipt: name, quantity, and its line amount in minor units. */
+/**
+ * A single purchased line item on a receipt: name, quantity, its per-unit price, and its line
+ * amount, all money in minor units. The invariant is `amountMinor == qty * unitPriceMinor` for a
+ * cleanly-read row; [unitPriceMinor] defaults to 0 when only a lump amount is known (callers may
+ * derive it as `amountMinor / qty`).
+ */
 data class ReceiptLineItem(
     val name: String,
     val amountMinor: Long,
     val qty: Int = 1,
+    val unitPriceMinor: Long = 0,
 )
 
 /** Currency symbol/code hints → the symbol we store for display. */
