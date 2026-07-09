@@ -2,8 +2,8 @@ package ai.schism.split.sms.receipt.engine
 
 import kotlin.math.roundToLong
 
-/** Regex for a plain (currency-stripped) numeric token: optional sign, digits, optional decimal. */
-private val PLAIN_NUMBER = Regex("-?\\d+(\\.\\d+)?")
+/** Regex for a plain (currency-stripped) numeric token: optional sign, digits, optional 1-2 digit decimal fraction (money shape). */
+private val PLAIN_NUMBER = Regex("-?\\d+(\\.\\d{1,2})?")
 
 /**
  * Strips currency symbols, thousands separators and whitespace from [raw], leaving only the
@@ -17,9 +17,11 @@ private fun cleanNumeric(raw: String): String =
  * "1,299.00", "₹40.00") into minor units (paise/cents), or `null` when [raw] doesn't look like an
  * amount at all, or looks more like a non-money number than a bill amount.
  *
- * A token with no decimal point whose integer part has 6 or more digits (e.g. a 10-digit phone
- * number) is rejected: real bill amounts of that magnitude are written with a decimal fraction,
- * so a bare 6+ digit integer is far more likely to be a phone number, order ID, or similar.
+ * A token with no decimal point whose integer part has 8 or more digits (phone-number length) is
+ * rejected: this app targets large group/catering bills, so a legit whole-rupee total can run into
+ * 6-7 digits (e.g. "123456" = ₹1,23,456) without a decimal fraction. Only phone-number-length (or
+ * longer) bare integers — 8+ digits — are far more likely to be a phone number, order ID, or
+ * similar than a bill amount, so only those are rejected.
  */
 fun parseMinor(raw: String): Long? {
     val cleaned = cleanNumeric(raw)
@@ -28,7 +30,7 @@ fun parseMinor(raw: String): Long? {
     val dotIndex = cleaned.indexOf('.')
     val hasDecimal = dotIndex >= 0
     val integerDigitCount = (if (hasDecimal) cleaned.substring(0, dotIndex) else cleaned).count { it.isDigit() }
-    if (!hasDecimal && integerDigitCount >= 6) return null
+    if (!hasDecimal && integerDigitCount >= 8) return null
 
     val value = cleaned.toDoubleOrNull() ?: return null
     return (value * 100).roundToLong()
