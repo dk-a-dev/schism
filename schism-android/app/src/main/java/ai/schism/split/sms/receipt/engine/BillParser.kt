@@ -109,14 +109,20 @@ private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: St
 private val LEADING_SERIAL = Regex("""^\d{1,3}[.)]?\s+""")
 
 /**
- * The item name for a row is every cell whose center is LEFT of the numeric (qty/rate/amount)
- * columns, joined left-to-right — NOT a single cell picked from the ITEM column. Wide item names
- * don't share a center with the narrow "Item"/"Description" header, so x-center clustering can split
- * the name region into several columns; reading "everything left of the numbers" is robust to that.
- * A leading serial-number token ("1", "12.") is dropped.
+ * The item name for a row is every cell EXCEPT the qty cell and the money cells sitting in the
+ * rate/amount band — joined left-to-right — NOT a single cell picked from the ITEM column. Wide item
+ * names don't share a center with the narrow "Item"/"Description" header, so x-center clustering can
+ * split the name region into several columns; keeping "everything that isn't a qty/rate/amount cell"
+ * is robust to that AND to a qty-first layout (`Qty | Item | Rate | Amount`), where a purely
+ * positional "left of the numbers" rule would wrongly drop the whole name (it sits right of the
+ * leftmost, qty, column). A name fragment that is itself digit-shaped ("7" of "7 Up") is kept as long
+ * as it sits left of the money band, so it isn't mistaken for a price. A leading serial-number token
+ * ("1", "12.") is dropped.
  */
-private fun nameLeftOfNumbers(row: Row, numericLeft: Int): String =
-    row.cells.filter { it.xCenter < numericLeft }
+private fun nameOfRow(row: Row, qtyCell: Cell?, moneyLeftBound: Int): String =
+    row.cells.filter { cell ->
+        cell !== qtyCell && !(cell.xCenter >= moneyLeftBound && isMoneyToken(cell.text))
+    }
         .sortedBy { it.xLeft }
         .joinToString(" ") { it.text.trim() }
         .trim()
@@ -180,9 +186,9 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
     val qtyCol = columns.firstOrNull { it.role == ColRole.QTY }
     val rateCol = columns.firstOrNull { it.role == ColRole.RATE }
     val amountCol = columns.firstOrNull { it.role == ColRole.AMOUNT }
-    val numericLeft = listOfNotNull(qtyCol, rateCol, amountCol).minOfOrNull { it.xLeft } ?: Int.MAX_VALUE
     // Money band = the rate/amount columns; a qty cell (which may itself be money-shaped) sits to
-    // the left of it and is excluded, so only genuine rate/amount cells feed the invariant.
+    // the left of it and is excluded, so only genuine rate/amount cells feed the invariant. The
+    // item name is everything that isn't the qty cell or a money cell in this band.
     val moneyLeftBound = listOfNotNull(rateCol, amountCol).minOfOrNull { it.xLeft } ?: Int.MAX_VALUE
 
     // Pass 1: split rows into priced anchors and letters-only wrapped-name fragments. A priced row
@@ -195,7 +201,7 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
         val qtyCell = qtyCol?.let { row.cellIn(it) }
         val rateCell = rateCol?.let { row.cellIn(it) }
         val amountCell = amountCol?.let { row.cellIn(it) }
-        val nameText = nameLeftOfNumbers(row, numericLeft)
+        val nameText = nameOfRow(row, qtyCell, moneyLeftBound)
         val hasNumericCell = qtyCell != null || rateCell != null || amountCell != null
 
         if (!hasNumericCell) {
