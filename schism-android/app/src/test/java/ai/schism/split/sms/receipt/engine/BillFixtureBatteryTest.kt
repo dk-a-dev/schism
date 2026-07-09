@@ -1214,4 +1214,153 @@ class BillFixtureBatteryTest {
         assertEquals(21000L, draft.totalMinor)
         assertTrue(draft.verified)
     }
+
+    // ======================================================================================
+    // Group I — Adversarial / stress
+    // ======================================================================================
+
+    /**
+     * Single-item bill where the one item's amount == subtotal == grand total. The lone item must not
+     * be confused with the totals lines, and the bill still verifies.
+     */
+    @Test fun singleItemBill_amountEqualsSubtotal() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                CHAI POINT|60|300|20
+
+                Item|60|140|90
+                Amount|480|560|90
+
+                Cutting Chai|60|230|140
+                15.00|480|560|140
+
+                Sub Total|300|455|200
+                15.00|480|560|200
+
+                Grand Total|60|300|240
+                15.00|480|560|240
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Cutting Chai"), draft.lineItems.map { it.name })
+        assertEquals(1, draft.lineItems.size)
+        assertEquals(1500L, draft.lineItems[0].amountMinor)
+        assertEquals(1500L, draft.subtotalMinor)
+        assertEquals(1500L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * 20+ item bill (built in code). Stress-tests that every item is read, none dropped or merged, and
+     * the whole thing reconciles Σitems == subtotal == grand total.
+     */
+    @Test fun twentyItemBill_allItemsReadAndReconcile() {
+        fun c(t: String, xL: Int, xR: Int, y: Int) = Cell(t, xL, xR, y)
+        val rows = mutableListOf<Row>()
+        rows.add(Row(listOf(c("MEGA CANTEEN", 60, 300, 20))))
+        rows.add(Row(listOf(c("Item", 60, 140, 90), c("Amount", 480, 560, 90))))
+        var y = 140
+        var sumMinor = 0L
+        val names = (1..20).map { "Dish Number $it" }
+        names.forEachIndexed { idx, name ->
+            val rupees = 100 + (idx + 1) // 101..120
+            sumMinor += rupees * 100L
+            rows.add(Row(listOf(c(name, 60, 300, y), c("$rupees.00", 480, 560, y))))
+            y += 40
+        }
+        rows.add(Row(listOf(c("Sub Total", 300, 455, y), c("2210.00", 470, 560, y))))
+        y += 40
+        rows.add(Row(listOf(c("Grand Total", 60, 300, y), c("2210.00", 470, 560, y))))
+
+        val draft = parseBill(rows)!!
+        assertEquals(20, draft.lineItems.size)
+        assertEquals(names, draft.lineItems.map { it.name })
+        assertEquals(221000L, sumMinor)
+        assertEquals(221000L, draft.lineItems.sumOf { it.amountMinor })
+        assertEquals(221000L, draft.subtotalMinor)
+        assertEquals(221000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * A pure-garble OCR row (a separator "----------" and a symbols-only "%#@ ~~") sitting BETWEEN two
+     * real items must be ignored entirely — neither becoming an item nor corrupting a neighbour's
+     * name.
+     */
+    @Test fun garbleRowsBetweenItemsIgnored() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                GARAGE CAFE|60|300|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                Veg Burger|60|230|140
+                1|310|330|140
+                90.00|380|440|140
+                90.00|480|560|140
+
+                ------------|60|300|180
+
+                Cheese Fries|60|240|220
+                2|310|330|220
+                60.00|380|440|220
+                120.00|480|560|220
+
+                %#@ ~~|60|200|260
+
+                Sub Total|300|455|300
+                210.00|480|560|300
+
+                Grand Total|60|300|340
+                210.00|480|560|340
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Veg Burger", "Cheese Fries"), draft.lineItems.map { it.name })
+        assertEquals(listOf(9000L, 12000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(21000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * A phone number sitting in an item row's AMOUNT position (10 digits, no decimal) must be rejected
+     * as money, so that "Helpline" row never becomes a ₹9.9-crore line item — only the real dish does.
+     */
+    @Test fun phoneNumberInAmountPositionRejected() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                TIFFIN SERVICE|60|300|20
+
+                Item|60|140|90
+                Amount|480|560|90
+
+                Veg Meal|60|200|140
+                80.00|480|560|140
+
+                Helpline|60|200|180
+                9940415250|480|560|180
+
+                Sub Total|300|455|240
+                80.00|480|560|240
+
+                Grand Total|60|300|280
+                80.00|480|560|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Veg Meal"), draft.lineItems.map { it.name })
+        assertEquals(1, draft.lineItems.size)
+        assertEquals(8000L, draft.lineItems[0].amountMinor)
+        assertEquals(8000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
 }
