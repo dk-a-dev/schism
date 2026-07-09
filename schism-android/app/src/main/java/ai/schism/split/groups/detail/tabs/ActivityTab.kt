@@ -23,9 +23,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -48,9 +53,17 @@ private enum class Tone { Positive, Neutral, Warn, Negative }
 
 private enum class ActivityFilter(val label: String, val matches: (String) -> Boolean) {
     All("All", { true }),
-    Added("Added", { it == "CREATE_EXPENSE" || it == "EXPENSE_CREATED" }),
-    Updated("Updated", { it == "UPDATE_EXPENSE" || it == "EXPENSE_UPDATED" || it.contains("GROUP") }),
-    Removed("Removed", { it == "DELETE_EXPENSE" || it == "EXPENSE_DELETED" }),
+    Added("Added", {
+        it == "CREATE_EXPENSE" || it == "EXPENSE_CREATED" || it == "GROUP_CREATED" ||
+            it == "MEMBER_ADDED" || it == "CLAIM_SESSION_CREATED"
+    }),
+    Updated("Updated", {
+        it == "UPDATE_EXPENSE" || it == "EXPENSE_UPDATED" || it == "GROUP_UPDATED" || it == "GROUP_RENAMED" ||
+            it == "CLAIM_SUBMITTED" || it == "CLAIM_ITEMS_EDITED" || it == "CLAIM_SESSION_FINALIZED"
+    }),
+    Removed("Removed", {
+        it == "DELETE_EXPENSE" || it == "EXPENSE_DELETED" || it == "MEMBER_REMOVED" || it == "CLAIM_SESSION_CANCELLED"
+    }),
 }
 
 @Composable
@@ -138,6 +151,15 @@ private fun action(type: String): ActionStyle = when (type) {
     "DELETE_EXPENSE", "EXPENSE_DELETED" -> ActionStyle("removed", Icons.Filled.Delete, Tone.Negative)
     "SETTLE", "REIMBURSEMENT" -> ActionStyle("settled up", Icons.Filled.SwapHoriz, Tone.Positive)
     "UPDATE_GROUP", "GROUP_UPDATED" -> ActionStyle("updated the group", Icons.Filled.Group, Tone.Neutral)
+    "GROUP_CREATED" -> ActionStyle("created the group", Icons.Filled.Group, Tone.Positive)
+    "GROUP_RENAMED" -> ActionStyle("renamed the group", Icons.Filled.Edit, Tone.Neutral)
+    "MEMBER_ADDED" -> ActionStyle("added", Icons.Filled.PersonAdd, Tone.Positive)
+    "MEMBER_REMOVED" -> ActionStyle("removed", Icons.Filled.PersonRemove, Tone.Warn)
+    "CLAIM_SESSION_CREATED" -> ActionStyle("started a claim", Icons.AutoMirrored.Filled.ReceiptLong, Tone.Positive)
+    "CLAIM_SUBMITTED" -> ActionStyle("claimed items", Icons.Filled.Checklist, Tone.Neutral)
+    "CLAIM_SESSION_FINALIZED" -> ActionStyle("locked the split", Icons.Filled.Lock, Tone.Positive)
+    "CLAIM_SESSION_CANCELLED" -> ActionStyle("cancelled a claim", Icons.Filled.Cancel, Tone.Warn)
+    "CLAIM_ITEMS_EDITED" -> ActionStyle("edited the bill", Icons.Filled.Edit, Tone.Neutral)
     else -> ActionStyle(
         type.lowercase().replace('_', ' '),
         Icons.AutoMirrored.Filled.ReceiptLong,
