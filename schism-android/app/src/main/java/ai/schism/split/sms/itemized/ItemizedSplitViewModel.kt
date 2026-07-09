@@ -185,12 +185,22 @@ class ItemizedSplitViewModel @Inject constructor(
         }
     }
 
-    /** Edit an item's name/qty/amount in place. */
-    fun updateItem(index: Int, name: String, qty: Int, amountMinor: Long) {
+    /**
+     * Edit an item's name/qty/unit-price in place. The line amount is derived as `qty *
+     * unitPriceMinor` — never typed directly — so the [ReceiptLineItem] invariant (amount == qty *
+     * unitPrice) holds for hand-edited items exactly as it does for scanned ones.
+     */
+    fun updateItem(index: Int, name: String, qty: Int, unitPriceMinor: Long) {
         _state.update { s ->
             if (index !in s.items.indices) return@update s
             val items = s.items.toMutableList()
-            items[index] = ReceiptLineItem(name = name.trim().take(60), amountMinor = amountMinor, qty = qty.coerceIn(1, 99))
+            val q = qty.coerceIn(1, 99)
+            items[index] = ReceiptLineItem(
+                name = name.trim().take(60),
+                amountMinor = unitPriceMinor * q,
+                qty = q,
+                unitPriceMinor = unitPriceMinor,
+            )
             s.copy(items = items, error = null)
         }
     }
@@ -207,10 +217,20 @@ class ItemizedSplitViewModel @Inject constructor(
         }
     }
 
-    /** Add a missing item by hand; everyone shares it 1× by default. */
-    fun addItem(name: String, qty: Int, amountMinor: Long) {
+    /**
+     * Add a missing item by hand (name + qty + unit price, amount derived as `qty * unitPrice`);
+     * everyone shares it 1× by default. This is also how a fully manual (no-scan) bill is built up
+     * from an empty [ItemizedSplitUiState.items] list.
+     */
+    fun addItem(name: String, qty: Int, unitPriceMinor: Long) {
         _state.update { s ->
-            val items = s.items + ReceiptLineItem(name.trim().take(60), amountMinor, qty.coerceIn(1, 99))
+            val q = qty.coerceIn(1, 99)
+            val items = s.items + ReceiptLineItem(
+                name = name.trim().take(60),
+                amountMinor = unitPriceMinor * q,
+                qty = q,
+                unitPriceMinor = unitPriceMinor,
+            )
             val everyone = s.selectedGroup?.participants?.associate { it.id to 1L } ?: emptyMap()
             s.copy(items = items, assignments = s.assignments + (items.lastIndex to everyone), error = null)
         }

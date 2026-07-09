@@ -12,6 +12,7 @@ import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.Participant
 import ai.schism.split.sms.receipt.ReceiptLineItem
+import ai.schism.split.sms.receipt.engine.parseMinor
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -155,7 +156,9 @@ fun ItemizedSplitScreen(
                         }
                     }
 
-                    if (!state.parsedByAi) {
+                    // Only relevant to a SCANNED bill (a manual/hand-built one, state.draft == null,
+                    // never went through OCR/AI at all, so there's no "couldn't read this" to tip about).
+                    if (state.draft != null && !state.parsedByAi) {
                         AiTipCard(aiEnabled = state.aiActive)
                     }
 
@@ -177,10 +180,21 @@ fun ItemizedSplitScreen(
                                         shares = state.assignments[index].orEmpty(),
                                         onAdjust = { pid, d -> viewModel.adjustShare(index, pid, d) },
                                         onSetShare = { pid, value -> viewModel.setShare(index, pid, value) },
-                                        onEdit = { name, qty, amount -> viewModel.updateItem(index, name, qty, amount) },
+                                        onEdit = { name, qty, unitPriceMinor ->
+                                            viewModel.updateItem(index, name, qty, unitPriceMinor)
+                                        },
                                         onRemove = { viewModel.removeItem(index) },
                                     )
                                 }
+                            }
+                            if (state.items.isEmpty()) {
+                                Text(
+                                    // No scan happened at all (manual entry) vs. a scan that read nothing.
+                                    if (state.draft == null) "Add items to split — tap \"Add item\" below."
+                                    else "Nothing could be read off this bill — add the dishes by hand below.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                             SchismSecondaryButton(onClick = { addingItem = true }, modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Filled.Add, contentDescription = null)
@@ -196,13 +210,6 @@ fun ItemizedSplitScreen(
                                 ) {
                                     Text(if (state.creatingClaimSession) "Creating…" else "Let everyone claim (alpha)")
                                 }
-                            }
-                            if (state.items.isEmpty()) {
-                                Text(
-                                    "Nothing could be read off this bill — add the dishes by hand above.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
                             }
                             PerPersonTotals(
                                 group = group,
@@ -256,9 +263,10 @@ fun ItemizedSplitScreen(
         ItemDialog(
             title = "Add item",
             initial = ReceiptLineItem("", 0L, 1),
+            currency = state.draft?.currency ?: "₹",
             onDismiss = { addingItem = false },
-            onSave = { name, qty, amount ->
-                viewModel.addItem(name, qty, amount)
+            onSave = { name, qty, unitPriceMinor ->
+                viewModel.addItem(name, qty, unitPriceMinor)
                 addingItem = false
             },
         )
@@ -392,9 +400,10 @@ private fun ItemCard(
         ItemDialog(
             title = "Edit item",
             initial = item,
+            currency = currency,
             onDismiss = { editing = false },
-            onSave = { name, qty, amount ->
-                onEdit(name, qty, amount)
+            onSave = { name, qty, unitPriceMinor ->
+                onEdit(name, qty, unitPriceMinor)
                 editing = false
             },
         )
@@ -445,22 +454,36 @@ private fun ShareEntryDialog(
     )
 }
 
-/** Add/edit an item: name, quantity, and the line's total amount. */
+/**
+ * Add/edit an item: name, quantity, and its PER-UNIT price — the line amount is derived as
+ * `qty * unitPrice` (never typed directly), keeping the [ReceiptLineItem] invariant intact so
+ * Feature 2's "qty × unit price = amount" card display is accurate for hand-entered items too.
+ * [onSave] reports (name, qty, unitPriceMinor); the caller computes/stores the amount.
+ */
 @Composable
 private fun ItemDialog(
     title: String,
     initial: ReceiptLineItem,
+    currency: String,
     onDismiss: () -> Unit,
     onSave: (String, Int, Long) -> Unit,
 ) {
     var name by remember { mutableStateOf(initial.name) }
     var qty by remember { mutableStateOf(if (initial.qty > 0) initial.qty.toString() else "1") }
-    var amount by remember {
-        mutableStateOf(if (initial.amountMinor > 0) String.format("%.2f", initial.amountMinor / 100.0) else "")
+    // Prefer the item's own unit price; fall back to deriving one from its lump amount (e.g. an
+    // older scanned item that never had unitPriceMinor set) so editing doesn't blank the field.
+    val initialUnitMinor = when {
+        initial.unitPriceMinor > 0 -> initial.unitPriceMinor
+        initial.qty > 0 && initial.amountMinor > 0 -> initial.amountMinor / initial.qty
+        else -> 0L
+    }
+    var unitPrice by remember {
+        mutableStateOf(if (initialUnitMinor > 0) String.format("%.2f", initialUnitMinor / 100.0) else "")
     }
     val qtyInt = qty.trim().toIntOrNull()
-    val amountMinor = amount.trim().toDoubleOrNull()?.let { (it * 100).toLong() }
-    val valid = name.isNotBlank() && qtyInt != null && qtyInt > 0 && amountMinor != null && amountMinor > 0
+    val unitPriceMinor = parseMinor(unitPrice)
+    val amountMinor = if (qtyInt != null && unitPriceMinor != null) qtyInt * unitPriceMinor else null
+    val valid = name.isNotBlank() && qtyInt != null && qtyInt > 0 && unitPriceMinor != null && unitPriceMinor > 0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -491,19 +514,26 @@ private fun ItemDialog(
                         ) { Icon(Icons.Filled.AddCircleOutline, contentDescription = "More") }
                     }
                     OutlinedTextField(
-                        value = amount,
-                        onValueChange = { amount = it },
-                        label = { Text("Line amount") },
+                        value = unitPrice,
+                        onValueChange = { unitPrice = it },
+                        label = { Text("Unit price") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(2f),
+                    )
+                }
+                if (amountMinor != null && amountMinor > 0) {
+                    Text(
+                        "Line total: ${formatMinor(amountMinor, currency)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { if (valid) onSave(name, qtyInt!!, amountMinor!!) },
+                onClick = { if (valid) onSave(name, qtyInt!!, unitPriceMinor!!) },
                 enabled = valid,
             ) { Text("Save") }
         },

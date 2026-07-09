@@ -61,6 +61,11 @@ class BillScanViewModel @Inject constructor(
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
 
+    /** Drops any leftover scanned draft — used before a "start with an empty bill" manual entry. */
+    fun clearPending() {
+        pending.draft = null
+    }
+
     fun scan(uri: Uri, onItemized: () -> Unit) {
         viewModelScope.launch {
             _scanning.value = true
@@ -106,16 +111,17 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 /**
  * Remembers a "add a bill" trigger: invoking the returned lambda offers a choice between the ML Kit
- * Document Scanner (auto crop/deskew/denoise — a much cleaner OCR read) and the plain gallery/Photo
- * Picker. Either way, once an image is chosen it is OCR'd + parsed (progress dialog shown) and
- * [onItemized] navigates to the itemised split screen.
+ * Document Scanner (auto crop/deskew/denoise — a much cleaner OCR read), the plain gallery/Photo
+ * Picker, and entering items by hand with no photo at all. Either scan path OCRs + parses the image
+ * (progress dialog shown) and calls [onItemized]; picking "Enter manually" clears any leftover
+ * scanned draft and calls [onManualEntry] directly, with no picker/OCR involved.
  *
  * The document scanner needs Google Play services and the host Activity; if either is unavailable
  * (no Activity in [LocalContext], or the scanner fails to launch) the flow degrades gracefully to the
  * plain picker instead of dead-ending.
  */
 @Composable
-fun rememberBillScan(onItemized: () -> Unit): () -> Unit {
+fun rememberBillScan(onItemized: () -> Unit, onManualEntry: () -> Unit = onItemized): () -> Unit {
     val viewModel: BillScanViewModel = hiltViewModel()
     val scanning by viewModel.scanning.collectAsState()
     val context = LocalContext.current
@@ -166,6 +172,7 @@ fun rememberBillScan(onItemized: () -> Unit): () -> Unit {
             onDismiss = { showChooser = false },
             onScan = { showChooser = false; launchDocumentScanner() },
             onUpload = { showChooser = false; launchGallery() },
+            onManual = { showChooser = false; viewModel.clearPending(); onManualEntry() },
         )
     }
     if (scanning) {
@@ -174,12 +181,16 @@ fun rememberBillScan(onItemized: () -> Unit): () -> Unit {
     return { showChooser = true }
 }
 
-/** Lets the user pick how to bring in a bill: camera scan (cleaner OCR) or an existing gallery photo. */
+/**
+ * Lets the user pick how to bring in a bill: camera scan (cleaner OCR), an existing gallery photo,
+ * or skip the photo entirely and build the bill by hand on the itemised split screen.
+ */
 @Composable
 private fun BillEntryChooserDialog(
     onDismiss: () -> Unit,
     onScan: () -> Unit,
     onUpload: () -> Unit,
+    onManual: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -188,6 +199,7 @@ private fun BillEntryChooserDialog(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onScan, modifier = Modifier.fillMaxWidth()) { Text("Scan with camera") }
                 TextButton(onClick = onUpload, modifier = Modifier.fillMaxWidth()) { Text("Upload from gallery") }
+                TextButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) { Text("Enter items manually") }
             }
         },
         confirmButton = {},

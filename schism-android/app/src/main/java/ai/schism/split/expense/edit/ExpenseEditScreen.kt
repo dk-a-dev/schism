@@ -106,10 +106,14 @@ fun ExpenseEditScreen(
     var scannedDraft by remember {
         mutableStateOf<ai.schism.split.sms.receipt.ReceiptDraft?>(null)
     }
-    val scanBill = ai.schism.split.sms.itemized.rememberBillScan(onItemized = {
-        // rememberBillScan stores the draft in PendingReceipt; surface the choice dialog.
-        scannedDraft = viewModel.peekPendingReceipt()
-    })
+    val scanBill = ai.schism.split.sms.itemized.rememberBillScan(
+        onItemized = {
+            // rememberBillScan stores the draft in PendingReceipt; surface the choice dialog.
+            scannedDraft = viewModel.peekPendingReceipt()
+        },
+        // No scanned draft to choose "total vs. split" from — go straight to the itemised screen.
+        onManualEntry = onScanItemized,
+    )
     scannedDraft?.let { draft ->
         AlertDialog(
             onDismissRequest = { scannedDraft = null },
