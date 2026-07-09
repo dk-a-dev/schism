@@ -105,6 +105,15 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    /**
+     * Clears just the bearer token — used when the backend reports our session is no longer valid
+     * (a 401 on a request that carried it), so the device stops sending a dead token. The rest of the
+     * device identity (name/email/phone/userId) is left alone; signing back in mints a fresh token.
+     */
+    suspend fun clearAuthToken() {
+        ds.edit { it[KEY_TOKEN] = "" }
+    }
+
     suspend fun addKnownGroup(id: String) {
         ds.edit { prefs ->
             prefs[KEY_GROUPS] = (prefs[KEY_GROUPS] ?: emptySet()) + id

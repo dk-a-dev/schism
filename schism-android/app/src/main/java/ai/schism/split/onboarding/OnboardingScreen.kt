@@ -38,17 +38,23 @@ import androidx.hilt.navigation.compose.hiltViewModel
  * First-run experience: a swipeable walkthrough of what Schism does, then account auth (create
  * account or log in with email + password). Session token is stored on success and the app's root
  * gate switches to the main app.
+ *
+ * [startAtLogin] and [message] let the root gate reuse this same screen for a forced re-auth (e.g.
+ * after the backend reports our session ended): the walkthrough is skipped, the form defaults to
+ * "Log in" rather than "Create account," and [message] is shown above the form.
  */
 @Composable
 fun OnboardingScreen(
     onDone: () -> Unit,
+    startAtLogin: Boolean = false,
+    message: String? = null,
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
-    var showAuth by rememberSaveable { mutableStateOf(false) }
+    var showAuth by rememberSaveable { mutableStateOf(startAtLogin) }
     if (!showAuth) {
         Walkthrough(onFinish = { showAuth = true })
     } else {
-        AuthForm(onDone = onDone, viewModel = viewModel)
+        AuthForm(onDone = onDone, viewModel = viewModel, initialRegister = !startAtLogin, message = message)
     }
 }
 
@@ -56,9 +62,11 @@ fun OnboardingScreen(
 private fun AuthForm(
     onDone: () -> Unit,
     viewModel: OnboardingViewModel,
+    initialRegister: Boolean = true,
+    message: String? = null,
 ) {
     val state by viewModel.state.collectAsState()
-    var register by rememberSaveable { mutableStateOf(true) }
+    var register by rememberSaveable { mutableStateOf(initialRegister) }
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }
@@ -93,6 +101,10 @@ private fun AuthForm(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            message?.let {
+                Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium)
+            }
 
             if (register) {
                 OutlinedTextField(
