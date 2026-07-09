@@ -6,10 +6,12 @@ enum class ColRole { ITEM, QTY, RATE, AMOUNT, OTHER }
 /** A horizontal band on the page, spanning [xLeft, xRight], assigned a role. */
 data class Column(val xLeft: Int, val xRight: Int, val role: ColRole)
 
-private val ITEM_KEYWORDS = Regex("item|description|particular", RegexOption.IGNORE_CASE)
-private val QTY_KEYWORDS = Regex("qty|quantity", RegexOption.IGNORE_CASE)
-private val RATE_KEYWORDS = Regex("rate|price|mrp", RegexOption.IGNORE_CASE)
-private val AMOUNT_KEYWORDS = Regex("amount|amt|total", RegexOption.IGNORE_CASE)
+// Word-boundary anchored so e.g. RATE_KEYWORDS doesn't match "Corporate", or ITEM_KEYWORDS
+// match a plural like "Particulars" (which is a legitimate near-miss, not a keyword hit).
+private val ITEM_KEYWORDS = Regex("\\b(item|description|particular)\\b", RegexOption.IGNORE_CASE)
+private val QTY_KEYWORDS = Regex("\\b(qty|quantity)\\b", RegexOption.IGNORE_CASE)
+private val RATE_KEYWORDS = Regex("\\b(rate|price|mrp)\\b", RegexOption.IGNORE_CASE)
+private val AMOUNT_KEYWORDS = Regex("\\b(amount|amt|total)\\b", RegexOption.IGNORE_CASE)
 
 private fun keywordRole(text: String): ColRole? {
     val t = text.trim()
@@ -98,7 +100,19 @@ fun detectColumns(rows: List<Row>): List<Column> {
     // 2. Structural fallback for any column still unassigned — either because no header row was
     // found at all, or because its header cell (e.g. a bare "Name") didn't match a keyword class.
     // Classification uses only non-header rows so header labels' own letters don't skew it.
-    val dataRows = if (headerRow != null) rows.filter { it !== headerRow } else rows
+    //
+    // A real header row can also go undetected by keywordRole entirely (e.g. "Particulars" /
+    // "Nos" / "Value" — near-misses that don't hit the class threshold). Left in dataRows, its
+    // label cells corrupt the majority-vote tallies below (e.g. a non-numeric "Nos" breaks the
+    // strict "all cells are small ints" QTY check). Detect that case structurally: the first row
+    // is a label row, not a data row, when none of its cells look numeric — a genuine item row
+    // always carries at least one numeric cell (qty, rate or amount), so this can't misfire on a
+    // legit item.
+    val firstRow = rows.firstOrNull()
+    val structuralHeaderRow = firstRow?.takeIf {
+        it !== headerRow && it.cells.isNotEmpty() && it.cells.none { cell -> isNumeric(cell.text) }
+    }
+    val dataRows = rows.filter { it !== headerRow && it !== structuralHeaderRow }
     val dataRowCells = dataRows.flatMap { it.cells }
     val dataCells = clusters.map { cluster -> cluster.cells.filter { cell -> dataRowCells.any { it === cell } } }
 
@@ -127,8 +141,20 @@ fun detectColumns(rows: List<Row>): List<Column> {
     val remainingNumericIdx = unassigned().filter { i ->
         dataCells[i].isNotEmpty() && dataCells[i].count { isNumeric(it.text) } * 2 >= dataCells[i].size
     }
+    // Column content width (not the neighbour-padded Column bounds): the actual span of a
+    // column's own cell text, used to tell a QTY column from a whole-rupee RATE column below.
+    fun contentWidth(i: Int): Int {
+        val cells = dataCells[i]
+        return if (cells.isEmpty()) 0 else cells.maxOf { it.xRight } - cells.minOf { it.xLeft }
+    }
     if (roles.none { it == ColRole.QTY }) {
-        val qtyIdx = remainingNumericIdx.firstOrNull { i -> dataCells[i].all { isSmallInt(it.text) } }
+        // A whole-rupee RATE (e.g. "50") is also a small int, so a headerless RATE-before-QTY
+        // layout can offer more than one small-int candidate. Quantities are 1–2 chars while
+        // rates/amounts run wider, so among small-int candidates the narrowest one is QTY — not
+        // simply the leftmost, which would mislabel a leading whole-number RATE as QTY. Ties
+        // (including the common single-candidate case) resolve to the leftmost, as before.
+        val smallIntIdx = remainingNumericIdx.filter { i -> dataCells[i].all { isSmallInt(it.text) } }
+        val qtyIdx = smallIntIdx.minByOrNull { i -> contentWidth(i) }
         if (qtyIdx != null) roles[qtyIdx] = ColRole.QTY
     }
     if (roles.none { it == ColRole.RATE }) {

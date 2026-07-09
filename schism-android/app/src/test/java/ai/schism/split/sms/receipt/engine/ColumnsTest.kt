@@ -33,4 +33,49 @@ class ColumnsTest {
         assertEquals("39.00", r.cellIn(byRole.getValue(ColRole.RATE))!!.text)
         assertEquals("234.00", r.cellIn(byRole.getValue(ColRole.AMOUNT))!!.text)
     }
+
+    /**
+     * Headerless layout, ITEM | RATE | QTY | AMOUNT, where RATE is a whole rupee amount ("50")
+     * that — like QTY's "1" — passes isSmallInt. The structural fallback must not pick the
+     * leftmost small-int column (RATE) as QTY: the narrower column (QTY's "1") wins.
+     */
+    @Test fun headerlessWholeNumberRateDoesNotSwapQtyRate() {
+        val rows = listOf(
+            Row(
+                listOf(
+                    c("GHEE PONGAL", 20, 160, 80),
+                    c("50", 200, 260, 80),
+                    c("1", 320, 340, 80),
+                    c("50.00", 420, 490, 80),
+                ),
+            ),
+        )
+        val byRole = detectColumns(rows).associateBy { it.role }
+        val r = rows[0]
+        assertEquals("1", r.cellIn(byRole.getValue(ColRole.QTY))!!.text)
+        assertEquals("50", r.cellIn(byRole.getValue(ColRole.RATE))!!.text)
+    }
+
+    /**
+     * A first row of plain labels ("Particulars"/"Nos"/"Value") that misses the header keyword
+     * threshold must still be excluded from the structural fallback's data rows — otherwise "Nos"
+     * (non-numeric) breaks the QTY column's "all cells are small ints" check and that column ends
+     * up unassigned (OTHER) instead of QTY.
+     */
+    @Test fun unrecognizedHeaderRowExcludedFromFallback() {
+        val rows = listOf(
+            Row(listOf(c("Particulars", 20, 150, 40), c("Nos", 300, 340, 40), c("Value", 420, 490, 40))),
+            Row(listOf(c("IDLI", 20, 100, 80), c("2", 310, 330, 80), c("40.00", 420, 480, 80))),
+            Row(listOf(c("DOSA", 20, 110, 120), c("1", 312, 328, 120), c("60.00", 420, 480, 120))),
+        )
+        val byRole = detectColumns(rows).associateBy { it.role }
+        val idli = rows[1]
+        val dosa = rows[2]
+        assertEquals("IDLI", idli.cellIn(byRole.getValue(ColRole.ITEM))!!.text)
+        assertEquals("2", idli.cellIn(byRole.getValue(ColRole.QTY))!!.text)
+        assertEquals("40.00", idli.cellIn(byRole.getValue(ColRole.AMOUNT))!!.text)
+        assertEquals("DOSA", dosa.cellIn(byRole.getValue(ColRole.ITEM))!!.text)
+        assertEquals("1", dosa.cellIn(byRole.getValue(ColRole.QTY))!!.text)
+        assertEquals("60.00", dosa.cellIn(byRole.getValue(ColRole.AMOUNT))!!.text)
+    }
 }
