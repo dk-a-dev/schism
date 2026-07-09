@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS claims;
+DROP TABLE IF EXISTS claim_sessions;
