@@ -88,6 +88,8 @@ fun ExpenseDetailSheet(
 
             // ── Items (only for a receipt split by items) ─────────
             val items = parseItemBreakdown(expense.notes)
+            val taxes = parseTaxBreakdown(expense.notes)
+            val isStructuredNotes = expense.notes.startsWith("Split by items")
             if (expense.splitMode == "BY_AMOUNT" && items.isNotEmpty()) {
                 Spacer(Modifier.height(24.dp))
                 SectionLabel("Items")
@@ -104,7 +106,26 @@ fun ExpenseDetailSheet(
                         }
                     }
                 }
-            } else if (expense.notes.isNotBlank()) {
+            }
+
+            // ── Taxes (labelled SGST/CGST/etc breakdown, if the notes carry one) ──
+            if (taxes.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                SectionLabel("Taxes")
+                Spacer(Modifier.height(8.dp))
+                taxes.forEach { tax ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(tax.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(
+                            formatMinor(tax.amountMinor, currency),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+
+            if (!isStructuredNotes && expense.notes.isNotBlank()) {
                 Spacer(Modifier.height(24.dp))
                 SectionLabel("Notes")
                 Spacer(Modifier.height(8.dp))
@@ -134,23 +155,53 @@ private fun SectionLabel(text: String) {
 }
 
 private data class SplitItem(val name: String, val sharedBy: String)
+private data class NoteTaxLine(val label: String, val amountMinor: Long)
 
 /**
- * Parses the "Split by items:" note the itemised flow writes into an expense into structured rows.
- * Each source line looks like `• <item name> — <PersonA×2, PersonB>`; the leading "Split by items:"
- * caption is dropped (the section already labels it). Returns empty when the note isn't a breakdown.
+ * Parses the "Split by items:" note the itemised flow (and claim-session finalize) writes into an
+ * expense into structured rows. Each source line looks like `• <item name> — <PersonA×2, PersonB>`;
+ * the leading "Split by items:" caption is dropped (the section already labels it). Item lines stop
+ * at a "Taxes:" line, if any (see [parseTaxBreakdown]), so a labelled tax breakdown never gets
+ * mistaken for an item row. Returns empty when the note isn't a breakdown.
  */
 private fun parseItemBreakdown(notes: String): List<SplitItem> {
     if (!notes.startsWith("Split by items")) return emptyList()
-    return notes.lineSequence()
-        .map { it.trim() }
+    return itemSectionLines(notes)
         .filter { it.startsWith("•") }
         .mapNotNull { line ->
             val body = line.removePrefix("•").trim()
             val dash = body.lastIndexOf(" — ")
             if (dash < 0) SplitItem(body, "") else SplitItem(body.substring(0, dash).trim(), body.substring(dash + 3).trim())
         }
-        .toList()
+}
+
+/**
+ * Parses the "Taxes:" section a claim-session finalize appends after the item breakdown — one
+ * `• <label>: <amountMinor>` line per labelled tax (e.g. `• SGST 2.5%: 2360`), amounts kept as raw
+ * minor-unit integers so the caller formats them with formatMinor. Returns empty when the note has no
+ * "Taxes:" section.
+ */
+private fun parseTaxBreakdown(notes: String): List<NoteTaxLine> {
+    if (!notes.startsWith("Split by items")) return emptyList()
+    val lines = notes.lineSequence().map { it.trim() }.toList()
+    val taxIdx = lines.indexOf("Taxes:")
+    if (taxIdx < 0) return emptyList()
+    return lines.drop(taxIdx + 1)
+        .filter { it.startsWith("•") }
+        .mapNotNull { line ->
+            val body = line.removePrefix("•").trim()
+            val colon = body.lastIndexOf(":")
+            if (colon < 0) return@mapNotNull null
+            val amount = body.substring(colon + 1).trim().toLongOrNull() ?: return@mapNotNull null
+            NoteTaxLine(body.substring(0, colon).trim(), amount)
+        }
+}
+
+/** The note's lines up to (but excluding) a "Taxes:" marker line, if any — the item-breakdown section. */
+private fun itemSectionLines(notes: String): List<String> {
+    val lines = notes.lineSequence().map { it.trim() }.toList()
+    val taxIdx = lines.indexOf("Taxes:")
+    return if (taxIdx < 0) lines else lines.subList(0, taxIdx)
 }
 
 /** "2026-07-09" → "9 Jul 2026"; falls back to the raw date-only string if it can't be parsed. */

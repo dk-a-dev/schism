@@ -181,6 +181,12 @@ func TestFinalizeClaimSessionBuildsExpenseAndIsIdempotent(t *testing.T) {
 	if byPid[dev] != 22000 || byPid[ru] != 11000 {
 		t.Fatalf("paidFor %+v", byPid)
 	}
+	// The expense's notes carry a per-item "who claimed it" breakdown in the exact format
+	// ExpenseDetailSheet parses: a "Split by items:" caption followed by "• <item> — <who>" lines.
+	wantNotes := "Split by items:\n• Dish ×3 — Dev×2, Ru"
+	if e.Notes != wantNotes {
+		t.Fatalf("notes = %q, want %q", e.Notes, wantNotes)
+	}
 
 	got, err := st.GetClaimSession(ctx, cs.ID)
 	if err != nil || got.Status != "finalized" || got.ExpenseID == nil || *got.ExpenseID != eid {
@@ -191,6 +197,44 @@ func TestFinalizeClaimSessionBuildsExpenseAndIsIdempotent(t *testing.T) {
 	eid2, err := st.FinalizeClaimSession(ctx, cs.ID, 999, nil)
 	if err != nil || eid2 != eid {
 		t.Fatalf("second finalize: eid=%q err=%v", eid2, err)
+	}
+}
+
+// TestFinalizeClaimSessionNotesIncludeLabelledTaxLines proves the finalized expense's notes append
+// each labelled tax line (e.g. SGST + CGST) below the item breakdown, as raw minor-unit integers for
+// the client to format with formatMinor.
+func TestFinalizeClaimSessionNotesIncludeLabelledTaxLines(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	dev := g.Participants[0].ID
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: dev, Title: "Dinner",
+		Items: []ClaimItem{{Idx: 0, Name: "Biryani", Qty: 1, AmountMinor: 94400}},
+		Taxes: []TaxLine{
+			{Label: "SGST 2.5%", AmountMinor: 2360},
+			{Label: "CGST 2.5%", AmountMinor: 2360},
+		}})
+	if err := st.UpsertClaims(ctx, cs.ID, dev, 1, map[int]float64{0: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	eid, err := st.FinalizeClaimSession(ctx, cs.ID, 1, nil)
+	if err != nil || eid == "" {
+		t.Fatalf("finalize: eid=%q err=%v", eid, err)
+	}
+	e, err := st.GetExpense(ctx, g.ID, eid)
+	if err != nil || e == nil {
+		t.Fatalf("get expense: %v %v", e, err)
+	}
+	wantNotes := "Split by items:\n• Biryani — Dev\nTaxes:\n• SGST 2.5%: 2360\n• CGST 2.5%: 2360"
+	if e.Notes != wantNotes {
+		t.Fatalf("notes = %q, want %q", e.Notes, wantNotes)
+	}
+	// The scalar tax_minor (sum of the labelled lines) still drives the split: 94400 + 4720 = 99120,
+	// all charged to dev (sole claimant).
+	if e.Amount != 99120 {
+		t.Fatalf("amount %d, want 99120", e.Amount)
 	}
 }
 

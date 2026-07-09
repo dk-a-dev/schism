@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -132,34 +134,9 @@ func ComputeClaimSplit(items []ClaimItem, claims []Claim, tax, fees, discount, r
 	owed := map[string]int64{}
 
 	for _, item := range items {
-		weights := claimsByItem[item.Idx]
-		hasClaims := false
-		for _, w := range weights {
-			if w > 0 {
-				hasClaims = true
-				break
-			}
-		}
-		if !hasClaims {
-			res, ok := resByItem[item.Idx]
-			if !ok {
-				continue // nobody claimed it and nothing resolved it
-			}
-			weights = map[string]float64{}
-			switch res.Mode {
-			case "assign":
-				if res.ParticipantID != "" {
-					weights[res.ParticipantID] = 1
-				}
-			case "split":
-				for _, pid := range allParticipantIDs {
-					weights[pid] = 1
-				}
-			case "cover":
-				if creatorID != "" {
-					weights[creatorID] = 1
-				}
-			}
+		weights := resolvedWeightsForItem(item.Idx, claimsByItem, resByItem, allParticipantIDs, creatorID)
+		if weights == nil {
+			continue // nobody claimed it and nothing resolved it
 		}
 
 		scaled := map[string]int64{}
@@ -229,6 +206,126 @@ func ComputeClaimSplit(items []ClaimItem, claims []Claim, tax, fees, discount, r
 	}
 
 	return owed
+}
+
+// resolvedWeightsForItem returns one item's participantID -> weight map: the actual claims if anyone
+// claimed it (weight > 0 for at least one participant), else a synthesized weight of 1 for whoever its
+// UnclaimedResolution (if any) assigns it to. Returns nil when nobody claimed it and nothing resolved
+// it — the caller should skip the item entirely. Shared by ComputeClaimSplit and the finalize notes
+// builder so "who this item's amount actually charged" and "who the notes say claimed it" never
+// disagree.
+func resolvedWeightsForItem(itemIdx int, claimsByItem map[int]map[string]float64, resByItem map[int]UnclaimedResolution,
+	allParticipantIDs []string, creatorID string) map[string]float64 {
+	weights := claimsByItem[itemIdx]
+	hasClaims := false
+	for _, w := range weights {
+		if w > 0 {
+			hasClaims = true
+			break
+		}
+	}
+	if hasClaims {
+		return weights
+	}
+	res, ok := resByItem[itemIdx]
+	if !ok {
+		return nil
+	}
+	out := map[string]float64{}
+	switch res.Mode {
+	case "assign":
+		if res.ParticipantID != "" {
+			out[res.ParticipantID] = 1
+		}
+	case "split":
+		for _, pid := range allParticipantIDs {
+			out[pid] = 1
+		}
+	case "cover":
+		if creatorID != "" {
+			out[creatorID] = 1
+		}
+	}
+	return out
+}
+
+// buildFinalizeNotes renders the finalized expense's notes: a "Split by items:" breakdown (matching
+// the format ai.schism.split.groups.detail.ExpenseDetailSheet already parses — one "• <item> — <who>"
+// line per item that resolved to someone) followed by a "Taxes:" section with one "• <label>:
+// <amountMinor>" line per labelled tax line (kept as a raw minor-unit integer, not pre-formatted
+// currency text, so the client formats it with formatMinor at display time). Returns "" when there's
+// nothing to show (no resolved items and no taxes).
+func buildFinalizeNotes(items []ClaimItem, claims []Claim, resolutions []UnclaimedResolution, taxes []TaxLine,
+	participantNames map[string]string, allParticipantIDs []string, creatorID string) string {
+	claimsByItem := map[int]map[string]float64{}
+	for _, c := range claims {
+		if claimsByItem[c.ItemIdx] == nil {
+			claimsByItem[c.ItemIdx] = map[string]float64{}
+		}
+		claimsByItem[c.ItemIdx][c.ParticipantID] += c.Weight
+	}
+	resByItem := map[int]UnclaimedResolution{}
+	for _, r := range resolutions {
+		resByItem[r.ItemIdx] = r
+	}
+
+	var itemLines []string
+	for _, item := range items {
+		weights := resolvedWeightsForItem(item.Idx, claimsByItem, resByItem, allParticipantIDs, creatorID)
+		pids := make([]string, 0, len(weights))
+		for pid, w := range weights {
+			if w > 0 {
+				pids = append(pids, pid)
+			}
+		}
+		if len(pids) == 0 {
+			continue
+		}
+		// Sort by display name (tie-broken by participant id for determinism) rather than raw id, so
+		// "who claimed it" reads in a natural order instead of scrambled by opaque id ordering.
+		sort.Slice(pids, func(i, j int) bool {
+			ni, nj := participantNames[pids[i]], participantNames[pids[j]]
+			if ni != nj {
+				return ni < nj
+			}
+			return pids[i] < pids[j]
+		})
+		who := make([]string, 0, len(pids))
+		for _, pid := range pids {
+			name := participantNames[pid]
+			if name == "" {
+				name = pid
+			}
+			w := weights[pid]
+			if w == math.Trunc(w) && w > 1 {
+				who = append(who, fmt.Sprintf("%s×%d", name, int64(w)))
+			} else {
+				who = append(who, name)
+			}
+		}
+		label := item.Name
+		if item.Qty > 1 {
+			label = fmt.Sprintf("%s ×%d", item.Name, item.Qty)
+		}
+		itemLines = append(itemLines, fmt.Sprintf("• %s — %s", label, strings.Join(who, ", ")))
+	}
+
+	if len(itemLines) == 0 && len(taxes) == 0 {
+		return ""
+	}
+
+	// Always lead with "Split by items:" (even with zero item lines) so the notes consistently start
+	// with the caption ExpenseDetailSheet's parser gates on, whether or not there happen to be any
+	// resolved items — the taxes-only case still needs that leading anchor.
+	lines := []string{"Split by items:"}
+	lines = append(lines, itemLines...)
+	if len(taxes) > 0 {
+		lines = append(lines, "Taxes:")
+		for _, t := range taxes {
+			lines = append(lines, fmt.Sprintf("• %s: %d", t.Label, t.AmountMinor))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // unresolvedItemIdx reports whether any item has zero total claimed weight and no UnclaimedResolution
@@ -510,14 +607,14 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 	var status, groupID, creatorID, title string
 	var version int
 	var tax, fees, discount, roundoff int64
-	var itemsJSON []byte
+	var itemsJSON, taxesJSON []byte
 	var existingExpenseID *string
 	err = tx.QueryRow(ctx,
 		`SELECT status, group_id, creator_participant_id, title, items,
-		        tax_minor, fees_minor, discount_minor, roundoff_minor, version, expense_id
+		        tax_minor, fees_minor, discount_minor, roundoff_minor, version, expense_id, taxes
 		 FROM claim_sessions WHERE id=$1 FOR UPDATE`, sid).
 		Scan(&status, &groupID, &creatorID, &title, &itemsJSON,
-			&tax, &fees, &discount, &roundoff, &version, &existingExpenseID)
+			&tax, &fees, &discount, &roundoff, &version, &existingExpenseID, &taxesJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrClaimLocked
 	}
@@ -540,6 +637,10 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 
 	var items []ClaimItem
 	if err := json.Unmarshal(itemsJSON, &items); err != nil {
+		return "", err
+	}
+	var taxes []TaxLine
+	if err := json.Unmarshal(taxesJSON, &taxes); err != nil {
 		return "", err
 	}
 
@@ -567,19 +668,21 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 		return "", ErrUnresolvedItems
 	}
 
-	// Load group participants (for split/cover resolutions over "everyone").
-	pRows, err := tx.Query(ctx, `SELECT id FROM participants WHERE group_id=$1 ORDER BY id`, groupID)
+	// Load group participants (for split/cover resolutions over "everyone", and names for the notes).
+	pRows, err := tx.Query(ctx, `SELECT id, name FROM participants WHERE group_id=$1 ORDER BY id`, groupID)
 	if err != nil {
 		return "", err
 	}
 	var allParticipantIDs []string
+	participantNames := map[string]string{}
 	for pRows.Next() {
-		var pid string
-		if err := pRows.Scan(&pid); err != nil {
+		var pid, name string
+		if err := pRows.Scan(&pid, &name); err != nil {
 			pRows.Close()
 			return "", err
 		}
 		allParticipantIDs = append(allParticipantIDs, pid)
+		participantNames[pid] = name
 	}
 	pRows.Close()
 	if err := pRows.Err(); err != nil {
@@ -587,6 +690,7 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 	}
 
 	owed := ComputeClaimSplit(items, claims, tax, fees, discount, roundoff, resolutions, allParticipantIDs, creatorID)
+	notes := buildFinalizeNotes(items, claims, resolutions, taxes, participantNames, allParticipantIDs, creatorID)
 
 	// Defensive: a claim can outlive the participant it belongs to (removed from the group while the
 	// session was open). The migration cascades the DB delete, but belt-and-suspenders here means a
@@ -628,6 +732,7 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 		PaidByID:    creatorID,
 		SplitMode:   "BY_AMOUNT",
 		AddedBy:     creatorID,
+		Notes:       notes,
 		PaidFor:     paidFor,
 	})
 	if err != nil {
