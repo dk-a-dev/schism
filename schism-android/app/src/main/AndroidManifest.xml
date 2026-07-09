@@ -39,6 +39,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="schism" android:host="group" />
             </intent-filter>
+            <!-- Claim-session deep links: schism://claim/<sid> opens the claim screen. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="schism" android:host="claim" />
+            </intent-filter>
         </activity>
 
         <!-- Incoming bank SMS: parsed on-device into the local transaction ledger. -->
