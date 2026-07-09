@@ -207,7 +207,7 @@ fun parseBill(rows: List<Row>): ReceiptDraft? {
         currency = "₹",
         date = date,
         lineItems = v.items,
-        taxMinor = v.tax + v.fees - v.discount,
+        taxMinor = v.tax + v.fees - v.discount + v.roundoff,
         subtotalMinor = v.subtotal,
         feesMinor = v.fees,
         discountMinor = v.discount,
