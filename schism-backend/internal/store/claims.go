@@ -20,6 +20,12 @@ var ErrClaimLocked = errors.New("session locked")
 // version (someone else edited items or claims concurrently).
 var ErrClaimStale = errors.New("session version stale")
 
+// ErrUnresolvedItems is returned by FinalizeClaimSession when at least one item has zero total claimed
+// weight and no UnclaimedResolution covering it. This is server-authoritative money code: an unresolved
+// item must never be silently dropped from the built expense, so finalize refuses until the caller
+// either gets someone to claim it or supplies a resolution for it.
+var ErrUnresolvedItems = errors.New("unresolved items")
+
 // ClaimItem is a single receipt line item captured on a claim session.
 type ClaimItem struct {
 	Idx         int    `json:"idx"`
@@ -178,7 +184,7 @@ func ComputeClaimSplit(items []ClaimItem, claims []Claim, tax, fees, discount, r
 	for _, v := range owed {
 		assignedSubtotal += v
 	}
-	if chargePot != 0 && assignedSubtotal > 0 {
+	if chargePot != 0 && len(owed) > 0 {
 		pids := make([]string, 0, len(owed))
 		for pid := range owed {
 			pids = append(pids, pid)
@@ -188,10 +194,16 @@ func ComputeClaimSplit(items []ClaimItem, claims []Claim, tax, fees, discount, r
 		remaining := chargePot
 		for i, pid := range pids {
 			var share int64
-			if i == len(pids)-1 {
+			switch {
+			case i == len(pids)-1:
 				share = remaining
-			} else {
+			case assignedSubtotal > 0:
 				share = chargePot * owed[pid] / assignedSubtotal
+			default:
+				// NOTE (Finding 3): claimed items summed to zero minor units, so there's no subtotal to
+				// split the pot proportionally to — fall back to splitting it evenly across everyone who
+				// has any claim, rather than dropping it.
+				share = chargePot / int64(len(pids))
 			}
 			remaining -= share
 			owed[pid] += share
@@ -199,6 +211,26 @@ func ComputeClaimSplit(items []ClaimItem, claims []Claim, tax, fees, discount, r
 	}
 
 	return owed
+}
+
+// unresolvedItemIdx reports whether any item has zero total claimed weight and no UnclaimedResolution
+// covering it. Mirrors the "hasClaims" check in ComputeClaimSplit so the two never disagree about what
+// counts as resolved.
+func unresolvedItemIdx(items []ClaimItem, claims []Claim, resolutions []UnclaimedResolution) (int, bool) {
+	claimedWeight := map[int]float64{}
+	for _, c := range claims {
+		claimedWeight[c.ItemIdx] += c.Weight
+	}
+	resByItem := map[int]bool{}
+	for _, r := range resolutions {
+		resByItem[r.ItemIdx] = true
+	}
+	for _, item := range items {
+		if claimedWeight[item.Idx] <= 0 && !resByItem[item.Idx] {
+			return item.Idx, true
+		}
+	}
+	return 0, false
 }
 
 // CreateClaimSession inserts a new open claim session (version 1) with the given items and charge
@@ -439,6 +471,10 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 		return "", err
 	}
 
+	if _, unresolved := unresolvedItemIdx(items, claims, resolutions); unresolved {
+		return "", ErrUnresolvedItems
+	}
+
 	// Load group participants (for split/cover resolutions over "everyone").
 	pRows, err := tx.Query(ctx, `SELECT id FROM participants WHERE group_id=$1 ORDER BY id`, groupID)
 	if err != nil {
@@ -459,6 +495,19 @@ func (s *Store) FinalizeClaimSession(ctx context.Context, sid string, expectedVe
 	}
 
 	owed := ComputeClaimSplit(items, claims, tax, fees, discount, roundoff, resolutions, allParticipantIDs, creatorID)
+
+	// Defensive: a claim can outlive the participant it belongs to (removed from the group while the
+	// session was open). The migration cascades the DB delete, but belt-and-suspenders here means a
+	// stale claims row can never wedge finalize with an expense_paid_for FK violation.
+	validParticipant := make(map[string]bool, len(allParticipantIDs))
+	for _, pid := range allParticipantIDs {
+		validParticipant[pid] = true
+	}
+	for pid := range owed {
+		if !validParticipant[pid] {
+			delete(owed, pid)
+		}
+	}
 
 	pids := make([]string, 0, len(owed))
 	for pid := range owed {

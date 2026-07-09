@@ -114,6 +114,35 @@ func TestClaimSessionAPIFlow(t *testing.T) {
 	require.Equal(t, "LOCKED", errBody.Error)
 }
 
+func TestFinalizeUnresolvedItemsMapsTo409(t *testing.T) {
+	srv := newTestServer(t)
+	g, token, _ := claimFixture(t, srv.URL)
+
+	// Two items, only one gets claimed — the other is neither claimed nor resolved.
+	createBody := `{"title":"Dinner","items":[{"idx":0,"name":"Claimed","qty":1,"amountMinor":10000},` +
+		`{"idx":1,"name":"Unclaimed","qty":1,"amountMinor":5000}]}`
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/claim-sessions", token, createBody)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var session struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+
+	putBody := `{"expectedVersion":1,"weights":[{"itemIdx":0,"weight":1}]}`
+	putResp := authRequest(t, http.MethodPut, srv.URL+"/v1/claim-sessions/"+session.ID+"/claims", token, putBody)
+	require.Equal(t, http.StatusOK, putResp.StatusCode)
+
+	// Finalize with no resolutions → 409 UNRESOLVED_ITEMS (item 1 is unresolved, not silently dropped).
+	finBody := `{"expectedVersion":1,"resolutions":[]}`
+	finResp := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/finalize", token, finBody)
+	require.Equal(t, http.StatusConflict, finResp.StatusCode)
+	var errBody struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(finResp.Body).Decode(&errBody))
+	require.Equal(t, "UNRESOLVED_ITEMS", errBody.Error)
+}
+
 func TestClaimSessionRequiresMembership(t *testing.T) {
 	srv := newTestServer(t)
 	g, token, _ := claimFixture(t, srv.URL)

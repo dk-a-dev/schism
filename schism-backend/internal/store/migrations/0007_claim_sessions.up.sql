@@ -18,7 +18,7 @@ CREATE TABLE claim_sessions (
 CREATE TABLE claims (
     session_id     TEXT NOT NULL REFERENCES claim_sessions(id) ON DELETE CASCADE,
     item_idx       INT  NOT NULL,
-    participant_id TEXT NOT NULL,
+    participant_id TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
     weight         NUMERIC(6,2) NOT NULL CHECK (weight > 0),
     PRIMARY KEY (session_id, item_idx, participant_id)
 );

@@ -195,6 +195,10 @@ func (h *Handler) finalizeClaimSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "VERSION_STALE")
 		return
 	}
+	if errors.Is(err, store.ErrUnresolvedItems) {
+		writeErr(w, http.StatusConflict, "UNRESOLVED_ITEMS")
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

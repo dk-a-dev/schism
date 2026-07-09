@@ -193,10 +193,128 @@ func TestCancelClaimSessionAndParticipantLookup(t *testing.T) {
 	}
 }
 
+// TestFinalizeRejectsUnresolvedItemsThenSucceedsWithResolution proves finalize never silently drops an
+// item's amount: an item with zero claimed weight and no resolution must block finalize (ErrUnresolvedItems)
+// rather than being skipped, and once resolved the expense totals the full bill.
+func TestFinalizeRejectsUnresolvedItemsThenSucceedsWithResolution(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}}})
+	dev := g.Participants[0].ID
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: dev, Title: "Dinner",
+		Items: []ClaimItem{
+			{Idx: 0, Name: "Claimed", Qty: 1, AmountMinor: 10000},
+			{Idx: 1, Name: "Unclaimed", Qty: 1, AmountMinor: 5000},
+		}, TaxMinor: 1000})
+	if err := st.UpsertClaims(ctx, cs.ID, dev, 1, map[int]float64{0: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.FinalizeClaimSession(ctx, cs.ID, 1, nil); err != ErrUnresolvedItems {
+		t.Fatalf("want ErrUnresolvedItems, got %v", err)
+	}
+
+	eid, err := st.FinalizeClaimSession(ctx, cs.ID, 1,
+		[]UnclaimedResolution{{ItemIdx: 1, Mode: "split"}})
+	if err != nil || eid == "" {
+		t.Fatalf("finalize with resolution: eid=%q err=%v", eid, err)
+	}
+	e, err := st.GetExpense(ctx, g.ID, eid)
+	if err != nil || e == nil {
+		t.Fatalf("get expense: %v %v", e, err)
+	}
+	// Full bill: 10000 (claimed) + 5000 (resolved) + 1000 tax = 16000. Nothing dropped.
+	if e.Amount != 16000 {
+		t.Fatalf("amount %d, want full bill 16000", e.Amount)
+	}
+}
+
+// TestFinalizeDropsClaimsOfRemovedParticipant proves that removing a participant from the group while
+// their claim session is still open doesn't wedge finalize with an FK violation, and their claim's
+// weight no longer counts (per the documented "their claims are dropped" behavior).
+func TestFinalizeDropsClaimsOfRemovedParticipant(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	g, _ := st.CreateGroup(ctx, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{Name: "Dev"}, {Name: "Ru"}, {Name: "Amit"}}})
+	byName := func(name string) Participant {
+		for _, p := range g.Participants {
+			if p.Name == name {
+				return p
+			}
+		}
+		t.Fatalf("no participant %q", name)
+		return Participant{}
+	}
+	dev, ru, amit := byName("Dev"), byName("Ru"), byName("Amit")
+
+	cs, _ := st.CreateClaimSession(ctx, ClaimSessionInput{GroupID: g.ID, CreatorParticipantID: dev.ID, Title: "Dinner",
+		Items: []ClaimItem{{Idx: 0, Name: "Dish", Qty: 2, AmountMinor: 20000}}, TaxMinor: 2000})
+	if err := st.UpsertClaims(ctx, cs.ID, dev.ID, 1, map[int]float64{0: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertClaims(ctx, cs.ID, amit.ID, 1, map[int]float64{0: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove Amit from the group while the session is still open.
+	devID, ruID := dev.ID, ru.ID
+	if _, err := st.UpdateGroup(ctx, g.ID, GroupInput{Name: "T", Currency: "₹",
+		Participants: []ParticipantInput{{ID: &devID, Name: "Dev"}, {ID: &ruID, Name: "Ru"}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	eid, err := st.FinalizeClaimSession(ctx, cs.ID, 1, nil)
+	if err != nil || eid == "" {
+		t.Fatalf("finalize: eid=%q err=%v", eid, err)
+	}
+	e, err := st.GetExpense(ctx, g.ID, eid)
+	if err != nil || e == nil {
+		t.Fatalf("get expense: %v %v", e, err)
+	}
+	byPid := map[string]int64{}
+	for _, pf := range e.PaidFor {
+		byPid[pf.ParticipantID] = pf.Shares
+	}
+	if _, present := byPid[amit.ID]; present {
+		t.Fatalf("amit's claim should have been dropped, got %+v", byPid)
+	}
+	// Amit's claim is gone (dropped by the ON DELETE CASCADE + the defensive owed-map filter), so dev
+	// is the sole remaining claimant on item 0 and absorbs the whole item + tax: 20000 + 2000 = 22000.
+	// The total is still exact over what's left claimed - nothing is silently lost to nobody.
+	if e.Amount != 22000 {
+		t.Fatalf("amount %d, want 22000 (dev absorbs the full item+tax once amit's claim is dropped)", e.Amount)
+	}
+	if byPid[dev.ID] != 22000 {
+		t.Fatalf("dev share %+v", byPid)
+	}
+}
+
+// TestComputeClaimSplitPotSurvivesZeroClaimedSubtotal proves the charge pot (tax/fees/discount/roundoff)
+// is still distributed when the claimed items happen to sum to zero minor units, instead of vanishing.
+func TestComputeClaimSplitPotSurvivesZeroClaimedSubtotal(t *testing.T) {
+	items := []ClaimItem{{Idx: 0, Name: "Free", Qty: 1, AmountMinor: 0}}
+	claims := []Claim{{ItemIdx: 0, ParticipantID: "dev", Weight: 1}, {ItemIdx: 0, ParticipantID: "ru", Weight: 1}}
+	owed := ComputeClaimSplit(items, claims, 1000, 0, 0, 0, nil, []string{"dev", "ru"}, "dev")
+	if owed["dev"]+owed["ru"] != 1000 {
+		t.Fatalf("pot lost: owed %+v", owed)
+	}
+	if owed["dev"] == 0 && owed["ru"] == 0 {
+		t.Fatalf("pot dropped entirely: owed %+v", owed)
+	}
+}
+
 // TestClaimVsFinalizeRace proves the row-lock state machine never silently loses a claim: a concurrent
 // UpsertClaims and FinalizeClaimSession either both succeed (the claim is counted in the expense) or
 // the claim is cleanly rejected with ErrClaimLocked — never a partial/lost write, and exactly one
 // expense results. Run with -race.
+//
+// A "cover" resolution is passed for the sole item so the item is always resolvable regardless of which
+// goroutine's row lock wins: if ru's claim lands first it claims the item (the resolution is then
+// irrelevant, per ComputeClaimSplit precedence); if finalize wins the lock first with no claim landed
+// yet, the resolution assigns the item to the creator instead of finalize spuriously failing with
+// ErrUnresolvedItems.
 func TestClaimVsFinalizeRace(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
@@ -217,7 +335,7 @@ func TestClaimVsFinalizeRace(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		eid, finErr = st.FinalizeClaimSession(ctx, cs.ID, 1, nil)
+		eid, finErr = st.FinalizeClaimSession(ctx, cs.ID, 1, []UnclaimedResolution{{ItemIdx: 0, Mode: "cover"}})
 	}()
 	wg.Wait()
 
