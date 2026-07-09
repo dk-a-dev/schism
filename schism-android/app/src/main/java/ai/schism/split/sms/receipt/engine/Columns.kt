@@ -35,11 +35,6 @@ private fun isNumeric(text: String): Boolean {
     return cleaned.isNotEmpty() && cleaned.matches(Regex("-?\\d+(\\.\\d+)?"))
 }
 
-private fun isSmallInt(text: String): Boolean {
-    val cleaned = text.trim()
-    return cleaned.matches(Regex("\\d{1,3}")) && !cleaned.contains(".")
-}
-
 /**
  * A cluster of cells whose xCenters fall close together — the raw building block for a [Column]
  * before roles and neighbour-padded bounds are assigned.
