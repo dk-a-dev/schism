@@ -22,8 +22,13 @@ private fun cleanNumeric(raw: String): String =
  * 6-7 digits (e.g. "123456" = ₹1,23,456) without a decimal fraction. Only phone-number-length (or
  * longer) bare integers — 8+ digits — are far more likely to be a phone number, order ID, or
  * similar than a bill amount, so only those are rejected.
+ *
+ * A token carrying a percent sign (e.g. "2.5%", "18%") is a tax/discount RATE, never a money
+ * amount, so it's rejected outright — otherwise `isMoneyToken("2.5%")` would be true and a
+ * percentage column could be misread as an amount when detecting money columns / regions.
  */
 fun parseMinor(raw: String): Long? {
+    if (raw.contains('%')) return null
     val cleaned = cleanNumeric(raw)
     if (cleaned.isEmpty() || !cleaned.matches(PLAIN_NUMBER)) return null
 
