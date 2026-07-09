@@ -326,12 +326,21 @@ private fun ItemCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (item.qty > 1) "${item.name}  ×${item.qty}" else item.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (item.qty > 1) "${item.name}  ×${item.qty}" else item.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (item.qty > 1 && item.unitPriceMinor > 0) {
+                        Text(
+                            "${item.qty} × ${formatMinor(item.unitPriceMinor, currency)} = " +
+                                formatMinor(item.amountMinor, currency),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 Text(
                     formatMinor(item.amountMinor, currency),
                     style = MaterialTheme.typography.titleMedium,
