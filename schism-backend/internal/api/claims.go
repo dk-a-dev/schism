@@ -3,11 +3,20 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/schism/schism-backend/internal/store"
 )
+
+// pluralize renders "N noun" or "N nouns" depending on n, for short activity-log detail strings.
+func pluralize(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
 
 // claimSessionResponse is a claim session plus the live "owesPreview" (what each participant would owe
 // given the CURRENT claims, no unclaimed-item resolutions).
@@ -81,6 +90,7 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = h.store.LogActivity(r.Context(), groupID, "CLAIM_SESSION_CREATED", actor(creator), nil, cs.Title)
 	h.writeSession(w, r, http.StatusCreated, &cs)
 }
 
@@ -161,6 +171,13 @@ func (h *Handler) putClaims(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	claimed := 0
+	for _, weight := range weights {
+		if weight > 0 {
+			claimed++
+		}
+	}
+	_ = h.store.LogActivity(r.Context(), cs.GroupID, "CLAIM_SUBMITTED", actor(pid), nil, "claimed "+pluralize(claimed, "item"))
 	updated, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -210,6 +227,13 @@ func (h *Handler) finalizeClaimSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Only log when this call actually performed the finalize (cs was loaded before finalize ran, so
+	// "open" here means this request is the one that transitioned it, not an idempotent replay of an
+	// already-finalized session).
+	if cs.Status == "open" {
+		_ = h.store.LogActivity(r.Context(), cs.GroupID, "CLAIM_SESSION_FINALIZED", actor(cs.CreatorParticipantID), nil, cs.Title)
+		_ = h.store.LogActivity(r.Context(), cs.GroupID, "CREATE_EXPENSE", actor(cs.CreatorParticipantID), &eid, cs.Title)
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"expenseId": eid})
 }
 
@@ -235,6 +259,11 @@ func (h *Handler) cancelClaimSession(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.CancelClaimSession(r.Context(), sid); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// CancelClaimSession is a no-op unless cs was still "open" (loaded above, before cancel ran), so
+	// this guard keeps a repeat cancel call from logging a second CLAIM_SESSION_CANCELLED activity.
+	if cs.Status == "open" {
+		_ = h.store.LogActivity(r.Context(), cs.GroupID, "CLAIM_SESSION_CANCELLED", actor(pid), nil, cs.Title)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -300,7 +329,8 @@ func (h *Handler) editClaimItems(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	v, err := h.store.EditItems(r.Context(), sid, d.toStoreItems())
+	items := d.toStoreItems()
+	v, err := h.store.EditItems(r.Context(), sid, items)
 	if errors.Is(err, store.ErrClaimLocked) {
 		writeErr(w, http.StatusConflict, "LOCKED")
 		return
@@ -309,5 +339,6 @@ func (h *Handler) editClaimItems(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = h.store.LogActivity(r.Context(), cs.GroupID, "CLAIM_ITEMS_EDITED", actor(pid), nil, "edited "+pluralize(len(items), "item"))
 	writeJSON(w, http.StatusOK, map[string]int{"version": v})
 }

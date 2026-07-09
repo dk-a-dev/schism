@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -41,6 +42,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = h.store.LogActivity(r.Context(), g.ID, "GROUP_CREATED", nil, nil, g.Name)
 	writeJSON(w, http.StatusCreated, map[string]string{"groupId": g.ID})
 }
 
@@ -62,6 +64,7 @@ func (h *Handler) getGroupDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
 	var d groupFormDTO
 	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -69,7 +72,12 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	in := d.toInput()
 	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
-	g, err := h.store.UpdateGroup(r.Context(), chi.URLParam(r, "groupID"), in)
+	before, err := h.store.GetGroup(r.Context(), groupID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	g, err := h.store.UpdateGroup(r.Context(), groupID, in)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -78,7 +86,38 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "group not found")
 		return
 	}
+	h.logGroupUpdateActivity(r.Context(), before, g)
 	writeJSON(w, http.StatusOK, g)
+}
+
+// logGroupUpdateActivity diffs the participant set (before -> after) and logs one MEMBER_ADDED or
+// MEMBER_REMOVED activity per participant that appeared or disappeared, plus a GROUP_RENAMED activity
+// when the group's name changed. Best-effort: never fails the request.
+func (h *Handler) logGroupUpdateActivity(ctx context.Context, before, after *store.Group) {
+	if before == nil || after == nil {
+		return
+	}
+	if before.Name != after.Name {
+		_ = h.store.LogActivity(ctx, after.ID, "GROUP_RENAMED", nil, nil, after.Name)
+	}
+	oldByID := make(map[string]string, len(before.Participants))
+	for _, p := range before.Participants {
+		oldByID[p.ID] = p.Name
+	}
+	newByID := make(map[string]string, len(after.Participants))
+	for _, p := range after.Participants {
+		newByID[p.ID] = p.Name
+	}
+	for id, name := range newByID {
+		if _, ok := oldByID[id]; !ok {
+			_ = h.store.LogActivity(ctx, after.ID, "MEMBER_ADDED", nil, nil, name)
+		}
+	}
+	for id, name := range oldByID {
+		if _, ok := newByID[id]; !ok {
+			_ = h.store.LogActivity(ctx, after.ID, "MEMBER_REMOVED", nil, nil, name)
+		}
+	}
 }
 
 func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request) {
