@@ -36,7 +36,8 @@ import androidx.compose.ui.unit.dp
 /*
  * A small kit of distinct loading indicators so different surfaces feel varied and alive (instead of
  * one spinner everywhere): shimmer skeletons for lists, bouncing dots for compact waits, and a
- * contained circular for hero/summary screens. The wavy indicator lives in WavyProgress.kt.
+ * contained circular for hero/summary screens. The circular Material-3-Expressive "splitting"
+ * loaders (pie wedges, morphing blob, orbiting dots) live in ExpressiveLoaders.kt.
  */
 
 /** An animated shimmer brush that sweeps a highlight across a muted base — for skeleton placeholders. */

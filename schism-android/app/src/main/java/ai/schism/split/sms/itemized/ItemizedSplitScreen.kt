@@ -3,7 +3,7 @@
 package ai.schism.split.sms.itemized
 
 import ai.schism.split.core.money.formatMinor
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.Participant
 import ai.schism.split.sms.receipt.ReceiptLineItem
@@ -92,7 +92,7 @@ fun ItemizedSplitScreen(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    WavyProgress()
+                    SplitLoader()
                 }
                 else -> Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),

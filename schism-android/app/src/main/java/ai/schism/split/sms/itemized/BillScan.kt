@@ -1,6 +1,6 @@
 package ai.schism.split.sms.itemized
 
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.sms.receipt.ReceiptScanner
 import ai.schism.split.sms.receipt.engine.parseBill
 import android.content.Context
@@ -111,7 +111,7 @@ fun BillScanProgressDialog() {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier,
             ) {
-                WavyProgress()
+                SplitLoader()
                 Text(
                     "Extracting dishes, quantities and tax on your device.",
                     style = MaterialTheme.typography.bodySmall,

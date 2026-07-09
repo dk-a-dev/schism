@@ -2,7 +2,7 @@
 
 package ai.schism.split.groups.edit
 
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.MorphLoader
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,7 +59,7 @@ fun EditGroupScreen(
         },
     ) { padding ->
         if (state.loading) {
-            Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { WavyProgress() }
+            Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { MorphLoader() }
             return@Scaffold
         }
         Column(

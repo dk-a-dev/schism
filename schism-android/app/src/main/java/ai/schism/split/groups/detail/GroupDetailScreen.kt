@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Share
-import ai.schism.split.core.ui.WavyProgress
+import ai.schism.split.core.ui.MorphLoader
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -193,7 +193,7 @@ fun <T> StateSlice(
     content: @Composable (T) -> Unit,
 ) {
     when (state) {
-        is UiState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { WavyProgress() }
+        is UiState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { MorphLoader() }
         is UiState.Empty -> CenteredMessage(emptyMessage)
         is UiState.Error -> CenteredMessage(state.message)
         is UiState.Data -> content(state.value)
