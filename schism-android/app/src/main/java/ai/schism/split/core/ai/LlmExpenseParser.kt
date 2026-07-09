@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -105,36 +106,46 @@ class LlmExpenseParser @Inject constructor(
      */
     suspend fun parseReceipt(
         ocrLines: List<String>,
-    ): ai.schism.split.sms.receipt.ReceiptDraft? = withContext(Dispatchers.Default) {
-        if (!settings.aiEnabled.first()) return@withContext null
-        val llm = engine() ?: return@withContext null
-        // Cap the OCR fed to the model so prompt + JSON output stay inside the 2048-token context.
-        val ocr = ocrLines.map { it.take(64) }.take(45).joinToString("\n").take(2400)
+    ): ai.schism.split.sms.receipt.ReceiptDraft? = runCatching {
+        withContext(Dispatchers.Default) {
+            if (!settings.aiEnabled.first()) return@withContext null
+            val llm = engine() ?: return@withContext null
+            // Cap the OCR fed to the model so prompt + JSON output stay inside the 2048-token context.
+            val ocr = ocrLines.map { it.take(64) }.take(45).joinToString("\n").take(2400)
 
-        // Harness: generate → scrub → validate; on failure, one repair round that tells the model
-        // exactly what was wrong with its previous answer. Never trust a single unvalidated pass.
-        val first = generateReceiptDraft(llm, buildReceiptPrompt(ocr))
-        var best = first?.let(::scrubDraft)
-        val problem: String? = if (best == null) "the JSON could not be parsed" else validateDraft(best)
-        if (problem != null) {
-            val repairPrompt = buildReceiptPrompt(ocr) + "\nYour previous answer was rejected because: " +
-                problem + ". Re-read the OCR and output corrected JSON only."
-            val second = generateReceiptDraft(llm, repairPrompt)?.let(::scrubDraft)
-            if (second != null && validateDraft(second) == null) {
-                best = second
+            // Harness: generate → scrub → validate; on failure, one repair round that tells the model
+            // exactly what was wrong with its previous answer. Never trust a single unvalidated pass.
+            val first = generateReceiptDraft(llm, buildReceiptPrompt(ocr))
+            var best = first?.let(::scrubDraft)
+            val problem: String? = if (best == null) "the JSON could not be parsed" else validateDraft(best)
+            if (problem != null) {
+                val repairPrompt = buildReceiptPrompt(ocr) + "\nYour previous answer was rejected because: " +
+                    problem + ". Re-read the OCR and output corrected JSON only."
+                val second = generateReceiptDraft(llm, repairPrompt)?.let(::scrubDraft)
+                if (second != null && validateDraft(second) == null) {
+                    best = second
+                }
             }
+            // A scrubbed-but-imperfect draft (e.g. slight sum drift) still beats the regex fallback, as
+            // long as it has plausible items; hard failures return null so the heuristic takes over.
+            val result = best
+            if (result == null || result.lineItems.isEmpty()) null else result
         }
-        // A scrubbed-but-imperfect draft (e.g. slight sum drift) still beats the regex fallback, as
-        // long as it has plausible items; hard failures return null so the heuristic takes over.
-        val result = best
-        if (result == null || result.lineItems.isEmpty()) null else result
-    }
+    }.getOrNull()
 
-    private fun generateReceiptDraft(
+    /**
+     * Runs a single generation and parses its JSON. The model call is wrapped in a 20s timeout so a
+     * stuck/slow model can never hang or OOM the caller — a timeout (or any MediaPipe exception,
+     * caught by the outer [runCatching] in [parseReceipt]) simply yields null and the deterministic
+     * engine's draft stands.
+     */
+    private suspend fun generateReceiptDraft(
         llm: LlmInference,
         prompt: String,
     ): ai.schism.split.sms.receipt.ReceiptDraft? {
-        val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return null
+        val raw = withTimeoutOrNull(20_000) {
+            runCatching { llm.generateResponse(prompt) }.getOrNull()
+        } ?: return null
         val json = extractJson(raw) ?: return null
         val obj = runCatching { JSONObject(json) }.getOrNull() ?: return null
 

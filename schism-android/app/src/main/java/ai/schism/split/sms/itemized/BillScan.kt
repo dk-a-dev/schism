@@ -2,7 +2,7 @@ package ai.schism.split.sms.itemized
 
 import ai.schism.split.core.ui.WavyProgress
 import ai.schism.split.sms.receipt.ReceiptScanner
-import ai.schism.split.sms.receipt.parseReceipt
+import ai.schism.split.sms.receipt.engine.parseBill
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
@@ -51,9 +51,18 @@ class BillScanViewModel @Inject constructor(
         viewModelScope.launch {
             _scanning.value = true
             runCatching {
-                val lines = receiptScanner.recognizeLines(appContext, uri)
-                // Prefer the on-device LLM (wrapped names, qty, tax); fall back to heuristics.
-                llmParser.parseReceipt(lines) ?: parseReceipt(lines)
+                val rows = receiptScanner.recognizeCells(appContext, uri)
+                // Deterministic engine is primary (fast, no model). Only when it can't produce a
+                // draft, or produced one it couldn't verify, try the on-device LLM as a fallback —
+                // it already no-ops (returns null) when the AI toggle is off or the model's absent.
+                var draft = parseBill(rows)
+                if (draft == null || draft.verified == false) {
+                    val ai = runCatching { llmParser.parseReceipt(rows.map { it.text }) }
+                        .getOrNull()
+                        ?.takeIf { it.lineItems.isNotEmpty() }
+                    if (ai != null) draft = ai
+                }
+                draft
             }.onSuccess { draft ->
                 _scanning.value = false
                 if (draft == null) {
