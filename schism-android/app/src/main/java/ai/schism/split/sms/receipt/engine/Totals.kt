@@ -8,12 +8,15 @@ private val GRAND_TOTAL_RE = Regex(
     """grand\s*total|bill\s*amount|bill\s*total|amount\s*payable|\bpaid\b|rounded\s*total|\bnet\b""",
     RegexOption.IGNORE_CASE,
 )
+// A bare "total" is the most common grand-total label; it's only treated as the grand total AFTER
+// SUBTOTAL_RE has had first refusal in the `when` below, so "Sub Total" never lands here.
+private val BARE_TOTAL_RE = Regex("""\btotal\b""", RegexOption.IGNORE_CASE)
 // Round-off/rounding-adjustment rows ("Round Off -0.40", "Round Amount", "Rounding") are a distinct
 // class from a "Rounded Total" (which is a grand-total variant, matched by GRAND_TOTAL_RE above) —
 // this is the small delta applied to reach that rounded figure, not the figure itself.
 private val ROUND_RE = Regex("""round\s*off|round\s*amount|\brounding\b""", RegexOption.IGNORE_CASE)
 private val DISCOUNT_RE = Regex("""discount|\boff\b|saved""", RegexOption.IGNORE_CASE)
-private val FEES_RE = Regex("""packaging|platform|service|delivery|charge""", RegexOption.IGNORE_CASE)
+private val FEES_RE = Regex("""packaging|platform|service|delivery|charge|\btip\b|gratuity""", RegexOption.IGNORE_CASE)
 private val FREE_RE = Regex("""\bfree\b""", RegexOption.IGNORE_CASE)
 
 private val CGST_RE = Regex("""\bcgst\b""", RegexOption.IGNORE_CASE)
@@ -119,12 +122,15 @@ fun readTotals(regions: Regions): Totals {
         val bucket = taxBucketOf(label)
 
         when {
-            GRAND_TOTAL_RE.containsMatchIn(label) -> grandTotal = maxOf(grandTotal ?: Long.MIN_VALUE, amount)
-            ROUND_RE.containsMatchIn(label) -> roundoff += amount
-            DISCOUNT_RE.containsMatchIn(label) -> discount += abs(amount)
+            // Sub-total gets first refusal so a bare "Total" (below) never captures "Sub Total".
             SUBTOTAL_RE.containsMatchIn(label) -> if (subtotal == null) subtotal = amount
+            ROUND_RE.containsMatchIn(label) -> roundoff += amount
+            GRAND_TOTAL_RE.containsMatchIn(label) -> grandTotal = maxOf(grandTotal ?: Long.MIN_VALUE, amount)
+            DISCOUNT_RE.containsMatchIn(label) -> discount += abs(amount)
             bucket != null -> taxByBucket[bucket] = (taxByBucket[bucket] ?: 0L) + amount
             FEES_RE.containsMatchIn(label) -> fees += amount
+            // A plain "Total" line (not sub-total, not a tax/fee/discount) is the grand total.
+            BARE_TOTAL_RE.containsMatchIn(label) -> grandTotal = maxOf(grandTotal ?: Long.MIN_VALUE, amount)
         }
     }
 

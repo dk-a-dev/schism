@@ -106,22 +106,37 @@ private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: St
  *
  * Rows with no derivable name (2+ letters) or no derivable amount are skipped.
  */
+private val LEADING_SERIAL = Regex("""^\d{1,3}[.)]?\s+""")
+
+/**
+ * The item name for a row is every cell whose center is LEFT of the numeric (qty/rate/amount)
+ * columns, joined left-to-right — NOT a single cell picked from the ITEM column. Wide item names
+ * don't share a center with the narrow "Item"/"Description" header, so x-center clustering can split
+ * the name region into several columns; reading "everything left of the numbers" is robust to that.
+ * A leading serial-number token ("1", "12.") is dropped.
+ */
+private fun nameLeftOfNumbers(row: Row, numericLeft: Int): String =
+    row.cells.filter { it.xCenter < numericLeft }
+        .sortedBy { it.xLeft }
+        .joinToString(" ") { it.text.trim() }
+        .trim()
+        .replaceFirst(LEADING_SERIAL, "")
+
 fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem> {
-    val itemCol = columns.firstOrNull { it.role == ColRole.ITEM }
     val qtyCol = columns.firstOrNull { it.role == ColRole.QTY }
     val rateCol = columns.firstOrNull { it.role == ColRole.RATE }
     val amountCol = columns.firstOrNull { it.role == ColRole.AMOUNT }
+    val numericLeft = listOfNotNull(qtyCol, rateCol, amountCol).minOfOrNull { it.xLeft } ?: Int.MAX_VALUE
 
     val items = mutableListOf<ReceiptLineItem>()
     var wrappedNamePrefix: String? = null
 
     for (row in regions.items) {
-        val nameCell = itemCol?.let { row.cellIn(it) }
         val qtyCell = qtyCol?.let { row.cellIn(it) }
         val rateCell = rateCol?.let { row.cellIn(it) }
         val amountCell = amountCol?.let { row.cellIn(it) }
 
-        val nameText = nameCell?.text?.trim().orEmpty()
+        val nameText = nameLeftOfNumbers(row, numericLeft)
         val hasNumericCell = qtyCell != null || rateCell != null || amountCell != null
 
         if (!hasNumericCell) {
