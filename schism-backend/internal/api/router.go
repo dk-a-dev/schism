@@ -27,6 +27,9 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 	// Public invite landing (https so messengers linkify it) → bounces into the app.
 	r.Get("/g/{groupID}", h.inviteLanding)
 
+	// Public claim-session landing → bounces into the app's claim screen.
+	r.Get("/c/{sid}", h.claimLanding)
+
 	// On-device model download (redirects to the ungated model, or proxies a gated one with HF_TOKEN).
 	r.Get("/model", h.modelDownload)
 

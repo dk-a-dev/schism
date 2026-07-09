@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/schism/schism-backend/internal/id"
@@ -131,4 +133,15 @@ func TestClaimSessionRequiresMembership(t *testing.T) {
 	// Unauthenticated → 401.
 	noauth := authRequest(t, http.MethodGet, srv.URL+"/v1/claim-sessions/"+session.ID, "", "")
 	require.Equal(t, http.StatusUnauthorized, noauth.StatusCode)
+}
+
+func TestClaimDeepLinkLanding(t *testing.T) {
+	srv := newTestServer(t)
+	resp, err := http.Get(srv.URL + "/c/test-sid")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, resp.Header.Get("Content-Type"), "text/html")
+	body, _ := io.ReadAll(resp.Body)
+	require.True(t, strings.Contains(string(body), "schism://claim/test-sid"),
+		"landing must contain the claim deep link")
 }
