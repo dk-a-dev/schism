@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package ai.schism.split.onboarding
 
 import ai.schism.split.core.ui.SchismLogo
@@ -13,7 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -148,9 +151,8 @@ private fun AuthForm(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
             ) {
                 if (state.submitting) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {

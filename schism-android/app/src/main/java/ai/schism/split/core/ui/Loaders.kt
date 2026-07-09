@@ -18,9 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -109,20 +109,17 @@ fun DotsLoader(
     }
 }
 
-/** A circular spinner sitting in a soft tinted disc — for hero/summary screens. */
+/**
+ * A circular spinner sitting in a soft tinted disc — for hero/summary screens. Backed by the
+ * official Material 3 Expressive [ContainedLoadingIndicator], which morphs between shapes while
+ * active rather than spinning a plain ring.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ContainedLoader(modifier: Modifier = Modifier) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
+    ContainedLoadingIndicator(
         modifier = modifier.size(64.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(30.dp),
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-        }
-    }
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        indicatorColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    )
 }

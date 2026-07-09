@@ -5,15 +5,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import ai.schism.split.groups.qr.scanQrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,7 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun JoinGroupScreen(
     onBack: () -> Unit,
@@ -80,7 +82,7 @@ fun JoinGroupScreen(
                 enabled = !joining && input.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                if (joining) CircularProgressIndicator(modifier = Modifier.padding(4.dp)) else Text("Join")
+                if (joining) LoadingIndicator(modifier = Modifier.padding(4.dp).size(20.dp)) else Text("Join")
             }
             OutlinedButton(
                 onClick = {

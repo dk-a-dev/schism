@@ -28,11 +28,12 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -371,6 +372,7 @@ private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
     val context = LocalContext.current
@@ -383,7 +385,7 @@ private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                LoadingIndicator(modifier = Modifier.size(16.dp))
                 Text("Checking for updates…", style = MaterialTheme.typography.bodySmall)
             }
         }

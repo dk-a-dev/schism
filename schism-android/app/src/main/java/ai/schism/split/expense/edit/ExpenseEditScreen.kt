@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+)
 
 package ai.schism.split.expense.edit
 
@@ -33,7 +36,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import ai.schism.split.core.ui.DotsLoader
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -44,6 +46,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -318,8 +321,7 @@ fun ExpenseEditScreen(
                     .heightIn(min = 52.dp),
             ) {
                 if (state.submitting) {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.dp,
+                    LoadingIndicator(
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(20.dp),
                     )
