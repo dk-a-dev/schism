@@ -122,46 +122,109 @@ private fun nameLeftOfNumbers(row: Row, numericLeft: Int): String =
         .trim()
         .replaceFirst(LEADING_SERIAL, "")
 
+/**
+ * Resolves a single items-row's (qty, amountMinor, unitPriceMinor).
+ *
+ * Fix #2: when the row carries at least two money cells in the rate/amount band AND a known qty,
+ * the (rate, amount) pair is chosen as the one satisfying `qty*rate=amount` ([invariantHolds])
+ * rather than by trusting a column's leftmost cell — so the true line amount is recovered even when
+ * the price and amount columns stayed merged (defect (d)) and `cellIn` would otherwise return the
+ * price. The rightmost satisfying amount is preferred. Falls back to the column-role reading
+ * ([resolveQtyAndAmount]) when no invariant-consistent pair exists (or qty is unknown).
+ */
+private fun resolveRow(
+    row: Row,
+    qtyCell: Cell?,
+    rateCell: Cell?,
+    amountCell: Cell?,
+    moneyLeftBound: Int,
+): Triple<Int, Long, Long>? {
+    val qtyFromCell = qtyCell?.text?.let { parseQty(it) }
+    val moneyCells = row.cells
+        .filter { it.xCenter >= moneyLeftBound && isMoneyToken(it.text) }
+        .sortedBy { it.xCenter }
+
+    if (qtyFromCell != null && moneyCells.size >= 2) {
+        for (j in moneyCells.indices.reversed()) {
+            val a = parseMinor(moneyCells[j].text) ?: continue
+            for (i in j - 1 downTo 0) {
+                val r = parseMinor(moneyCells[i].text) ?: continue
+                if (invariantHolds(r, qtyFromCell, a)) return Triple(qtyFromCell, a, r)
+            }
+        }
+    }
+
+    val (qty, amountMinor) = resolveQtyAndAmount(qtyCell?.text, rateCell?.text, amountCell?.text) ?: return null
+    val unit = if (qty > 0) amountMinor / qty else amountMinor
+    return Triple(qty, amountMinor, unit)
+}
+
+/** An anchor row (bears the numeric triple) plus the wrap fragments attached above/below it. */
+private class Anchor(
+    val y: Int,
+    val qty: Int,
+    val amountMinor: Long,
+    val unitPriceMinor: Long,
+    val inlineName: String,
+) {
+    val prefix = mutableListOf<String>()
+    val suffix = mutableListOf<String>()
+    val fullName: String
+        get() = (prefix + listOf(inlineName) + suffix).filter { it.isNotBlank() }.joinToString(" ").trim()
+}
+
+/** The vertical center of a visual row (its cells share a y-band). */
+private fun Row.yCenter(): Int = if (cells.isEmpty()) 0 else cells.sumOf { it.yCenter } / cells.size
+
 fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem> {
     val qtyCol = columns.firstOrNull { it.role == ColRole.QTY }
     val rateCol = columns.firstOrNull { it.role == ColRole.RATE }
     val amountCol = columns.firstOrNull { it.role == ColRole.AMOUNT }
     val numericLeft = listOfNotNull(qtyCol, rateCol, amountCol).minOfOrNull { it.xLeft } ?: Int.MAX_VALUE
+    // Money band = the rate/amount columns; a qty cell (which may itself be money-shaped) sits to
+    // the left of it and is excluded, so only genuine rate/amount cells feed the invariant.
+    val moneyLeftBound = listOfNotNull(rateCol, amountCol).minOfOrNull { it.xLeft } ?: Int.MAX_VALUE
 
-    val items = mutableListOf<ReceiptLineItem>()
-    var wrappedNamePrefix: String? = null
+    // Pass 1: split rows into priced anchors and letters-only wrapped-name fragments. A priced row
+    // that can't be resolved (e.g. an "N/A" in the amount column) is neither — it's dropped without
+    // consuming any fragment, so a wrapped name still bridges it to the next real priced row.
+    val anchors = mutableListOf<Anchor>()
+    val fragments = mutableListOf<Pair<Int, String>>() // (yCenter, text)
 
     for (row in regions.items) {
         val qtyCell = qtyCol?.let { row.cellIn(it) }
         val rateCell = rateCol?.let { row.cellIn(it) }
         val amountCell = amountCol?.let { row.cellIn(it) }
-
         val nameText = nameLeftOfNumbers(row, numericLeft)
         val hasNumericCell = qtyCell != null || rateCell != null || amountCell != null
 
         if (!hasNumericCell) {
-            // A letters-only row carrying no priced data at all is a wrapped item name's
-            // continuation line, not an item of its own — fold it into the next row's name.
-            if (looksLikeName(nameText)) {
-                wrappedNamePrefix = listOfNotNull(wrappedNamePrefix, nameText).joinToString(" ")
-            }
+            if (looksLikeName(nameText)) fragments.add(row.yCenter() to nameText)
             continue
         }
-
-        // Don't clear wrappedNamePrefix until this row is confirmed to actually consume it (a real
-        // item gets emitted below) — a stray/garbled row between a wrapped name and its priced row
-        // must not discard the pending name fragment before it can attach to the next real item.
-        val fullName = listOfNotNull(wrappedNamePrefix, nameText.ifBlank { null }).joinToString(" ").trim()
-        if (!looksLikeName(fullName)) continue
-        val (qty, amountMinor) = resolveQtyAndAmount(qtyCell?.text, rateCell?.text, amountCell?.text) ?: continue
-        // A discount/void/zero row (e.g. "Discount -50.00", or a stray "0.00") resolves to a
-        // non-positive amount — never a real purchased item, so skip it before adding.
+        val (qty, amountMinor, unitPriceMinor) = resolveRow(row, qtyCell, rateCell, amountCell, moneyLeftBound)
+            ?: continue
+        // A discount/void/zero row resolves to a non-positive amount — never a purchased item.
         if (amountMinor <= 0) continue
-
-        wrappedNamePrefix = null
-        items.add(ReceiptLineItem(name = fullName, amountMinor = amountMinor, qty = qty))
+        anchors.add(Anchor(row.yCenter(), qty, amountMinor, unitPriceMinor, nameText))
     }
-    return items
+
+    // Pass 2 (Fix #4): attach each wrapped-name fragment to its vertically NEAREST anchor — so a
+    // name that wrapped ABOVE its price (prefix) and one that wrapped BELOW it (the thermal layout,
+    // suffix) are both grouped correctly. A tie (a fragment exactly between two anchors) resolves to
+    // the FOLLOWING anchor, treating the fragment as the lead-in of the next item's name. Fragments
+    // are visited top-to-bottom so multi-line names keep their reading order.
+    for ((fy, text) in fragments) {
+        val anchor = anchors.minWithOrNull(
+            compareBy<Anchor> { abs(it.y - fy) }.thenByDescending { it.y },
+        ) ?: continue
+        if (fy <= anchor.y) anchor.prefix.add(text) else anchor.suffix.add(text)
+    }
+
+    // A resolved anchor with no plausible name (2+ letters) — even after folding in wrap fragments —
+    // is bill noise, not a purchased item.
+    return anchors.filter { looksLikeName(it.fullName) }
+        .map { ReceiptLineItem(name = it.fullName, amountMinor = it.amountMinor, qty = it.qty, unitPriceMinor = it.unitPriceMinor) }
 }
 
 /**

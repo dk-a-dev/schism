@@ -117,4 +117,52 @@ class BillParserItemsTest {
         assertEquals(listOf("Chicken Tikka"), items.map { it.name })
         assertEquals(listOf(25000L), items.map { it.amountMinor })
     }
+
+    @Test fun wrappedNameBelowPriceAttachesToPrecedingAnchor() {
+        // Thermal layout: the numeric triple is on the FIRST line (no inline name) and the item name
+        // wraps DOWNWARD across the following moneyless rows. Those following fragments must attach to
+        // the just-emitted anchor above them, not the (non-existent) next item.
+        val columns = listOf(
+            Column(0, 100, ColRole.ITEM),
+            Column(101, 200, ColRole.QTY),
+            Column(201, 300, ColRole.RATE),
+            Column(301, 400, ColRole.AMOUNT),
+        )
+        val rows = listOf(
+            Row(listOf(c("2", 120, 160, 40), c("60.00", 220, 260, 40), c("120.00", 320, 380, 40))),
+            Row(listOf(c("Masala", 10, 90, 80))),
+            Row(listOf(c("Dosa", 10, 90, 120))),
+        )
+        val regions = Regions(header = emptyList(), items = rows, totals = emptyList())
+        val items = extractItems(regions, columns)
+        assertEquals(listOf("Masala Dosa"), items.map { it.name })
+        assertEquals(listOf(2), items.map { it.qty })
+        assertEquals(listOf(12000L), items.map { it.amountMinor })
+        assertEquals(listOf(6000L), items.map { it.unitPriceMinor })
+    }
+
+    @Test fun qtyGreaterThanOneWithClosePriceAndAmountLocksAmountByInvariant() {
+        // Price and Amount so close their columns merged into a single AMOUNT band (no RATE column).
+        // With qty=3 and both money cells (149.00 price, 447.00 amount) present, the (rate, amount)
+        // pair satisfying qty×rate=amount must be chosen — NOT the leftmost (price) cell.
+        val columns = listOf(
+            Column(0, 800, ColRole.ITEM),
+            Column(820, 875, ColRole.QTY),
+            Column(878, 960, ColRole.AMOUNT), // merged price+amount band, no RATE
+        )
+        val row = Row(
+            listOf(
+                c("Jumbo King Roll", 140, 520, 80),
+                c("3", 833, 867, 80),
+                c("149.00", 890, 924, 80),
+                c("447.00", 926, 960, 80),
+            ),
+        )
+        val regions = Regions(header = emptyList(), items = listOf(row), totals = emptyList())
+        val items = extractItems(regions, columns)
+        assertEquals(1, items.size)
+        assertEquals(3, items[0].qty)
+        assertEquals(44700L, items[0].amountMinor)
+        assertEquals(14900L, items[0].unitPriceMinor)
+    }
 }
