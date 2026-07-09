@@ -152,4 +152,118 @@ class ParseBillIntegrationTest {
         assertEquals(1496L, draft.totalMinor)
         assertTrue("Held-out café bill should verify with the same general code", draft.verified)
     }
+
+    /**
+     * Olive Street Food Cafe — the canonical failing thermal bill. Encoded EXACTLY as ML Kit emits:
+     * the header prints `No.Item  Qty.  PriceAmount` with Price+Amount fused into ONE cell (no gap),
+     * each item's numeric triple (qty, price, amount) sits on the FIRST line with the first name word,
+     * and the rest of the (wrapped) name follows on SEPARATE moneyless rows. The Price and Amount
+     * money columns are printed so close together that the geometry clusterer merges them — reproducing
+     * defect (d): with no distinct RATE column and a fused header, the naive reading grabs the leftmost
+     * money cell (the price) instead of the line amount, undercounting qty>1 rows. The engine must
+     * still recover the correct (qty, unit price, amount) per row via the qty×price=amount invariant.
+     */
+    @Test
+    fun oliveThermalBillWithFusedPriceAmountHeaderAndWrappedNames() {
+        val rows = rowsOf(
+            """
+            OLIVE STREET FOOD CAFE|60|360|20
+
+            No.Item|60|300|90
+            Qty.|833|867|90
+            PriceAmount|890|960|90
+
+            Egg|140|180|140
+            1|833|867|140
+            149.00|890|924|140
+            149.00|926|960|140
+
+            & Sausage Blast Roll|140|520|170
+
+            Jumbo|140|230|220
+            3|833|867|220
+            149.00|890|924|220
+            447.00|926|960|220
+
+            King Roll|140|300|250
+
+            Chicken|140|250|300
+            1|833|867|300
+            89.00|890|924|300
+            89.00|926|960|300
+
+            Lahori Roll|140|320|330
+
+            Bombay|140|260|380
+            1|833|867|380
+            99.00|890|924|380
+            99.00|926|960|380
+
+            Parotta Roll|140|330|410
+
+            Lime|140|220|460
+            3|833|867|460
+            35.00|895|924|460
+            105.00|926|960|460
+
+            Juice|140|230|490
+
+            Water|140|240|540
+            1|833|867|540
+            55.00|895|924|540
+            55.00|926|960|540
+
+            Melon|140|250|570
+
+            Total Qty: 10|140|360|620
+
+            Sub Total|140|300|660
+            944.00|860|960|660
+
+            SGST|140|230|700
+            2.5%|300|360|700
+            23.60|860|960|700
+
+            CGST|140|230|740
+            2.5%|300|360|740
+            23.60|860|960|740
+
+            Round off|140|300|780
+            -0.20|860|960|780
+
+            Grand Total|140|340|820
+            991.00|860|960|820
+            """,
+        )
+        val draft = parseBill(rows)!!
+
+        assertEquals(
+            listOf(
+                "Egg & Sausage Blast Roll", "Jumbo King Roll", "Chicken Lahori Roll",
+                "Bombay Parotta Roll", "Lime Juice", "Water Melon",
+            ),
+            draft.lineItems.map { it.name },
+        )
+        assertEquals(listOf(1, 3, 1, 1, 3, 1), draft.lineItems.map { it.qty })
+        assertEquals(
+            listOf(14900L, 14900L, 8900L, 9900L, 3500L, 5500L),
+            draft.lineItems.map { it.unitPriceMinor },
+        )
+        assertEquals(
+            listOf(14900L, 44700L, 8900L, 9900L, 10500L, 5500L),
+            draft.lineItems.map { it.amountMinor },
+        )
+        assertEquals(94400L, draft.lineItems.sumOf { it.amountMinor })
+        assertEquals(94400L, draft.subtotalMinor)
+        assertEquals(99100L, draft.totalMinor)
+        assertTrue("Olive bill must verify deterministically (items→subtotal→grand total)", draft.verified)
+
+        // Totals-region specifics: the two GST lines survive their trailing "2.5%" tokens, and the
+        // signed round-off is captured as −0.20.
+        val totals = readTotals(segment(rows))
+        assertEquals(4720L, totals.tax) // SGST 23.60 + CGST 23.60
+        assertEquals(-20L, totals.roundoff)
+        assertEquals(94400L, totals.subtotal)
+        assertEquals(99100L, totals.grandTotal)
+    }
 }
