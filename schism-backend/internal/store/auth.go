@@ -30,9 +30,10 @@ func newToken() (raw, hash string, err error) {
 }
 
 // RegisterUser creates a password account and mints a bearer token. Email must be unique among
-// password accounts. The raw token is returned once; only its hash is stored. When a phone is
-// provided, participants added earlier by friends under that number are claimed for this account,
-// so their groups show up the moment the user joins the platform.
+// password accounts. The raw token is returned once; only its hash is stored (both on the legacy
+// users.token_hash column and as this session's row in tokens). When a phone is provided,
+// participants added earlier by friends under that number are claimed for this account, so their
+// groups show up the moment the user joins the platform.
 func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone string) (User, string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -43,8 +44,15 @@ func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone s
 		return User{}, "", err
 	}
 	normPhone := NormalizePhone(phone)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return User{}, "", err
+	}
+	defer tx.Rollback(ctx)
+
 	var u User
-	err = s.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO users (id, name, email, phone, token_hash, password_hash)
 		 VALUES ($1,$2,$3,$4,$5,$6)
 		 RETURNING id, name, email, phone, created_at`,
@@ -55,6 +63,12 @@ func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone s
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return User{}, "", ErrEmailTaken
 		}
+		return User{}, "", err
+	}
+	if err := s.insertToken(ctx, tx, u.ID, tokenHash); err != nil {
+		return User{}, "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return User{}, "", err
 	}
 	_ = s.ClaimParticipantsByPhone(ctx, u.ID, normPhone)
@@ -90,7 +104,9 @@ func (s *Store) GroupIDsForUser(ctx context.Context, userID string) ([]string, e
 	return out, rows.Err()
 }
 
-// LoginUser verifies credentials and mints a fresh session token.
+// LoginUser verifies credentials and mints a fresh session token. This ADDS a new session (a tokens
+// row) rather than rotating the account's single token, so existing sessions on other devices stay
+// valid — logging in here no longer signs anyone else out.
 func (s *Store) LoginUser(ctx context.Context, email, password string) (User, string, error) {
 	var u User
 	var passHash string
@@ -111,7 +127,7 @@ func (s *Store) LoginUser(ctx context.Context, email, password string) (User, st
 	if err != nil {
 		return User{}, "", err
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE users SET token_hash = $2 WHERE id = $1`, u.ID, tokenHash); err != nil {
+	if err := s.insertToken(ctx, s.pool, u.ID, tokenHash); err != nil {
 		return User{}, "", err
 	}
 	// Claim any participants friends added under this phone since the last session.

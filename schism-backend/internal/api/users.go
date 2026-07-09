@@ -101,6 +101,21 @@ func (h *Handler) authLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, authResponse{u.ID, u.Name, u.Email, token})
 }
 
+// authLogout ends the caller's CURRENT session only (deletes just the tokens row matching the
+// bearer token on this request) — other devices/logins for the same account stay signed in.
+func (h *Handler) authLogout(w http.ResponseWriter, r *http.Request) {
+	u := userFromContext(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if err := h.store.DeleteToken(r.Context(), rawTokenFromRequest(r)); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	u := userFromContext(r.Context())
 	if u == nil {

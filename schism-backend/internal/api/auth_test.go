@@ -76,6 +76,66 @@ func TestParticipantUserIDSanitized(t *testing.T) {
 	require.Equal(t, u.ID, *got)
 }
 
+// TestAuthLoginPreservesOtherSessions is the API-level multi-session assertion: logging in again
+// (e.g. a second device) must not sign out an already-authenticated session.
+func TestAuthLoginPreservesOtherSessions(t *testing.T) {
+	srv := newTestServer(t)
+	email := "session-" + id.New() + "@example.com"
+
+	regBody := fmt.Sprintf(`{"name":"Sasha","email":%q,"password":"hunter22","phone":""}`, email)
+	regResp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/register", "", regBody)
+	require.Equal(t, http.StatusOK, regResp.StatusCode)
+	var reg authResponse
+	require.NoError(t, json.NewDecoder(regResp.Body).Decode(&reg))
+
+	loginBody := fmt.Sprintf(`{"email":%q,"password":"hunter22"}`, email)
+	loginResp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/login", "", loginBody)
+	require.Equal(t, http.StatusOK, loginResp.StatusCode)
+	var login authResponse
+	require.NoError(t, json.NewDecoder(loginResp.Body).Decode(&login))
+	require.NotEqual(t, reg.Token, login.Token)
+
+	// BOTH sessions are still valid — logging in again did not kick out the first device.
+	meOriginal := authRequest(t, http.MethodGet, srv.URL+"/v1/users/me", reg.Token, "")
+	require.Equal(t, http.StatusOK, meOriginal.StatusCode)
+	meNew := authRequest(t, http.MethodGet, srv.URL+"/v1/users/me", login.Token, "")
+	require.Equal(t, http.StatusOK, meNew.StatusCode)
+}
+
+func TestAuthLogoutEndsOnlyThatSession(t *testing.T) {
+	srv := newTestServer(t)
+	email := "logout-api-" + id.New() + "@example.com"
+
+	regBody := fmt.Sprintf(`{"name":"Tux","email":%q,"password":"hunter22","phone":""}`, email)
+	regResp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/register", "", regBody)
+	require.Equal(t, http.StatusOK, regResp.StatusCode)
+	var reg authResponse
+	require.NoError(t, json.NewDecoder(regResp.Body).Decode(&reg))
+
+	loginBody := fmt.Sprintf(`{"email":%q,"password":"hunter22"}`, email)
+	loginResp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/login", "", loginBody)
+	require.Equal(t, http.StatusOK, loginResp.StatusCode)
+	var login authResponse
+	require.NoError(t, json.NewDecoder(loginResp.Body).Decode(&login))
+
+	logoutResp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/logout", reg.Token, "")
+	require.Equal(t, http.StatusNoContent, logoutResp.StatusCode)
+
+	// The logged-out session is gone...
+	meOriginal := authRequest(t, http.MethodGet, srv.URL+"/v1/users/me", reg.Token, "")
+	require.Equal(t, http.StatusUnauthorized, meOriginal.StatusCode)
+
+	// ...but the OTHER session (the second login) is untouched.
+	meOther := authRequest(t, http.MethodGet, srv.URL+"/v1/users/me", login.Token, "")
+	require.Equal(t, http.StatusOK, meOther.StatusCode)
+}
+
+func TestAuthLogoutRequiresAuth(t *testing.T) {
+	srv := newTestServer(t)
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/logout", "", "")
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
 // createAndFetchUserID creates a group (optionally authenticated) then returns the stored userId of
 // the named participant.
 func createAndFetchUserID(t *testing.T, srv, token, body, name string) *string {
