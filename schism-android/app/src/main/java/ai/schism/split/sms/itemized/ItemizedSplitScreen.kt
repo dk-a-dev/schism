@@ -90,38 +90,53 @@ fun ItemizedSplitScreen(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    OutlinedTextField(
-                        value = state.title,
-                        onValueChange = viewModel::onTitleChange,
-                        label = { Text("Merchant / title") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        "You paid. Use − / + to set how much of each dish a person had. Tax splits by " +
-                            "what each person ordered.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    state.draft?.let { d ->
-                        val verified = d.verified
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Icon(
-                                if (verified) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
-                                contentDescription = null,
-                                tint = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp),
+                            OutlinedTextField(
+                                value = state.title,
+                                onValueChange = viewModel::onTitleChange,
+                                label = { Text("Merchant / title") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
                             )
                             Text(
-                                if (verified) "Totals verified — the items add up to the bill"
-                                else "Double-check the items — the totals didn't add up",
+                                "You paid. Use − / + to set how much of each dish a person had. Tax " +
+                                    "splits by what each person ordered.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+
+                            state.draft?.let { d ->
+                                val verified = d.verified
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(
+                                        if (verified) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Text(
+                                        if (verified) "Totals verified — the items add up to the bill"
+                                        else "Double-check the items — the totals didn't add up",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+
+                            if (state.groups.isNotEmpty()) {
+                                GroupPicker(
+                                    groups = state.groups,
+                                    selected = state.selectedGroup,
+                                    onSelect = viewModel::onGroupChange,
+                                )
+                            }
                         }
                     }
 
@@ -137,23 +152,20 @@ fun ItemizedSplitScreen(
                         )
                     } else {
                         val group = state.selectedGroup
-                        GroupPicker(
-                            groups = state.groups,
-                            selected = group,
-                            onSelect = viewModel::onGroupChange,
-                        )
                         if (group != null) {
-                            state.items.forEachIndexed { index, item ->
-                                ItemCard(
-                                    item = item,
-                                    currency = state.draft?.currency ?: "₹",
-                                    participants = group.participants,
-                                    shares = state.assignments[index].orEmpty(),
-                                    onAdjust = { pid, d -> viewModel.adjustShare(index, pid, d) },
-                                    onSetShare = { pid, value -> viewModel.setShare(index, pid, value) },
-                                    onEdit = { name, qty, amount -> viewModel.updateItem(index, name, qty, amount) },
-                                    onRemove = { viewModel.removeItem(index) },
-                                )
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                state.items.forEachIndexed { index, item ->
+                                    ItemCard(
+                                        item = item,
+                                        currency = state.draft?.currency ?: "₹",
+                                        participants = group.participants,
+                                        shares = state.assignments[index].orEmpty(),
+                                        onAdjust = { pid, d -> viewModel.adjustShare(index, pid, d) },
+                                        onSetShare = { pid, value -> viewModel.setShare(index, pid, value) },
+                                        onEdit = { name, qty, amount -> viewModel.updateItem(index, name, qty, amount) },
+                                        onRemove = { viewModel.removeItem(index) },
+                                    )
+                                }
                             }
                             OutlinedButton(onClick = { addingItem = true }, modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Filled.Add, contentDescription = null)
@@ -269,7 +281,10 @@ private fun ItemCard(
     var editing by remember { mutableStateOf(false) }
     var editingShareFor by remember { mutableStateOf<Pair<String, Long>?>(null) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 16.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     if (item.qty > 1) "${item.name}  ×${item.qty}" else item.name,
@@ -289,7 +304,8 @@ private fun ItemCard(
                     Icon(Icons.Filled.Close, contentDescription = "Remove item", modifier = Modifier.size(18.dp))
                 }
             }
-            Column(Modifier.padding(top = 4.dp, end = 12.dp)) {
+            HorizontalDivider()
+            Column(Modifier.padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 participants.forEach { p ->
                     val share = shares[p.id] ?: 0L
                     Row(

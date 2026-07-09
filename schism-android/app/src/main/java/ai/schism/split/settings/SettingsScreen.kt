@@ -2,6 +2,7 @@ package ai.schism.split.settings
 
 import ai.schism.split.BuildConfig
 import ai.schism.split.core.theme.ThemeMode
+import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -170,27 +170,12 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = symbol,
-                        onValueChange = { symbol = it },
-                        label = { Text("Symbol") },
-                        placeholder = { Text("₹") },
-                        singleLine = true,
-                        modifier = Modifier.width(110.dp),
-                    )
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it },
-                        label = { Text("ISO code") },
-                        placeholder = { Text("INR") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                CurrencyPicker(
+                    symbol = symbol,
+                    code = code,
+                    onPick = { s, c -> symbol = s; code = c },
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Button(
                     onClick = { viewModel.saveDefaultCurrency(symbol, code) },
                     modifier = Modifier.fillMaxWidth(),

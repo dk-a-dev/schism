@@ -4,6 +4,15 @@ package ai.schism.split.groups.list
 
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.UiState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -24,10 +34,11 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import ai.schism.split.core.ui.ListSkeleton
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,9 +52,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -79,19 +93,12 @@ fun GroupsListScreen(
                     IconButton(onClick = scanBill) {
                         Icon(Icons.Filled.DocumentScanner, contentDescription = "Scan a bill")
                     }
-                    IconButton(onClick = onJoinGroup) {
-                        Icon(Icons.Filled.GroupAdd, contentDescription = "Join a group")
-                    }
                 },
                 scrollBehavior = scrollBehavior,
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                text = { Text("New group") },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                onClick = onCreateGroup,
-            )
+            ExpandableGroupFab(onCreate = onCreateGroup, onJoin = onJoinGroup)
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -144,11 +151,93 @@ private fun GroupCard(group: GroupSummary, onOpenGroup: (String) -> Unit) {
                 )
                 val members = if (group.memberCount == 1) "1 member" else "${group.memberCount} members"
                 Text(
-                    listOf(members, group.currency).filter { it.isNotBlank() }.joinToString(" · "),
+                    members,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/**
+ * A single FAB that expands into two labeled mini-actions ("Create group" / "Join group") instead
+ * of offering two separate, easily-confused entry points. Tapping the main FAB rotates its icon
+ * from `+` to `×` and reveals the mini-actions above it with a fade/slide-in; tapping a mini-action
+ * or the scrim collapses it again.
+ */
+@Composable
+private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val rotation by animateFloatAsState(targetValue = if (expanded) 45f else 0f, label = "fabRotation")
+
+    Box(Modifier.fillMaxSize()) {
+        if (expanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { expanded = false },
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
+            ) {
+                MiniFabAction(label = "Create group", icon = Icons.Filled.Add) {
+                    expanded = false
+                    onCreate()
+                }
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
+            ) {
+                MiniFabAction(label = "Join group", icon = Icons.Filled.GroupAdd) {
+                    expanded = false
+                    onJoin()
+                }
+            }
+            FloatingActionButton(onClick = { expanded = !expanded }) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = if (expanded) "Close" else "New group",
+                    modifier = Modifier.rotate(rotation),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniFabAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 2.dp,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+        SmallFloatingActionButton(onClick = onClick) {
+            Icon(icon, contentDescription = label)
         }
     }
 }

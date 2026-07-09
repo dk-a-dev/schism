@@ -2,6 +2,7 @@
 
 package ai.schism.split.groups.create
 
+import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
 import android.content.Context
 import android.net.Uri
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -87,22 +87,12 @@ fun CreateGroupScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = form.currency,
-                        onValueChange = { viewModel.onCurrencyChange(it, form.currencyCode) },
-                        label = { Text("Symbol") },
-                        singleLine = true,
-                        modifier = Modifier.width(110.dp),
-                    )
-                    OutlinedTextField(
-                        value = form.currencyCode,
-                        onValueChange = { viewModel.onCurrencyChange(form.currency, it) },
-                        label = { Text("Currency code") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                CurrencyPicker(
+                    symbol = form.currency,
+                    code = form.currencyCode,
+                    onPick = { s, c -> viewModel.onCurrencyChange(s, c) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
                 OutlinedTextField(
                     value = form.information,
