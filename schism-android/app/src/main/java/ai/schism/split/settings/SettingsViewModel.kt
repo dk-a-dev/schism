@@ -109,6 +109,16 @@ class SettingsViewModel @Inject constructor(
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
+    /** Release notes ("what's new") for the currently-installed version, fetched from GitHub once. */
+    private val _currentNotes = MutableStateFlow<String?>(null)
+    val currentNotes: StateFlow<String?> = _currentNotes.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _currentNotes.value = updateChecker.releaseForTag(BuildConfig.VERSION_NAME)?.notes?.takeIf { it.isNotBlank() }
+        }
+    }
+
     /** Ask GitHub Releases for the latest tag and compare it to the running build. */
     fun checkForUpdates() {
         viewModelScope.launch {

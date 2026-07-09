@@ -11,15 +11,18 @@ import javax.inject.Singleton
 /** Public GitHub source repo, linked from Settings. */
 const val GITHUB_REPO_URL = "https://github.com/dk-a-dev/schism"
 
-/** Public, unauthenticated GitHub Releases API endpoint for the latest release. */
-const val GITHUB_LATEST_RELEASE_API_URL = "https://api.github.com/repos/dk-a-dev/schism/releases/latest"
+private const val GITHUB_API_BASE = "https://api.github.com/repos/dk-a-dev/schism/releases"
 
-/** A GitHub release, distilled to what the update-check UI needs. */
+/** Public, unauthenticated GitHub Releases API endpoint for the latest release. */
+const val GITHUB_LATEST_RELEASE_API_URL = "$GITHUB_API_BASE/latest"
+
+/** A GitHub release, distilled to what the update-check UI needs. [notes] is the release body ("what's new"). */
 data class ReleaseInfo(
     val versionName: String,
     val tag: String,
     val apkUrl: String?,
     val releaseUrl: String,
+    val notes: String,
 )
 
 /** Compares dotted numeric version strings component-by-component (e.g. "1.2.0" vs "1.1.9").
@@ -36,8 +39,8 @@ fun isNewer(latest: String, current: String): Boolean {
     return false
 }
 
-/** Checks GitHub's public Releases API for a newer build than the one installed. Never throws —
- *  any network/parse failure surfaces as a null result so callers can show a simple "couldn't check". */
+/** Checks GitHub's public Releases API for a newer build than the one installed, and the release
+ *  notes for a given version. Never throws — any network/parse failure surfaces as a null result. */
 @Singleton
 class UpdateChecker @Inject constructor() {
     // A PLAIN client on purpose — NOT the app's shared OkHttp. That one carries a
@@ -46,10 +49,19 @@ class UpdateChecker @Inject constructor() {
     // rejects. This client talks to GitHub's public API directly with no app interceptors.
     private val client = OkHttpClient()
 
-    suspend fun latestRelease(): ReleaseInfo? = withContext(Dispatchers.IO) {
+    /** The latest published release (for the "update available" check). */
+    suspend fun latestRelease(): ReleaseInfo? = fetch(GITHUB_LATEST_RELEASE_API_URL)
+
+    /** The release for a specific tag (e.g. "v1.1.5") — used to show "what's new" for the running build. */
+    suspend fun releaseForTag(tag: String): ReleaseInfo? {
+        val t = if (tag.startsWith("v")) tag else "v$tag"
+        return fetch("$GITHUB_API_BASE/tags/$t")
+    }
+
+    private suspend fun fetch(url: String): ReleaseInfo? = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url(GITHUB_LATEST_RELEASE_API_URL)
+                .url(url)
                 .header("Accept", "application/vnd.github+json")
                 .build()
             client.newCall(request).execute().use { response ->
@@ -58,6 +70,7 @@ class UpdateChecker @Inject constructor() {
                 val json = JSONObject(body)
                 val tag = json.optString("tag_name").takeIf { it.isNotBlank() } ?: return@use null
                 val releaseUrl = json.optString("html_url").takeIf { it.isNotBlank() } ?: return@use null
+                val notes = json.optString("body").trim()
 
                 var apkUrl: String? = null
                 val assets = json.optJSONArray("assets")
@@ -76,6 +89,7 @@ class UpdateChecker @Inject constructor() {
                     tag = tag,
                     apkUrl = apkUrl,
                     releaseUrl = releaseUrl,
+                    notes = notes,
                 )
             }
         }.getOrNull()

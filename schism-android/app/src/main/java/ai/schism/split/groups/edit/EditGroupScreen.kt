@@ -8,6 +8,11 @@ package ai.schism.split.groups.edit
 import ai.schism.split.core.ui.MorphLoader
 import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
+import ai.schism.split.groups.contactNameAndPhone
+import ai.schism.split.groups.pickPhoneContactIntent
+import ai.schism.split.groups.sendSmsInvites
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
@@ -123,16 +129,45 @@ fun EditGroupScreen(
                     }
                 }
             }
-            SchismSecondaryButton(onClick = viewModel::addParticipant, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text("  Add participant")
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val pickContact = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult(),
+            ) { result ->
+                result.data?.data?.let { uri ->
+                    contactNameAndPhone(context, uri)?.let { (name, phone) ->
+                        viewModel.addParticipantFromContact(name, phone)
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SchismSecondaryButton(onClick = viewModel::addParticipant, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Add")
+                }
+                SchismSecondaryButton(
+                    onClick = { pickContact.launch(pickPhoneContactIntent()) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.Contacts, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Contacts")
+                }
             }
 
             state.submitError?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             }
             SchismPrimaryButton(
-                onClick = { viewModel.submit(onSaved) },
+                onClick = {
+                    viewModel.submit {
+                        // Text an invite to anyone just added from contacts, then leave.
+                        val phones = viewModel.pendingInvitePhones()
+                        if (phones.isNotEmpty()) {
+                            sendSmsInvites(context, phones, viewModel.groupNameForInvite(), viewModel.inviteGroupId)
+                        }
+                        android.widget.Toast.makeText(context, "Group saved", android.widget.Toast.LENGTH_SHORT).show()
+                        onSaved()
+                    }
+                },
                 enabled = !state.submitting,
                 modifier = Modifier.fillMaxWidth(),
             ) {

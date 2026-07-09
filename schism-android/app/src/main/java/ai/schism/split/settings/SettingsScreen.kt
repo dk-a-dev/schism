@@ -71,6 +71,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
+    val currentNotes by viewModel.currentNotes.collectAsState()
     val context = LocalContext.current
 
     // Local edit buffers seeded from the persisted state; re-seed when the source changes.
@@ -216,10 +217,41 @@ fun SettingsScreen(
                         InfoRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                     }
                 }
-                SchismSecondaryButton(
-                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL))) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Source code") }
+                currentNotes?.let { notes ->
+                    Card(
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "WHAT'S NEW IN ${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                notes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    SchismSecondaryButton(
+                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL))) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Source code") }
+                    SchismSecondaryButton(
+                        onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("$GITHUB_REPO_URL/releases")))
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Release history") }
+                }
                 UpdateSection(updateState, onCheck = viewModel::checkForUpdates)
             }
 

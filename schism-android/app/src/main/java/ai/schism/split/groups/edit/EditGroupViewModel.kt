@@ -16,8 +16,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** A participant being edited; [id] is null for a newly added one (the backend will insert it). */
-data class EditParticipant(val id: String?, val name: String, val userId: String?)
+/** A participant being edited; [id] is null for a newly added one (the backend will insert it).
+ *  [phone] is set only for someone just added from contacts — it links them + powers the invite. */
+data class EditParticipant(val id: String?, val name: String, val userId: String?, val phone: String? = null)
 
 data class EditGroupForm(
     val name: String = "",
@@ -89,6 +90,29 @@ class EditGroupViewModel @Inject constructor(
         it.copy(form = it.form.copy(participants = it.form.participants + EditParticipant(null, "", null)))
     }
 
+    /** Add someone picked from contacts: a new participant carrying their phone (for linking + invite). */
+    fun addParticipantFromContact(name: String, phone: String?) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        _state.update { s ->
+            // Fill the first empty row if there is one, else append.
+            val parts = s.form.participants
+            val emptyIdx = parts.indexOfFirst { it.id == null && it.name.isBlank() }
+            val newRow = EditParticipant(id = null, name = trimmed, userId = null, phone = phone?.trim())
+            val next = if (emptyIdx >= 0) parts.toMutableList().also { it[emptyIdx] = newRow } else parts + newRow
+            s.copy(form = s.form.copy(participants = next), participantsError = null)
+        }
+    }
+
+    /** Phones of contact-added members still present in the form, for the post-save SMS invite. */
+    fun pendingInvitePhones(): List<String> =
+        _state.value.form.participants.mapNotNull { it.phone?.takeIf { p -> p.isNotBlank() && it.name.isNotBlank() } }
+
+    fun groupNameForInvite(): String = _state.value.form.name.trim()
+
+    /** The group being edited — used to build the invite link. */
+    val inviteGroupId: String get() = groupId
+
     fun removeParticipant(index: Int) = _state.update { s ->
         if (s.form.participants.size <= 1) return@update s
         s.copy(form = s.form.copy(participants = s.form.participants.filterIndexed { i, _ -> i != index }))
@@ -120,7 +144,9 @@ class EditGroupViewModel @Inject constructor(
                     information = form.information.trim(),
                     currency = form.currency,
                     currencyCode = form.currencyCode,
-                    participants = kept.map { ParticipantRequest(id = it.id, name = it.name, userId = it.userId) },
+                    participants = kept.map {
+                        ParticipantRequest(id = it.id, name = it.name, userId = it.userId, phone = it.phone)
+                    },
                 ),
             ).onSuccess {
                 _state.update { it.copy(submitting = false) }
