@@ -103,15 +103,25 @@ class LlmExpenseParser @Inject constructor(
      * Parse OCR text from a restaurant/shop receipt into a [ai.schism.split.sms.receipt.ReceiptDraft]
      * with per-item quantities and the tax, using the on-device model. Returns null when no model is
      * loaded or the output can't be understood — the caller falls back to the regex receipt parser.
+     *
+     * [structuredHandoff], when given, replaces [ocrLines] as the text shown to the model — e.g. the
+     * column-structured rows (and partial-draft summary) built by
+     * [ai.schism.split.sms.receipt.engine.buildLlmHandoff], which is far easier for the model to
+     * repair against than flattened OCR text. Omitting it preserves the original plain-lines
+     * behaviour, so existing callers don't need to change.
      */
     suspend fun parseReceipt(
         ocrLines: List<String>,
+        structuredHandoff: String? = null,
     ): ai.schism.split.sms.receipt.ReceiptDraft? = runCatching {
         withContext(Dispatchers.Default) {
             if (!settings.aiEnabled.first()) return@withContext null
             val llm = engine() ?: return@withContext null
-            // Cap the OCR fed to the model so prompt + JSON output stay inside the 2048-token context.
-            val ocr = ocrLines.map { it.take(64) }.take(45).joinToString("\n").take(2400)
+            // Cap the text fed to the model so prompt + JSON output stay inside the 2048-token
+            // context. A structured handoff carries " | " separators, so allow slightly longer lines
+            // before truncating than the plain-text path, but keep the same overall budget.
+            val ocr = structuredHandoff?.lines()?.map { it.take(80) }?.take(45)?.joinToString("\n")?.take(2400)
+                ?: ocrLines.map { it.take(64) }.take(45).joinToString("\n").take(2400)
 
             // Harness: generate → scrub → validate; on failure, one repair round that tells the model
             // exactly what was wrong with its previous answer. Never trust a single unvalidated pass.
@@ -231,6 +241,10 @@ class LlmExpenseParser @Inject constructor(
         - Sanity check: the sum of item amounts should be close to the subtotal. Drop anything that
           doesn't look like a dish price.
         - "tax" = all taxes and charges combined (GST/CGST/SGST/service), "total" = the final payable.
+        - Some lines below separate their columns with " | " (e.g. "Paneer Tikka | 2 | 190.00 | 380.00"
+          is name | qty | rate | amount) — use that structure to read qty/rate/amount correctly instead
+          of guessing from a run of numbers. A line before the OCR may already summarize items/totals
+          this app previously extracted — treat that as a starting point to correct, not to discard.
         Reply with ONLY minified JSON, no prose, exactly:
         {"merchant": string, "date": "YYYY-MM-DD" or null, "items": [{"name": string, "qty": number, "amount": number}], "subtotal": number, "tax": number, "total": number}
         OCR:

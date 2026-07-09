@@ -2,6 +2,7 @@ package ai.schism.split.sms.itemized
 
 import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.sms.receipt.ReceiptScanner
+import ai.schism.split.sms.receipt.engine.buildLlmHandoff
 import ai.schism.split.sms.receipt.engine.parseBill
 import android.app.Activity
 import android.content.Context
@@ -70,10 +71,13 @@ class BillScanViewModel @Inject constructor(
                 // it already no-ops (returns null) when the AI toggle is off or the model's absent.
                 var draft = parseBill(rows)
                 if (draft == null || draft.verified == false) {
-                    val ai = runCatching { llmParser.parseReceipt(rows.map { it.text }) }
+                    // Hand the model column-structured OCR (and what the engine already read, if
+                    // anything) instead of flattened lines, so it repairs against structure.
+                    val handoff = buildLlmHandoff(rows, draft)
+                    val aiDraft = runCatching { llmParser.parseReceipt(rows.map { it.text }, handoff) }
                         .getOrNull()
                         ?.takeIf { it.lineItems.isNotEmpty() }
-                    if (ai != null) draft = ai
+                    if (aiDraft != null) draft = aiDraft
                 }
                 draft
             }.onSuccess { draft ->
