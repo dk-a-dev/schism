@@ -145,7 +145,8 @@ class ClaimSessionViewModel @Inject constructor(
         }
     }
 
-    /** Adjust this device's weight for an item by [delta] (+0.5 / -0.5, …), clamped at 0. */
+    /** Adjust this device's weight for an item by [delta] (the stepper uses ±1.0; ±0.5 is only
+     * reachable via typed entry), clamped at 0. */
     fun adjustWeight(itemIdx: Int, delta: Double) {
         setWeight(itemIdx, (_state.value.weightFor(itemIdx) + delta).coerceAtLeast(0.0))
     }
@@ -180,7 +181,13 @@ class ClaimSessionViewModel @Inject constructor(
 
     private suspend fun handlePutClaimsFailure(e: Throwable) {
         when (e) {
-            is ClaimError.Stale -> refresh() // keeps this device's in-flight myWeights; only the session is replaced.
+            is ClaimError.Stale -> {
+                // Keeps this device's in-flight myWeights; only the session is replaced. The stale PUT
+                // never landed, so re-issue it against the fresh version or the user's edits are
+                // silently lost.
+                refresh()
+                if (_state.value.myWeights.isNotEmpty()) submitWeights()
+            }
             is ClaimError.Locked -> {
                 pollJob?.cancel()
                 _state.update {

@@ -26,6 +26,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,6 +45,7 @@ class ClaimSessionViewModelTest {
     private lateinit var claimRepo: ClaimSessionRepository
 
     private var putClaimsShouldLock = false
+    private var putClaimsShouldStaleOnce = false
     private var putRequestCount = 0
     private var getRequestCount = 0
 
@@ -64,10 +66,11 @@ class ClaimSessionViewModelTest {
                 return when {
                     request.method == "PUT" && path.contains("/claims") -> {
                         putRequestCount++
-                        if (putClaimsShouldLock) {
-                            MockResponse().setResponseCode(409).setBody("""{"error":"LOCKED"}""")
-                        } else {
-                            MockResponse().setResponseCode(200)
+                        when {
+                            putClaimsShouldLock -> MockResponse().setResponseCode(409).setBody("""{"error":"LOCKED"}""")
+                            putClaimsShouldStaleOnce && putRequestCount == 1 ->
+                                MockResponse().setResponseCode(409).setBody("""{"error":"VERSION_STALE"}""")
+                            else -> MockResponse().setResponseCode(200)
                         }
                     }
                     path.endsWith("/v1/claim-sessions/s1") -> {
@@ -143,5 +146,25 @@ class ClaimSessionViewModelTest {
         testScheduler.runCurrent()
         assertEquals(putsAfterLock, putRequestCount)
         assertEquals(getsAfterLock, getRequestCount)
+    }
+
+    @Test
+    fun staleVersionRefetchesAndResubmitsTheWrite(): TestResult = runTest(dispatcher) {
+        putClaimsShouldStaleOnce = true
+        val vm = vm()
+        vm.state.first { it.session != null && it.myParticipantId.isNotBlank() }
+
+        vm.setWeight(0, 1.0)
+        // Fire the debounced PUT without waiting 400 real ms.
+        testScheduler.advanceTimeBy(500)
+        testScheduler.runCurrent()
+
+        // First PUT hits 409 VERSION_STALE; the VM must refetch AND re-issue the write (not just
+        // silently keep the local edit unsent) so a second PUT lands and clears myWeights (only
+        // `submitWeights`'s success path does that — if the stale write were never resubmitted,
+        // myWeights would stay populated forever and putRequestCount would stay at 1).
+        vm.state.first { it.myWeights.isEmpty() }
+        assertEquals(2, putRequestCount)
+        assertTrue("expected the stale-triggered refresh plus the initial load", getRequestCount >= 2)
     }
 }

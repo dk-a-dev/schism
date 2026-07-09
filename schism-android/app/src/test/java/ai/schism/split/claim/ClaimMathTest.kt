@@ -64,6 +64,24 @@ class ClaimMathTest {
     }
 
     @Test
+    fun lastSortedParticipantIdAbsorbsRoundingRegardlessOfClaimOrder() {
+        // Claims supplied out of sorted order ("c" first) must still have the LAST-SORTED id ("c")
+        // absorb the per-item rounding remainder, matching the server's sorted-participant-id rule —
+        // not insertion/claims-list order.
+        val items = listOf(ClaimItemDto(0, "Snack", 1, 100))
+        val claims = listOf(
+            ClaimDto(0, "c", 1.0),
+            ClaimDto(0, "a", 1.0),
+            ClaimDto(0, "b", 1.0),
+        )
+        val owes = previewOwes(items, claims)
+        assertEquals(33L, owes["a"])
+        assertEquals(33L, owes["b"])
+        assertEquals(34L, owes["c"])
+        assertEquals(100L, owes.values.sum())
+    }
+
+    @Test
     fun multipleItemsAndClaimantsSplitChargePotProportionally() {
         val items = listOf(
             ClaimItemDto(0, "Dish A", 1, 20000),
