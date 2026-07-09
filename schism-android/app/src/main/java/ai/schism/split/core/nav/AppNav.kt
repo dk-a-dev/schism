@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -107,6 +109,24 @@ fun AppNav() {
             modifier = Modifier.padding(padding).windowInsetsPadding(WindowInsets.statusBars),
         ) {
             CloudStatusBanner(online = online, pending = pending)
+            val updateVm: ai.schism.split.core.update.UpdateBannerViewModel =
+                androidx.hilt.navigation.compose.hiltViewModel()
+            val updateAvailable by updateVm.available.collectAsState()
+            updateAvailable?.let { release ->
+                UpdateAvailableBanner(
+                    versionName = release.versionName,
+                    onDownload = {
+                        val url = release.apkUrl ?: release.releaseUrl
+                        runCatching {
+                            ctx.startActivity(
+                                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    },
+                    onDismiss = updateVm::dismiss,
+                )
+            }
             NavHost(
                 navController = navController,
                 startDestination = Routes.GROUPS,
@@ -288,6 +308,42 @@ private fun CloudStatusBanner(online: Boolean, pending: Int) {
         ) {
             Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
             Text(text, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = fg)
+        }
+    }
+}
+
+/** A slim "Update available" strip shown at launch when GitHub has a newer release than this build. */
+@Composable
+private fun UpdateAvailableBanner(versionName: String, onDownload: () -> Unit, onDismiss: () -> Unit) {
+    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(scheme.primaryContainer)
+            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            androidx.compose.material.icons.Icons.Filled.CloudUpload,
+            contentDescription = null,
+            tint = scheme.onPrimaryContainer,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            "Update available — v$versionName",
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = scheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.TextButton(onClick = onDownload) { Text("Download") }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                androidx.compose.material.icons.Icons.Filled.Close,
+                contentDescription = "Dismiss",
+                tint = scheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }

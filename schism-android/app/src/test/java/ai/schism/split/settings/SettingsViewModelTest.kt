@@ -27,7 +27,7 @@ import okhttp3.OkHttpClient
 class SettingsViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var settings: SettingsRepository
-    private val updateChecker = UpdateChecker(OkHttpClient())
+    private val updateChecker = UpdateChecker()
 
     @Before
     fun setUp() {

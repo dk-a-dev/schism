@@ -39,9 +39,13 @@ fun isNewer(latest: String, current: String): Boolean {
 /** Checks GitHub's public Releases API for a newer build than the one installed. Never throws —
  *  any network/parse failure surfaces as a null result so callers can show a simple "couldn't check". */
 @Singleton
-class UpdateChecker @Inject constructor(
-    private val client: OkHttpClient,
-) {
+class UpdateChecker @Inject constructor() {
+    // A PLAIN client on purpose — NOT the app's shared OkHttp. That one carries a
+    // BackendUrlInterceptor that rewrites every request's host to the Schism backend (so a GitHub
+    // call would be sent to api.schism… and fail) plus an AuthInterceptor whose bearer token GitHub
+    // rejects. This client talks to GitHub's public API directly with no app interceptors.
+    private val client = OkHttpClient()
+
     suspend fun latestRelease(): ReleaseInfo? = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
