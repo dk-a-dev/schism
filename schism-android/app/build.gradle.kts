@@ -35,8 +35,8 @@ android {
         applicationId = "ai.schism.split"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10101
-        versionName = "1.1.1"
+        versionCode = 10102
+        versionName = "1.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
     }
