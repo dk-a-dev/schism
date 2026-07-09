@@ -132,6 +132,9 @@ fun GroupDetailScreen(
                     text = { Text("Add expense") },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     onClick = { onAddExpense(groupId) },
+                    shape = MaterialTheme.shapes.large,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         },

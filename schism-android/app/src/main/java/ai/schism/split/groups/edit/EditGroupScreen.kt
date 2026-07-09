@@ -6,6 +6,8 @@
 package ai.schism.split.groups.edit
 
 import ai.schism.split.core.ui.MorphLoader
+import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,12 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -123,7 +123,7 @@ fun EditGroupScreen(
                     }
                 }
             }
-            OutlinedButton(onClick = viewModel::addParticipant, modifier = Modifier.fillMaxWidth()) {
+            SchismSecondaryButton(onClick = viewModel::addParticipant, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Text("  Add participant")
             }
@@ -131,7 +131,7 @@ fun EditGroupScreen(
             state.submitError?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             }
-            Button(
+            SchismPrimaryButton(
                 onClick = { viewModel.submit(onSaved) },
                 enabled = !state.submitting,
                 modifier = Modifier.fillMaxWidth(),
@@ -139,7 +139,7 @@ fun EditGroupScreen(
                 if (state.submitting) {
                     LoadingIndicator(modifier = Modifier.size(20.dp))
                 } else {
-                    Text("Save changes", fontWeight = FontWeight.SemiBold)
+                    Text("Save changes")
                 }
             }
         }

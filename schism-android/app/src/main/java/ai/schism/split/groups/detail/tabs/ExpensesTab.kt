@@ -106,5 +106,10 @@ private fun ExpenseCard(
             }
         }
     }
-    Card(onClick = { onExpenseClick(expense) }, colors = cardColors, modifier = Modifier.fillMaxWidth()) { body() }
+    Card(
+        onClick = { onExpenseClick(expense) },
+        colors = cardColors,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) { body() }
 }

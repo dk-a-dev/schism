@@ -6,6 +6,8 @@
 package ai.schism.split.sms.itemized
 
 import ai.schism.split.core.money.formatMinor
+import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.Participant
@@ -34,7 +36,6 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -45,7 +46,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -101,7 +101,10 @@ fun ItemizedSplitScreen(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                        shape = MaterialTheme.shapes.large,
+                    ) {
                         Column(
                             Modifier.fillMaxWidth().padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -178,7 +181,7 @@ fun ItemizedSplitScreen(
                                     )
                                 }
                             }
-                            OutlinedButton(onClick = { addingItem = true }, modifier = Modifier.fillMaxWidth()) {
+                            SchismSecondaryButton(onClick = { addingItem = true }, modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Filled.Add, contentDescription = null)
                                 Text("  Add item")
                             }
@@ -209,7 +212,7 @@ fun ItemizedSplitScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
 
-                    Button(
+                    SchismPrimaryButton(
                         onClick = {
                             viewModel.submit(onDone = {
                                 Toast.makeText(
@@ -252,7 +255,10 @@ fun ItemizedSplitScreen(
 
 @Composable
 private fun AiTipCard(aiEnabled: Boolean) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        shape = MaterialTheme.shapes.large,
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(14.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -299,7 +305,10 @@ private fun ItemCard(
 ) {
     var editing by remember { mutableStateOf(false) }
     var editingShareFor by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -485,7 +494,10 @@ private fun ItemDialog(
 private fun PerPersonTotals(group: Group, perPerson: Map<String, Long>, taxMinor: Long, currency: String) {
     val grand = perPerson.values.sum()
     val subtotal = grand - taxMinor
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
+    ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Each person owes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             HorizontalDivider()

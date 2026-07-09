@@ -7,6 +7,8 @@ package ai.schism.split.groups.create
 
 import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import android.content.Context
 import android.net.Uri
 import android.provider.ContactsContract
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -27,15 +28,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -156,14 +154,14 @@ fun CreateGroupScreen(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
+                    SchismSecondaryButton(
                         onClick = viewModel::addParticipant,
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text("Add", modifier = Modifier.padding(start = 8.dp))
                     }
-                    OutlinedButton(
+                    SchismSecondaryButton(
                         onClick = {
                             pickContact.launch(
                                 android.content.Intent(android.content.Intent.ACTION_PICK).apply {
@@ -188,7 +186,7 @@ fun CreateGroupScreen(
             }
 
             val inviteContext = LocalContext.current
-            Button(
+            SchismPrimaryButton(
                 onClick = {
                     viewModel.submit { groupId ->
                         // Real invites: prefill an SMS to every contact-added member with the link.
@@ -200,11 +198,7 @@ fun CreateGroupScreen(
                     }
                 },
                 enabled = !state.submitting,
-                shape = MaterialTheme.shapes.large,
-                contentPadding = ButtonDefaults.ContentPadding,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.submitting) {
                     LoadingIndicator(
@@ -212,7 +206,7 @@ fun CreateGroupScreen(
                         modifier = Modifier.size(20.dp),
                     )
                 } else {
-                    Text("Create group", fontWeight = FontWeight.SemiBold)
+                    Text("Create group")
                 }
             }
         }
@@ -270,6 +264,7 @@ private fun SectionCard(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
             ),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(

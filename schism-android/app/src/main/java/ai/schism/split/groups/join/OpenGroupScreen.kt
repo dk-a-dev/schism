@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import ai.schism.split.core.ui.MorphLoader
+import ai.schism.split.core.ui.SchismPrimaryButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,7 +48,7 @@ fun OpenGroupScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
-                Button(onClick = onFailed) { Text("Go to groups") }
+                SchismPrimaryButton(onClick = onFailed) { Text("Go to groups") }
             }
             else -> Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

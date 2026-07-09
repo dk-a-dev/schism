@@ -2,6 +2,7 @@
 
 package ai.schism.split.groups.qr
 
+import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.groups.join.JoinGroupViewModel
 import ai.schism.split.groups.join.shareGroupInvite
 import androidx.compose.foundation.Image
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -83,6 +83,7 @@ fun InviteQrScreen(
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = MaterialTheme.shapes.large,
             ) {
                 Image(
                     bitmap = qr,
@@ -98,7 +99,7 @@ fun InviteQrScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            Button(
+            SchismPrimaryButton(
                 onClick = { shareGroupInvite(context, groupId, groupName) },
                 modifier = Modifier.fillMaxWidth(),
             ) {

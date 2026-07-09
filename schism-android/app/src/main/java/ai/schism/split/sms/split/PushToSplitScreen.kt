@@ -4,6 +4,7 @@ package ai.schism.split.sms.split
 
 import ai.schism.split.core.money.formatMinor
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.groups.data.Group
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -109,7 +109,7 @@ fun PushToSplitScreen(
                         )
                     }
 
-                    Button(
+                    SchismPrimaryButton(
                         onClick = { state.selectedGroupId?.let(onContinue) },
                         enabled = state.selectedGroupId != null,
                         modifier = Modifier.fillMaxWidth(),
@@ -124,7 +124,10 @@ fun PushToSplitScreen(
 
 @Composable
 private fun TransactionSummary(merchant: String, amount: String, bank: String, key: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,

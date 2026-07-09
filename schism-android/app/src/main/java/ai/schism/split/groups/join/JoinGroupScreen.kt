@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import ai.schism.split.groups.qr.scanQrCode
+import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -77,14 +77,14 @@ fun JoinGroupScreen(
                 supportingText = (state as? JoinState.Error)?.let { { Text(it.message) } },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
+            SchismPrimaryButton(
                 onClick = { viewModel.join(input, onJoined) },
                 enabled = !joining && input.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (joining) LoadingIndicator(modifier = Modifier.padding(4.dp).size(20.dp)) else Text("Join")
             }
-            OutlinedButton(
+            SchismSecondaryButton(
                 onClick = {
                     scanQrCode(context) { value ->
                         val id = value?.let { JoinGroupViewModel.parseGroupId(it) }

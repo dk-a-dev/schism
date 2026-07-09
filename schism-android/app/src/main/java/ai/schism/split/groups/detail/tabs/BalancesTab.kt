@@ -63,6 +63,7 @@ fun BalancesTab(
             items(balances.perParticipant.entries.toList(), key = { it.key }) { (id, balance) ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -98,6 +99,7 @@ fun BalancesTab(
                 items(balances.reimbursements, key = { it.from + it.to + it.amount }) { r ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                        shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(

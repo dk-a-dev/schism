@@ -6,6 +6,8 @@
 package ai.schism.split.expense.edit
 
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.ui.SchismFilterChip
+import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.expense.edit.voice.VoiceListeningDialog
 import ai.schism.split.expense.edit.voice.rememberVoiceInput
 import android.widget.Toast
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,8 +32,6 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -42,7 +41,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -306,7 +304,7 @@ fun ExpenseEditScreen(
                 )
             }
 
-            Button(
+            SchismPrimaryButton(
                 onClick = {
                     viewModel.submit(onSaved = {
                         Toast.makeText(context, "Expense saved", Toast.LENGTH_SHORT).show()
@@ -314,11 +312,7 @@ fun ExpenseEditScreen(
                     })
                 },
                 enabled = !state.submitting,
-                shape = MaterialTheme.shapes.large,
-                contentPadding = ButtonDefaults.ContentPadding,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.submitting) {
                     LoadingIndicator(
@@ -326,7 +320,7 @@ fun ExpenseEditScreen(
                         modifier = Modifier.size(20.dp),
                     )
                 } else {
-                    Text("Save", fontWeight = FontWeight.SemiBold)
+                    Text("Save")
                 }
             }
         }
@@ -345,7 +339,7 @@ private fun SplitMode.label(): String = when (this) {
 private fun SplitModeChips(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SplitMode.entries.forEach { mode ->
-            FilterChip(
+            SchismFilterChip(
                 selected = state.splitMode == mode,
                 onClick = { viewModel.onSplitModeChange(mode) },
                 label = { Text(mode.label()) },
@@ -481,6 +475,7 @@ private fun SectionCard(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
             ),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(

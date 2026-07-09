@@ -1,6 +1,7 @@
 package ai.schism.split.groups.detail.tabs
 
 import ai.schism.split.core.money.formatMinor
+import ai.schism.split.core.ui.SchismFilterChip
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.expense.data.Activity
 import ai.schism.split.groups.detail.StateSlice
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +68,7 @@ fun ActivityTab(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ActivityFilter.entries.forEach { f ->
-                    FilterChip(
+                    SchismFilterChip(
                         selected = filter == f,
                         onClick = { filter = f },
                         label = { Text(f.label) },

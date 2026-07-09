@@ -4,6 +4,8 @@ import ai.schism.split.BuildConfig
 import ai.schism.split.core.theme.ThemeMode
 import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.update.GITHUB_REPO_URL
 import android.content.Intent
 import android.net.Uri
@@ -26,7 +28,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -35,7 +36,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -100,7 +100,13 @@ fun SettingsScreen(
         ) {
             // ── Profile ────────────────────────────────────────────────────
             SettingsSection("Profile", initiallyExpanded = true) {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    ),
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Column(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -150,7 +156,7 @@ fun SettingsScreen(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Button(
+                        SchismPrimaryButton(
                             onClick = { viewModel.saveProfile(name, email, phone) },
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("Save profile") }
@@ -185,7 +191,7 @@ fun SettingsScreen(
                     onPick = { s, c -> symbol = s; code = c },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Button(
+                SchismPrimaryButton(
                     onClick = { viewModel.saveDefaultCurrency(symbol, code) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Save currency") }
@@ -193,7 +199,13 @@ fun SettingsScreen(
 
             // ── About ──────────────────────────────────────────────────────
             SettingsSection("About") {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    ),
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Column(Modifier.padding(16.dp)) {
                         InfoRow("Groups joined", state.groupCount.toString())
                         HorizontalDivider()
@@ -202,7 +214,7 @@ fun SettingsScreen(
                         InfoRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                     }
                 }
-                OutlinedButton(
+                SchismSecondaryButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL))) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Source code") }
@@ -217,7 +229,7 @@ fun SettingsScreen(
 
             // ── Data ───────────────────────────────────────────────────────
             SettingsSection("Data") {
-                OutlinedButton(
+                SchismSecondaryButton(
                     onClick = { confirmReset = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Reset app data") }
@@ -285,10 +297,10 @@ private fun AccountSection(viewModel: AccountSettingsViewModel = hiltViewModel()
     var confirmDelete by remember { mutableStateOf(false) }
 
     SettingsSection("Account") {
-        OutlinedButton(onClick = { confirmLogout = true }, modifier = Modifier.fillMaxWidth()) {
+        SchismSecondaryButton(onClick = { confirmLogout = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Log out")
         }
-        OutlinedButton(
+        SchismSecondaryButton(
             onClick = { confirmDelete = true },
             modifier = Modifier.fillMaxWidth(),
             colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
@@ -358,15 +370,15 @@ private fun AiSection(viewModel: AiSettingsViewModel = hiltViewModel()) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
-                downloading -> OutlinedButton(onClick = viewModel::cancel, modifier = Modifier.weight(1f)) {
+                downloading -> SchismSecondaryButton(onClick = viewModel::cancel, modifier = Modifier.weight(1f)) {
                     Text("Cancel")
                 }
-                else -> Button(onClick = viewModel::download, modifier = Modifier.weight(1f)) {
+                else -> SchismPrimaryButton(onClick = viewModel::download, modifier = Modifier.weight(1f)) {
                     Text(if (ready) "Re-download" else "Download model")
                 }
             }
             if (ready && !downloading) {
-                OutlinedButton(onClick = viewModel::delete, modifier = Modifier.weight(1f)) { Text("Delete") }
+                SchismSecondaryButton(onClick = viewModel::delete, modifier = Modifier.weight(1f)) { Text("Delete") }
             }
         }
     }
@@ -378,7 +390,7 @@ private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
     val context = LocalContext.current
     when (updateState) {
         is UpdateState.Idle -> {
-            Button(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
+            SchismPrimaryButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
         }
         is UpdateState.Checking -> {
             Row(
@@ -395,7 +407,7 @@ private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
+            SchismSecondaryButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
         }
         is UpdateState.Available -> {
             Text(
@@ -403,7 +415,7 @@ private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            Button(
+            SchismPrimaryButton(
                 onClick = {
                     val url = updateState.release.apkUrl ?: updateState.release.releaseUrl
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -417,7 +429,7 @@ private fun UpdateSection(updateState: UpdateState, onCheck: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            OutlinedButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
+            SchismSecondaryButton(onClick = onCheck, modifier = Modifier.fillMaxWidth()) { Text("Check for updates") }
         }
     }
 }

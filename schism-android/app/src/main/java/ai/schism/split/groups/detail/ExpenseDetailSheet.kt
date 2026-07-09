@@ -3,6 +3,7 @@
 package ai.schism.split.groups.detail
 
 import ai.schism.split.core.money.formatMinor
+import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.expense.data.Expense
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -76,7 +76,7 @@ fun ExpenseDetailSheet(
                 Text(expense.notes, style = MaterialTheme.typography.bodyMedium)
             }
             if (canEdit) {
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                SchismPrimaryButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
                     Text("Edit expense")
                 }
             }

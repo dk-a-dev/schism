@@ -4,6 +4,9 @@ package ai.schism.split.sms.inbox
 
 import ai.schism.split.core.money.formatMinor
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.ui.SchismFilterChip
+import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.sms.data.Transaction
 import android.Manifest
@@ -29,10 +32,8 @@ import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -43,7 +44,6 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -127,6 +127,9 @@ fun InboxScreen(
                 text = { Text("Scan receipt") },
                 icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
                 onClick = { pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
+                shape = MaterialTheme.shapes.large,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         },
     ) { padding ->
@@ -137,7 +140,7 @@ fun InboxScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     InboxFilter.entries.forEach { f ->
-                        FilterChip(
+                        SchismFilterChip(
                             selected = filter == f,
                             onClick = { viewModel.setFilter(f) },
                             label = { Text(f.label) },
@@ -199,6 +202,7 @@ private fun TransactionCard(
     var editing by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -231,16 +235,16 @@ private fun TransactionCard(
             }
             when (filter) {
                 InboxFilter.ToSplit -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
+                    SchismSecondaryButton(
                         onClick = { onKeepPersonal(txn.id) },
                         modifier = Modifier.weight(1f),
                     ) { Text("Keep personal") }
-                    Button(
+                    SchismPrimaryButton(
                         onClick = { onSplit(txn.id) },
                         modifier = Modifier.weight(1f),
                     ) { Text("Split to group") }
                 }
-                InboxFilter.Personal -> OutlinedButton(
+                InboxFilter.Personal -> SchismSecondaryButton(
                     onClick = { onRestore(txn.id) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Move to split") }
@@ -321,14 +325,14 @@ private fun PermissionRequest(onAllow: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            Button(onClick = onAllow) { Text("Allow SMS access") }
+            SchismPrimaryButton(onClick = onAllow) { Text("Allow SMS access") }
             Text(
                 "If the prompt doesn't appear, open Settings → Permissions → SMS and turn it on.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            OutlinedButton(onClick = { context.openAppSettings() }) { Text("Open app settings") }
+            SchismSecondaryButton(onClick = { context.openAppSettings() }) { Text("Open app settings") }
         }
     }
 }

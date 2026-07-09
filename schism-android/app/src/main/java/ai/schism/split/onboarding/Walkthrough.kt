@@ -1,6 +1,7 @@
 package ai.schism.split.onboarding
 
 import ai.schism.split.core.ui.SchismLogo
+import ai.schism.split.core.ui.SchismPrimaryButton
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Sms
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -159,16 +158,16 @@ fun Walkthrough(onFinish: () -> Unit) {
                 }
             }
 
-            Button(
+            SchismPrimaryButton(
                 onClick = {
                     if (isLast) onFinish() else scope.launch {
                         pagerState.animateScrollToPage(pagerState.currentPage + 1)
                     }
                 },
                 shape = RoundedCornerShape(100),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 4.dp, bottom = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 20.dp),
             ) {
-                Text(if (isLast) "Get started" else "Next", fontWeight = FontWeight.SemiBold)
+                Text(if (isLast) "Get started" else "Next")
             }
         }
     }

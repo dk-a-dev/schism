@@ -109,6 +109,7 @@ private fun SpendingContent(summary: SpendingSummary) {
 private fun MonthHeroCard(monthTotalMinor: Long, currency: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = MaterialTheme.shapes.extraLarge,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -130,6 +131,7 @@ private fun MonthHeroCard(monthTotalMinor: Long, currency: String) {
 private fun MerchantRow(merchant: MerchantSpend, currency: String, maxMinor: Long) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -188,6 +190,7 @@ private fun ProportionBar(fraction: Float) {
 private fun MonthlyTrendCard(months: List<MonthSpend>, currency: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

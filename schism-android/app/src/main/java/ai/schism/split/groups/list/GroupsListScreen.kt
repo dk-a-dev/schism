@@ -5,7 +5,9 @@ package ai.schism.split.groups.list
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.UiState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -25,7 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -135,6 +136,7 @@ private fun GroupCard(group: GroupSummary, onOpenGroup: (String) -> Unit) {
     Card(
         onClick = { onOpenGroup(group.id) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -169,7 +171,11 @@ private fun GroupCard(group: GroupSummary, onOpenGroup: (String) -> Unit) {
 @Composable
 private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val rotation by animateFloatAsState(targetValue = if (expanded) 45f else 0f, label = "fabRotation")
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 45f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "fabRotation",
+    )
 
     Box(Modifier.fillMaxSize()) {
         if (expanded) {
@@ -208,7 +214,12 @@ private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit) {
                     onJoin()
                 }
             }
-            FloatingActionButton(onClick = { expanded = !expanded }) {
+            FloatingActionButton(
+                onClick = { expanded = !expanded },
+                shape = MaterialTheme.shapes.large,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
                 Icon(
                     Icons.Filled.Add,
                     contentDescription = if (expanded) "Close" else "New group",
@@ -226,7 +237,7 @@ private fun MiniFabAction(label: String, icon: androidx.compose.ui.graphics.vect
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Surface(
-            shape = RoundedCornerShape(8.dp),
+            shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 2.dp,
         ) {
@@ -236,7 +247,12 @@ private fun MiniFabAction(label: String, icon: androidx.compose.ui.graphics.vect
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
-        SmallFloatingActionButton(onClick = onClick) {
+        SmallFloatingActionButton(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.large,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ) {
             Icon(icon, contentDescription = label)
         }
     }

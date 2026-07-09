@@ -3,18 +3,17 @@
 package ai.schism.split.onboarding
 
 import ai.schism.split.core.ui.SchismLogo
+import ai.schism.split.core.ui.SchismPrimaryButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -141,14 +140,14 @@ private fun AuthForm(
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
 
-            Button(
+            SchismPrimaryButton(
                 onClick = {
                     if (register) viewModel.register(name, email, password, phone, onDone)
                     else viewModel.login(email, password, onDone)
                 },
                 enabled = canSubmit,
                 shape = RoundedCornerShape(100),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.submitting) {
                     LoadingIndicator(
@@ -156,7 +155,7 @@ private fun AuthForm(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    Text(if (register) "Create account" else "Log in", fontWeight = FontWeight.SemiBold)
+                    Text(if (register) "Create account" else "Log in")
                 }
             }
             TextButton(onClick = { register = !register }, modifier = Modifier.fillMaxWidth()) {
