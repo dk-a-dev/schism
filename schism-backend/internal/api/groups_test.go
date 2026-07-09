@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -55,6 +56,48 @@ func TestCreateGroupHTTP(t *testing.T) {
 
 	resp3, _ := http.Get(srv.URL + "/v1/groups/nope")
 	require.Equal(t, http.StatusNotFound, resp3.StatusCode)
+}
+
+func TestCreateGroupLogsActivity(t *testing.T) {
+	srv := newTestServer(t)
+	g := createGroupFixture(t, srv.URL)
+
+	actResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	require.Equal(t, http.StatusOK, actResp.StatusCode)
+	var acts []store.Activity
+	require.NoError(t, json.NewDecoder(actResp.Body).Decode(&acts))
+	require.Len(t, acts, 1)
+	require.Equal(t, "GROUP_CREATED", acts[0].ActivityType)
+	require.Equal(t, "Trip", acts[0].Data)
+}
+
+func TestUpdateGroupLogsMemberAndRenameActivity(t *testing.T) {
+	srv := newTestServer(t)
+	g := createGroupFixture(t, srv.URL) // participants: A, B
+
+	// Rename the group, drop B, and add C.
+	body := fmt.Sprintf(`{"name":"Trip 2","currency":"$",
+	  "participants":[{"id":%q,"name":"A"},{"name":"C"}]}`, g.Participants[0].ID)
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/v1/groups/"+g.ID, bytes.NewBufferString(body))
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	actResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	require.Equal(t, http.StatusOK, actResp.StatusCode)
+	var acts []store.Activity
+	require.NoError(t, json.NewDecoder(actResp.Body).Decode(&acts))
+
+	byType := map[string][]store.Activity{}
+	for _, a := range acts {
+		byType[a.ActivityType] = append(byType[a.ActivityType], a)
+	}
+	require.Len(t, byType["GROUP_RENAMED"], 1)
+	require.Equal(t, "Trip 2", byType["GROUP_RENAMED"][0].Data)
+	require.Len(t, byType["MEMBER_ADDED"], 1)
+	require.Equal(t, "C", byType["MEMBER_ADDED"][0].Data)
+	require.Len(t, byType["MEMBER_REMOVED"], 1)
+	require.Equal(t, "B", byType["MEMBER_REMOVED"][0].Data)
 }
 
 func TestListCategoriesHTTP(t *testing.T) {

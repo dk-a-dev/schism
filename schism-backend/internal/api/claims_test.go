@@ -114,6 +114,134 @@ func TestClaimSessionAPIFlow(t *testing.T) {
 	require.Equal(t, "LOCKED", errBody.Error)
 }
 
+// activitiesFor fetches a group's activity feed keyed by activity type (last one wins for repeated
+// types, which is fine for these tests since they assert on a single occurrence per type).
+func activitiesFor(t *testing.T, srvURL, groupID string) map[string]store.Activity {
+	t.Helper()
+	resp, err := http.Get(srvURL + "/v1/groups/" + groupID + "/activities")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var acts []store.Activity
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&acts))
+	byType := map[string]store.Activity{}
+	for _, a := range acts {
+		byType[a.ActivityType] = a
+	}
+	return byType
+}
+
+func TestClaimSessionActivityFullFlow(t *testing.T) {
+	srv := newTestServer(t)
+	g, token, creator := claimFixture(t, srv.URL)
+
+	createBody := `{"title":"Dinner","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}]}`
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/claim-sessions", token, createBody)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var session struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+
+	byType := activitiesFor(t, srv.URL, g.ID)
+	require.Contains(t, byType, "CLAIM_SESSION_CREATED")
+	require.Equal(t, "Dinner", byType["CLAIM_SESSION_CREATED"].Data)
+	require.NotNil(t, byType["CLAIM_SESSION_CREATED"].ParticipantID)
+	require.Equal(t, creator, *byType["CLAIM_SESSION_CREATED"].ParticipantID)
+
+	putBody := `{"expectedVersion":1,"weights":[{"itemIdx":0,"weight":1}]}`
+	putResp := authRequest(t, http.MethodPut, srv.URL+"/v1/claim-sessions/"+session.ID+"/claims", token, putBody)
+	require.Equal(t, http.StatusOK, putResp.StatusCode)
+
+	byType = activitiesFor(t, srv.URL, g.ID)
+	require.Contains(t, byType, "CLAIM_SUBMITTED")
+	require.Contains(t, byType["CLAIM_SUBMITTED"].Data, "1 item")
+
+	finBody := `{"expectedVersion":1,"resolutions":[]}`
+	finResp := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/finalize", token, finBody)
+	require.Equal(t, http.StatusOK, finResp.StatusCode)
+	var fin struct {
+		ExpenseID string `json:"expenseId"`
+	}
+	require.NoError(t, json.NewDecoder(finResp.Body).Decode(&fin))
+	require.NotEmpty(t, fin.ExpenseID)
+
+	byType = activitiesFor(t, srv.URL, g.ID)
+	require.Contains(t, byType, "CLAIM_SESSION_FINALIZED")
+	require.Equal(t, "Dinner", byType["CLAIM_SESSION_FINALIZED"].Data)
+	require.Contains(t, byType, "CREATE_EXPENSE")
+	require.NotNil(t, byType["CREATE_EXPENSE"].ExpenseID)
+	require.Equal(t, fin.ExpenseID, *byType["CREATE_EXPENSE"].ExpenseID)
+
+	// Re-finalizing (idempotent replay) must not log a second FINALIZED/CREATE_EXPENSE pair.
+	finResp2 := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/finalize", token, finBody)
+	require.Equal(t, http.StatusOK, finResp2.StatusCode)
+	resp2, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	var acts2 []store.Activity
+	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&acts2))
+	count := 0
+	for _, a := range acts2 {
+		if a.ActivityType == "CLAIM_SESSION_FINALIZED" {
+			count++
+		}
+	}
+	require.Equal(t, 1, count)
+}
+
+func TestEditClaimItemsLogsActivity(t *testing.T) {
+	srv := newTestServer(t)
+	g, token, _ := claimFixture(t, srv.URL)
+
+	createBody := `{"title":"Dinner","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}]}`
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/claim-sessions", token, createBody)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var session struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+
+	editBody := `{"items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000},{"idx":1,"name":"Drink","qty":1,"amountMinor":5000}]}`
+	editResp := authRequest(t, http.MethodPatch, srv.URL+"/v1/claim-sessions/"+session.ID+"/items", token, editBody)
+	require.Equal(t, http.StatusOK, editResp.StatusCode)
+
+	byType := activitiesFor(t, srv.URL, g.ID)
+	require.Contains(t, byType, "CLAIM_ITEMS_EDITED")
+	require.Contains(t, byType["CLAIM_ITEMS_EDITED"].Data, "2 items")
+}
+
+func TestCancelClaimSessionLogsActivityOnce(t *testing.T) {
+	srv := newTestServer(t)
+	g, token, _ := claimFixture(t, srv.URL)
+
+	createBody := `{"title":"Dinner","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}]}`
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/claim-sessions", token, createBody)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var session struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+
+	cancelResp := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/cancel", token, "")
+	require.Equal(t, http.StatusNoContent, cancelResp.StatusCode)
+
+	byType := activitiesFor(t, srv.URL, g.ID)
+	require.Contains(t, byType, "CLAIM_SESSION_CANCELLED")
+	require.Equal(t, "Dinner", byType["CLAIM_SESSION_CANCELLED"].Data)
+
+	// Cancelling again is a store-level no-op; it must not log a second activity.
+	cancelResp2 := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/cancel", token, "")
+	require.Equal(t, http.StatusNoContent, cancelResp2.StatusCode)
+	resp2, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	var acts2 []store.Activity
+	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&acts2))
+	count := 0
+	for _, a := range acts2 {
+		if a.ActivityType == "CLAIM_SESSION_CANCELLED" {
+			count++
+		}
+	}
+	require.Equal(t, 1, count)
+}
+
 func TestFinalizeUnresolvedItemsMapsTo409(t *testing.T) {
 	srv := newTestServer(t)
 	g, token, _ := claimFixture(t, srv.URL)
