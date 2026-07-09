@@ -6,6 +6,7 @@
 package ai.schism.split.expense.edit
 
 import ai.schism.split.core.ui.InitialAvatar
+import ai.schism.split.core.ui.SchismFilterChip
 import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.expense.edit.voice.VoiceListeningDialog
 import ai.schism.split.expense.edit.voice.rememberVoiceInput
@@ -13,6 +14,8 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -333,20 +336,20 @@ private fun SplitMode.label(): String = when (this) {
     SplitMode.BY_AMOUNT -> "Amount"
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+// Four split-mode chips (Evenly / Shares / Percentage / Amount). A plain FlowRow of stable
+// FilterChips — the Material 3 Expressive alpha ButtonGroup rendered these blank, hiding the modes.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SplitModeChips(state: ExpenseEditUiState, viewModel: ExpenseEditViewModel) {
-    ButtonGroup(
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SplitMode.entries.forEach { mode ->
-            toggleableItem(
-                checked = state.splitMode == mode,
-                onCheckedChange = { checked -> if (checked) viewModel.onSplitModeChange(mode) },
-                label = mode.label(),
-                icon = { Text(mode.label()) },
-                weight = 1f,
+            SchismFilterChip(
+                selected = state.splitMode == mode,
+                onClick = { viewModel.onSplitModeChange(mode) },
+                label = { Text(mode.label()) },
             )
         }
     }
