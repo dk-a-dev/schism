@@ -5,6 +5,7 @@ package ai.schism.split.expense.edit
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.expense.edit.voice.VoiceListeningDialog
 import ai.schism.split.expense.edit.voice.rememberVoiceInput
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -72,6 +74,7 @@ fun ExpenseEditScreen(
     viewModel: ExpenseEditViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
     val voice = rememberVoiceInput { transcript -> viewModel.previewVoice(transcript) }
     VoiceListeningDialog(voice)
 
@@ -301,7 +304,12 @@ fun ExpenseEditScreen(
             }
 
             Button(
-                onClick = { viewModel.submit(onSaved) },
+                onClick = {
+                    viewModel.submit(onSaved = {
+                        Toast.makeText(context, "Expense saved", Toast.LENGTH_SHORT).show()
+                        onSaved()
+                    })
+                },
                 enabled = !state.submitting,
                 shape = MaterialTheme.shapes.large,
                 contentPadding = ButtonDefaults.ContentPadding,

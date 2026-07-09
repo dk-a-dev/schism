@@ -66,7 +66,13 @@ fun ExpenseDetailSheet(
             }
             if (expense.notes.isNotBlank()) {
                 HorizontalDivider()
-                Text("Notes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                val isItemBreakdown = expense.splitMode == "BY_AMOUNT" &&
+                    expense.notes.startsWith("Split by items")
+                Text(
+                    if (isItemBreakdown) "Split by items" else "Notes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 Text(expense.notes, style = MaterialTheme.typography.bodyMedium)
             }
             if (canEdit) {

@@ -6,6 +6,7 @@ import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.GroupRepository
 import ai.schism.split.sms.receipt.ReceiptDraft
 import ai.schism.split.sms.receipt.ReceiptLineItem
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -78,7 +79,11 @@ class ItemizedSplitViewModel @Inject constructor(
     private val expenseRepo: ExpenseRepository,
     private val settings: SettingsRepository,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    /** The group we were launched from (e.g. a group's Add Expense), if any — preselected below. */
+    private val preselectGroupId: String? = savedStateHandle["groupId"]
 
     private val _state = MutableStateFlow(ItemizedSplitUiState())
     val state: StateFlow<ItemizedSplitUiState> = _state.asStateFlow()
@@ -101,6 +106,7 @@ class ItemizedSplitViewModel @Inject constructor(
             }.collect { known ->
                 _state.update { s ->
                     val selectedId = s.selectedGroupId?.takeIf { id -> known.any { it.id == id } }
+                        ?: preselectGroupId?.takeIf { id -> known.any { it.id == id } }
                         ?: known.firstOrNull()?.id
                     val selected = known.firstOrNull { it.id == selectedId }
                     s.copy(
@@ -219,6 +225,15 @@ class ItemizedSplitViewModel @Inject constructor(
             val youParticipant = group.participants.firstOrNull { it.id == group.activeParticipantId }
             val addedBy = userId.takeIf { it.isNotBlank() && youParticipant?.userId == it }
 
+            val participantNames = group.participants.associate { it.id to it.name }
+            val breakdown = buildItemBreakdown(s.items, s.assignments, participantNames)
+            val userNotes = s.notes.trim()
+            val combinedNotes = when {
+                breakdown.isBlank() -> userNotes
+                userNotes.isBlank() -> breakdown
+                else -> "$breakdown\n\n$userNotes"
+            }
+
             val request = buildItemizedExpenseRequest(
                 items = assigned,
                 group = group,
@@ -228,7 +243,7 @@ class ItemizedSplitViewModel @Inject constructor(
                 currency = s.draft?.currency ?: "₹",
                 dateIso = s.draft?.date,
                 taxMinor = s.taxMinor,
-                notes = s.notes.trim(),
+                notes = combinedNotes,
             )
             if (request == null) {
                 _state.update { it.copy(submitting = false, error = "Assign at least one item to someone") }

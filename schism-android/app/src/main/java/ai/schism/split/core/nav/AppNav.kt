@@ -117,7 +117,7 @@ fun AppNav() {
                     onOpenGroup = { id -> navController.navigate(Routes.groupDetail(id)) },
                     onCreateGroup = { navController.navigate(Routes.CREATE_GROUP) },
                     onJoinGroup = { navController.navigate(Routes.JOIN_GROUP) },
-                    onScanBill = { navController.navigate(Routes.RECEIPT_ITEMIZED) },
+                    onScanBill = { navController.navigate(Routes.receiptItemized()) },
                 )
             }
             composable(Routes.CREATE_GROUP) {
@@ -201,23 +201,40 @@ fun AppNav() {
                         defaultValue = null
                     },
                 ),
-            ) {
+            ) { entry ->
+                val groupId = entry.arguments?.getString("groupId")
                 ExpenseEditScreen(
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },
-                    onScanItemized = { navController.navigate(Routes.RECEIPT_ITEMIZED) },
+                    onScanItemized = { navController.navigate(Routes.receiptItemized(groupId)) },
                 )
             }
             composable(Routes.INBOX) {
                 InboxScreen(
                     onSplit = { txnId -> navController.navigate(Routes.pushSplit(txnId)) },
-                    onScanItemized = { navController.navigate(Routes.RECEIPT_ITEMIZED) },
+                    onScanItemized = { navController.navigate(Routes.receiptItemized()) },
                 )
             }
-            composable(Routes.RECEIPT_ITEMIZED) {
+            composable(
+                Routes.RECEIPT_ITEMIZED,
+                arguments = listOf(
+                    navArgument("groupId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
+                val groupId = entry.arguments?.getString("groupId")
                 ItemizedSplitScreen(
                     onBack = { navController.popBackStack() },
-                    onDone = { navController.popBackStack() },
+                    onDone = {
+                        if (groupId != null) {
+                            navController.popBackStack(Routes.groupDetail(groupId), inclusive = false)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                 )
             }
             composable(

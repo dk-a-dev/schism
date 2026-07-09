@@ -12,7 +12,8 @@ object Routes {
     const val PUSH_SPLIT = "sms/split/{transactionId}"
     fun pushSplit(transactionId: String) = "sms/split/$transactionId"
 
-    const val RECEIPT_ITEMIZED = "sms/itemized"
+    const val RECEIPT_ITEMIZED = "sms/itemized?groupId={groupId}"
+    fun receiptItemized(groupId: String? = null) = if (groupId == null) "sms/itemized" else "sms/itemized?groupId=$groupId"
 
     const val OPEN_GROUP = "open_group/{groupId}"
     const val GROUP_DETAIL = "groups/detail/{groupId}"

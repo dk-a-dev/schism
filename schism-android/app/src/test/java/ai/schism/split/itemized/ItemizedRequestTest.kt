@@ -2,8 +2,10 @@ package ai.schism.split.sms.itemized
 
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.Participant
+import ai.schism.split.sms.receipt.ReceiptLineItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ItemizedRequestTest {
@@ -110,6 +112,34 @@ class ItemizedRequestTest {
             title = "Coffee", currency = "₹", dateIso = null, notes = "team offsite",
         )!!
         assertEquals("team offsite", req.notes)
+    }
+
+    @Test
+    fun breakdownListsEachAssigneeWithSharesAndSkipsUnassignedItems() {
+        val items = listOf(
+            ReceiptLineItem(name = "Biryani", amountMinor = 30000L, qty = 2),
+            ReceiptLineItem(name = "Coke", amountMinor = 6000L, qty = 1),
+            ReceiptLineItem(name = "Extra Napkins", amountMinor = 0L, qty = 1),
+        )
+        val assignments = mapOf(
+            0 to mapOf("dev" to 2L, "ru" to 1L),
+            1 to mapOf("dev" to 1L, "ru" to 0L),
+            2 to emptyMap<String, Long>(),
+        )
+        val names = mapOf("dev" to "Dev", "ru" to "Ru")
+
+        val breakdown = buildItemBreakdown(items, assignments, names)
+
+        assertTrue(breakdown.startsWith("Split by items:"))
+        assertTrue(breakdown.contains("• Biryani ×2 — Dev×2, Ru"))
+        assertTrue(breakdown.contains("• Coke — Dev"))
+        assertTrue(!breakdown.contains("Napkins"))
+    }
+
+    @Test
+    fun breakdownIsBlankWhenNothingAssigned() {
+        val items = listOf(ReceiptLineItem(name = "Coke", amountMinor = 6000L, qty = 1))
+        assertEquals("", buildItemBreakdown(items, emptyMap(), emptyMap()))
     }
 
     @Test

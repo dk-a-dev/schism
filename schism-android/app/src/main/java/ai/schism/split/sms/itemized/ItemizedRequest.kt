@@ -3,6 +3,7 @@ package ai.schism.split.sms.itemized
 import ai.schism.split.core.net.ExpenseRequest
 import ai.schism.split.core.net.PaidForDto
 import ai.schism.split.groups.data.Group
+import ai.schism.split.sms.receipt.ReceiptLineItem
 
 /**
  * A receipt line item together with WEIGHTED shares per participant: `{devId: 2, ruId: 1}` means Dev
@@ -15,6 +16,37 @@ data class AssignedItem(
 ) {
     constructor(amountMinor: Long, participantIds: List<String>) :
         this(amountMinor, participantIds.associateWith { 1L })
+}
+
+/**
+ * Builds a human-readable "who had what" breakdown from the receipt items and their per-participant
+ * shares, e.g.:
+ * ```
+ * Split by items:
+ * • Chicken Biryani ×2 — Dev×2, Ru
+ * • Coke — Dev
+ * ```
+ * A participant appears on a line only if their share is > 0; `×N` is appended when their share is
+ * greater than 1. Items nobody was assigned to are skipped entirely. Returns "" when nothing was
+ * assigned to anyone (nothing to show). Pure and network-free so it can be unit-tested.
+ */
+fun buildItemBreakdown(
+    items: List<ReceiptLineItem>,
+    assignments: Map<Int, Map<String, Long>>,
+    participantNames: Map<String, String>,
+): String {
+    val lines = items.mapIndexedNotNull { index, item ->
+        val shares = assignments[index].orEmpty().filterValues { it > 0 }
+        if (shares.isEmpty()) return@mapIndexedNotNull null
+        val who = shares.entries.joinToString(", ") { (participantId, share) ->
+            val name = participantNames[participantId] ?: participantId
+            if (share > 1) "$name×$share" else name
+        }
+        val label = if (item.qty > 1) "${item.name} ×${item.qty}" else item.name
+        "• $label — $who"
+    }
+    if (lines.isEmpty()) return ""
+    return (listOf("Split by items:") + lines).joinToString("\n")
 }
 
 /**
