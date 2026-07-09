@@ -58,7 +58,15 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 					r.Put("/{expenseID}", h.updateExpense)
 					r.Delete("/{expenseID}", h.deleteExpense)
 				})
+				r.Post("/claim-sessions", h.createClaimSession)
 			})
+		})
+		r.Route("/claim-sessions/{sid}", func(r chi.Router) {
+			r.Get("/", h.getClaimSession)
+			r.Put("/claims", h.putClaims)
+			r.Post("/finalize", h.finalizeClaimSession)
+			r.Post("/cancel", h.cancelClaimSession)
+			r.Patch("/items", h.editClaimItems)
 		})
 	})
 	return r

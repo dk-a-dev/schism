@@ -50,6 +50,66 @@ type expenseFormDTO struct {
 	PaidFor         []paidForDTO `json:"paidFor"`
 }
 
+type claimItemDTO struct {
+	Idx         int    `json:"idx"`
+	Name        string `json:"name"`
+	Qty         int    `json:"qty"`
+	AmountMinor int64  `json:"amountMinor"`
+}
+
+func toStoreItems(items []claimItemDTO) []store.ClaimItem {
+	out := make([]store.ClaimItem, len(items))
+	for i, it := range items {
+		out[i] = store.ClaimItem{Idx: it.Idx, Name: it.Name, Qty: it.Qty, AmountMinor: it.AmountMinor}
+	}
+	return out
+}
+
+type createClaimSessionDTO struct {
+	Title         string         `json:"title"`
+	Currency      string         `json:"currency"`
+	Items         []claimItemDTO `json:"items"`
+	TaxMinor      int64          `json:"taxMinor"`
+	FeesMinor     int64          `json:"feesMinor"`
+	DiscountMinor int64          `json:"discountMinor"`
+	RoundoffMinor int64          `json:"roundoffMinor"`
+}
+
+func (d createClaimSessionDTO) toStoreItems() []store.ClaimItem { return toStoreItems(d.Items) }
+
+type claimWeightDTO struct {
+	ItemIdx int     `json:"itemIdx"`
+	Weight  float64 `json:"weight"`
+}
+type putClaimsDTO struct {
+	ExpectedVersion int              `json:"expectedVersion"`
+	Weights         []claimWeightDTO `json:"weights"`
+}
+
+type resolutionDTO struct {
+	ItemIdx       int    `json:"itemIdx"`
+	Mode          string `json:"mode"`
+	ParticipantID string `json:"participantId"`
+}
+type finalizeDTO struct {
+	ExpectedVersion int             `json:"expectedVersion"`
+	Resolutions     []resolutionDTO `json:"resolutions"`
+}
+
+func (d finalizeDTO) toResolutions() []store.UnclaimedResolution {
+	out := make([]store.UnclaimedResolution, len(d.Resolutions))
+	for i, r := range d.Resolutions {
+		out[i] = store.UnclaimedResolution{ItemIdx: r.ItemIdx, Mode: r.Mode, ParticipantID: r.ParticipantID}
+	}
+	return out
+}
+
+type editItemsDTO struct {
+	Items []claimItemDTO `json:"items"`
+}
+
+func (d editItemsDTO) toStoreItems() []store.ClaimItem { return toStoreItems(d.Items) }
+
 func (d expenseFormDTO) toInput() store.ExpenseInput {
 	pf := make([]store.PaidForInput, len(d.PaidFor))
 	for i, p := range d.PaidFor {
