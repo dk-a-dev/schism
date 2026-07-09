@@ -169,4 +169,271 @@ class BillFixtureBatteryTest {
         assertEquals(6000L, draft.totalMinor)
         assertTrue(draft.verified)
     }
+
+    /**
+     * Qty-FIRST layout `Qty | Item | Rate | Amount` — the item name sits to the RIGHT of the leftmost
+     * (qty) column, so a purely positional "name is left of the numbers" reading would drop it. The
+     * name-by-exclusion rule must still recover it.
+     */
+    @Test fun qtyFirst_qtyItemRateAmount() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                SARAVANA TIFFIN|60|360|20
+
+                Qty|20|60|90
+                Item|100|200|90
+                Rate|380|440|90
+                Amount|480|560|90
+
+                2|25|45|140
+                Idli|100|180|140
+                40.00|380|440|140
+                80.00|480|560|140
+
+                3|25|45|180
+                Medu Vada|100|240|180
+                30.00|380|440|180
+                90.00|480|560|180
+
+                Sub Total|300|455|240
+                170.00|480|560|240
+
+                Total|60|300|280
+                170.00|480|560|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Idli", "Medu Vada"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 3), draft.lineItems.map { it.qty })
+        assertEquals(listOf(4000L, 3000L), draft.lineItems.map { it.unitPriceMinor })
+        assertEquals(listOf(8000L, 9000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(17000L, draft.subtotalMinor)
+        assertEquals(17000L, draft.totalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Rate/Amount SWAPPED order: the Amount money column is printed LEFT of the Rate column (labelled
+     * headers keep their meaning). The engine reads by column role and the qty×rate=amount invariant,
+     * so the true line amount (80.00) is recovered even though it sits left of the rate.
+     */
+    @Test fun rateAmountSwappedOrder_amountLeftOfRate() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                DOSA CORNER|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Amount|380|440|90
+                Rate|480|540|90
+
+                Plain Dosa|60|230|140
+                2|310|330|140
+                80.00|380|440|140
+                40.00|480|540|140
+
+                Onion Uttapam|60|260|180
+                1|310|330|180
+                70.00|380|440|180
+                70.00|480|540|180
+
+                Sub Total|300|455|240
+                150.00|380|460|240
+
+                Total|60|300|280
+                150.00|380|460|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Plain Dosa", "Onion Uttapam"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(4000L, 7000L), draft.lineItems.map { it.unitPriceMinor })
+        assertEquals(listOf(8000L, 7000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(15000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * `Item | Qty | Amount` (no rate column). The unit price is not independently printed, so it can
+     * only be DERIVED as amount/qty — asserted as such, not as an independently-read value.
+     */
+    @Test fun itemQtyAmount_noRateColumn() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                CHAAT BHANDAR|60|360|20
+
+                Item|60|140|90
+                Qty|300|340|90
+                Amount|480|560|90
+
+                Pani Puri|60|220|140
+                2|310|330|140
+                60.00|480|560|140
+
+                Bhel Puri|60|230|180
+                1|310|330|180
+                50.00|480|560|180
+
+                Sub Total|300|455|240
+                110.00|480|560|240
+
+                Grand Total|60|300|280
+                110.00|480|560|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Pani Puri", "Bhel Puri"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(6000L, 5000L), draft.lineItems.map { it.amountMinor })
+        // No rate column: unit price is DERIVED (amount/qty), not read off the bill.
+        assertEquals(listOf(3000L, 5000L), draft.lineItems.map { it.unitPriceMinor })
+        assertEquals(11000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    // ======================================================================================
+    // Group B — Fused / abbreviated / absent headers   +   Group C — colliding money columns
+    // ======================================================================================
+
+    /**
+     * Fused `RateAmount` header (no gap → one OCR token matching no \b-anchored keyword) over two
+     * money columns printed so close the clusterer merges them. Interleaves equal rate==amount rows
+     * (qty 1) with qty>1 rows in the SAME bill, plus a Total Qty cross-check. The engine must split
+     * the fused money band and pick the right amount per row via qty×rate=amount.
+     */
+    @Test fun fusedRateAmountHeader_equalAndMultiQtyInterleaved() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                CORNER CAFE|140|420|20
+
+                Item|140|300|90
+                Qty|833|867|90
+                RateAmount|890|960|90
+
+                Masala Tea|140|300|140
+                1|833|867|140
+                20.00|890|924|140
+                20.00|926|960|140
+
+                Veg Sandwich|140|320|180
+                3|833|867|180
+                60.00|890|924|180
+                180.00|926|960|180
+
+                Cold Coffee|140|300|220
+                1|833|867|220
+                90.00|890|924|220
+                90.00|926|960|220
+
+                Masala Fries|140|320|260
+                2|833|867|260
+                70.00|890|924|260
+                140.00|926|960|260
+
+                Total Qty: 7|140|360|320
+
+                Sub Total|140|300|360
+                430.00|860|960|360
+
+                Grand Total|140|340|400
+                430.00|860|960|400
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Masala Tea", "Veg Sandwich", "Cold Coffee", "Masala Fries"), draft.lineItems.map { it.name })
+        assertEquals(listOf(1, 3, 1, 2), draft.lineItems.map { it.qty })
+        assertEquals(listOf(2000L, 6000L, 9000L, 7000L), draft.lineItems.map { it.unitPriceMinor })
+        assertEquals(listOf(2000L, 18000L, 9000L, 14000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(43000L, draft.subtotalMinor)
+        assertEquals(43000L, draft.totalMinor)
+        assertEquals(7, draft.lineItems.sumOf { it.qty })
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * Abbreviated ALL-CAPS headers `QTY | RATE | AMT` (no fusion, distinct columns). Exercises the
+     * `amt` amount-keyword abbreviation and all-caps header matching.
+     */
+    @Test fun abbreviatedAllCapsHeaders_qtyRateAmt() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                HIGHWAY DHABA|60|360|20
+
+                ITEM|60|140|90
+                QTY|300|340|90
+                RATE|380|440|90
+                AMT|480|560|90
+
+                Dal Fry|60|220|140
+                2|310|330|140
+                110.00|380|440|140
+                220.00|480|560|140
+
+                Butter Naan|60|250|180
+                3|310|330|180
+                40.00|380|440|180
+                120.00|480|560|180
+
+                Sub Total|300|455|240
+                340.00|480|560|240
+
+                Grand Total|60|300|280
+                340.00|480|560|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Dal Fry", "Butter Naan"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 3), draft.lineItems.map { it.qty })
+        assertEquals(listOf(22000L, 12000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(34000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
+
+    /**
+     * NO header row at all — purely structural column detection. `Item | Qty | Rate | Amount` shape
+     * must be inferred from the data cells alone (leftmost letters → ITEM, narrow small-int → QTY,
+     * rightmost numeric → AMOUNT, remaining numeric → RATE).
+     */
+    @Test fun noHeaderRow_structuralColumnsOnly() {
+        val draft = parseBill(
+            rowsOf(
+                """
+                ROADSIDE EATS|60|360|20
+
+                Veg Fried Rice|60|260|140
+                2|310|330|140
+                120.00|380|440|140
+                240.00|480|560|140
+
+                Gobi Manchurian|60|280|180
+                1|310|330|180
+                150.00|380|440|180
+                150.00|480|560|180
+
+                Sub Total|300|455|240
+                390.00|480|560|240
+
+                Grand Total|60|300|280
+                390.00|480|560|280
+                """,
+            ),
+        )!!
+
+        assertEquals(listOf("Veg Fried Rice", "Gobi Manchurian"), draft.lineItems.map { it.name })
+        assertEquals(listOf(2, 1), draft.lineItems.map { it.qty })
+        assertEquals(listOf(24000L, 15000L), draft.lineItems.map { it.amountMinor })
+        assertEquals(listOf(12000L, 15000L), draft.lineItems.map { it.unitPriceMinor })
+        assertEquals(39000L, draft.subtotalMinor)
+        assertTrue(draft.verified)
+    }
 }
