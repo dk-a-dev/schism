@@ -1,11 +1,17 @@
 package ai.schism.split.sms.receipt.engine
 
+import kotlin.math.abs
+
 /** Generic keyword classes for a totals-region row: label pattern → the financial role it plays. */
 private val SUBTOTAL_RE = Regex("""sub\s*total""", RegexOption.IGNORE_CASE)
 private val GRAND_TOTAL_RE = Regex(
     """grand\s*total|bill\s*amount|bill\s*total|amount\s*payable|\bpaid\b|rounded\s*total|\bnet\b""",
     RegexOption.IGNORE_CASE,
 )
+// Round-off/rounding-adjustment rows ("Round Off -0.40", "Round Amount", "Rounding") are a distinct
+// class from a "Rounded Total" (which is a grand-total variant, matched by GRAND_TOTAL_RE above) —
+// this is the small delta applied to reach that rounded figure, not the figure itself.
+private val ROUND_RE = Regex("""round\s*off|round\s*amount|\brounding\b""", RegexOption.IGNORE_CASE)
 private val DISCOUNT_RE = Regex("""discount|\boff\b|saved""", RegexOption.IGNORE_CASE)
 private val FEES_RE = Regex("""packaging|platform|service|delivery|charge""", RegexOption.IGNORE_CASE)
 private val FREE_RE = Regex("""\bfree\b""", RegexOption.IGNORE_CASE)
@@ -20,13 +26,19 @@ private val TAX_RE = Regex("""\btax\b""", RegexOption.IGNORE_CASE)
 /** A bare money-shaped token, used to pull an amount out of a row's joined text as a fallback. */
 private val MONEY_TOKEN = Regex("""[₹$€£]?\s*-?\d[\d,]*(?:\.\d{1,2})?""")
 
-/** A generic-keyword breakdown of a bill's totals region, all amounts in Long minor units (paise/cents). */
+/**
+ * A generic-keyword breakdown of a bill's totals region, all amounts in Long minor units
+ * (paise/cents). [discount] is always a positive magnitude (a bill printing "Discount -50.00"
+ * still yields `discount = 50`) — [reconcile] subtracts it. [roundoff] is signed: a negative
+ * value shaves the bill down, a positive one adds to it, exactly as printed.
+ */
 data class Totals(
     val subtotal: Long?,
     val tax: Long = 0,
     val fees: Long = 0,
     val discount: Long = 0,
     val grandTotal: Long? = null,
+    val roundoff: Long = 0,
 )
 
 /** Which GST family a tax-labelled row belongs to — used to sum CGST+SGST unless a combined GST row wins. */
@@ -74,14 +86,21 @@ private fun taxBucketOf(label: String): TaxBucket? = when {
 
 /**
  * Classifies each row of [regions]' totals region by generic keyword class — subtotal / tax /
- * fees / discount / grand-total — and folds same-class rows into a single [Totals] breakdown.
+ * fees / discount / round-off / grand-total — and folds same-class rows into a single [Totals]
+ * breakdown.
  *
  * Tax rows sum CGST+SGST(+IGST/VAT/generic-tax) unless a standalone combined "GST" row is present,
  * in which case it replaces the CGST/SGST split (IGST/VAT/generic-tax rows are distinct line items
- * and still add on top). Fee rows (packaging/platform/service/delivery/charge) and discount rows
- * (discount/off/saved) are summed across however many such rows appear. The grand total is the
- * largest amount among grand-total-labelled rows, since a bill may show both a pre-round and a
- * rounded figure. A "FREE"/struck-through row always contributes 0.
+ * and still add on top). Fee rows (packaging/platform/service/delivery/charge) are summed across
+ * however many such rows appear. Discount rows (discount/off/saved) are summed as a positive
+ * magnitude regardless of how the row's own sign was printed — "Discount -50.00" and "Discount
+ * 50.00" both contribute 50, since a discount always reduces the bill. Round-off rows (round
+ * off/round amount/rounding) are summed with their printed sign preserved, since a rounding
+ * adjustment can go either way. The grand total is the largest amount among grand-total-labelled
+ * rows, since a bill may show both a pre-round and a rounded figure; a grand-total-labelled row
+ * (checked first) wins over any of the other classes a label might otherwise also match — e.g.
+ * "Amount Payable after Discount" is the grand total, not a discount. A "FREE"/struck-through row
+ * always contributes 0.
  *
  * This is keyword-and-arithmetic only: no merchant name, fixture value, or specific amount is ever
  * inspected, so the same classification applies to any bill shape.
@@ -90,6 +109,7 @@ fun readTotals(regions: Regions): Totals {
     var subtotal: Long? = null
     var fees = 0L
     var discount = 0L
+    var roundoff = 0L
     var grandTotal: Long? = null
     val taxByBucket = mutableMapOf<TaxBucket, Long>()
 
@@ -99,8 +119,9 @@ fun readTotals(regions: Regions): Totals {
         val bucket = taxBucketOf(label)
 
         when {
-            DISCOUNT_RE.containsMatchIn(label) -> discount += amount
             GRAND_TOTAL_RE.containsMatchIn(label) -> grandTotal = maxOf(grandTotal ?: Long.MIN_VALUE, amount)
+            ROUND_RE.containsMatchIn(label) -> roundoff += amount
+            DISCOUNT_RE.containsMatchIn(label) -> discount += abs(amount)
             SUBTOTAL_RE.containsMatchIn(label) -> if (subtotal == null) subtotal = amount
             bucket != null -> taxByBucket[bucket] = (taxByBucket[bucket] ?: 0L) + amount
             FEES_RE.containsMatchIn(label) -> fees += amount
@@ -114,5 +135,12 @@ fun readTotals(regions: Regions): Totals {
         taxByBucket.values.sum()
     }
 
-    return Totals(subtotal = subtotal, tax = tax, fees = fees, discount = discount, grandTotal = grandTotal)
+    return Totals(
+        subtotal = subtotal,
+        tax = tax,
+        fees = fees,
+        discount = discount,
+        grandTotal = grandTotal,
+        roundoff = roundoff,
+    )
 }

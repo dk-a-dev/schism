@@ -136,4 +136,55 @@ class SolverTest {
         val t = readTotals(totals)
         assertEquals(100000L, t.grandTotal)
     }
+
+    // --- readTotals × reconcile: round-off sign, discount sign, and no-anchor regression coverage
+    // (all built from Rows so the label/sign parsing itself is exercised, not just Totals values). ---
+
+    @Test fun roundOffNegativeRowStillVerifies() {
+        // A negative "Round Off" row must be applied with its real (negative) sign, not folded into
+        // discount (which would double-subtract it) or dropped. Chosen so a wrong sign puts the
+        // grand-total invariant outside tolerance (max(1%, ₹2)), making this red pre-fix.
+        val items = listOf(ReceiptLineItem("Widget", 10000, 1)) // ₹100.00
+        val totalsRegion = regionsOf(
+            listOf(
+                row("Sub Total" to 0, "100.00" to 200),
+                row("Tax" to 0, "10.00" to 200),
+                row("Round Off" to 0, "-1.50" to 200),
+                row("Grand Total" to 0, "108.50" to 200), // 100 + 10 - 1.50
+            ),
+        )
+        val totals = readTotals(totalsRegion)
+        val v = reconcile(items, totals)
+        assertTrue(v.verified)
+        assertEquals(10850L, v.grandTotal)
+    }
+
+    @Test fun explicitMinusDiscountReducesTotal() {
+        // "Discount -50.00" must reduce the total (a discount is always a reduction), not add to it
+        // just because the row happened to print a leading minus.
+        val items = listOf(ReceiptLineItem("Widget", 100000, 1)) // ₹1000.00
+        val totalsRegion = regionsOf(
+            listOf(
+                row("Sub Total" to 0, "1000.00" to 200),
+                row("Discount" to 0, "-50.00" to 200),
+                row("Grand Total" to 0, "950.00" to 200),
+            ),
+        )
+        val totals = readTotals(totalsRegion)
+        val v = reconcile(items, totals)
+        assertTrue(v.verified)
+        assertEquals(95000L, v.grandTotal)
+        assertEquals(-5000L, v.tax + v.fees - v.discount + v.roundoff) // charge pot: -₹50
+    }
+
+    @Test fun noAnchorsIsNotVerified() {
+        // No subtotal row and no grand-total row anywhere in the totals region: there is no
+        // independently-read anchor to check the arithmetic against, so this must not verify even
+        // though every derived value trivially agrees with itself.
+        val items = listOf(ReceiptLineItem("Widget", 10000, 1))
+        val totalsRegion = regionsOf(listOf(row("CGST" to 0, "50.00" to 200)))
+        val totals = readTotals(totalsRegion)
+        val v = reconcile(items, totals)
+        assertFalse(v.verified)
+    }
 }
