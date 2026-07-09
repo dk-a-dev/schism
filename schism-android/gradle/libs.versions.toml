@@ -22,6 +22,7 @@ androidxTestCore = "1.6.1"
 datastore = "1.1.1"
 codeScanner = "16.1.0"
 zxing = "3.5.3"
+documentScanner = "16.0.0-beta1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -61,6 +62,7 @@ mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition"
 mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version = "0.10.24" }
 play-services-code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "codeScanner" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+mlkit-document-scanner = { group = "com.google.android.gms", name = "play-services-mlkit-document-scanner", version.ref = "documentScanner" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

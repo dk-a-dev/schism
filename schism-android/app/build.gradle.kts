@@ -113,6 +113,7 @@ dependencies {
     implementation(libs.mediapipe.tasks.genai)
     implementation(libs.play.services.code.scanner)
     implementation(libs.zxing.core)
+    implementation(libs.mlkit.document.scanner)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.okhttp)
