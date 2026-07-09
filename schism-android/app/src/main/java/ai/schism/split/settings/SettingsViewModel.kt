@@ -36,13 +36,20 @@ data class SettingsUi(
     val currencyCode: String,
     val themeMode: String,
     val groupCount: Int,
+    val claimLinksAlpha: Boolean,
 ) {
     /** True once this device has a backend identity (registered during onboarding). */
     val registered: Boolean get() = userId.isNotBlank()
 }
 
 private data class Profile(val name: String, val email: String, val phone: String, val userId: String)
-private data class Prefs(val symbol: String, val code: String, val theme: String, val groups: Int)
+private data class Prefs(
+    val symbol: String,
+    val code: String,
+    val theme: String,
+    val groups: Int,
+    val claimLinksAlpha: Boolean,
+)
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -57,7 +64,8 @@ class SettingsViewModel @Inject constructor(
 
     private val prefs = combine(
         settings.currencySymbol, settings.currencyCode, settings.themeMode, settings.knownGroupIds,
-    ) { symbol, code, theme, groups -> Prefs(symbol, code, theme, groups.size) }
+        settings.claimLinksAlpha,
+    ) { symbol, code, theme, groups, claimLinksAlpha -> Prefs(symbol, code, theme, groups.size, claimLinksAlpha) }
 
     val state: StateFlow<SettingsUi> = combine(profile, prefs) { p, pf ->
         SettingsUi(
@@ -69,6 +77,7 @@ class SettingsViewModel @Inject constructor(
             currencyCode = pf.code,
             themeMode = pf.theme,
             groupCount = pf.groups,
+            claimLinksAlpha = pf.claimLinksAlpha,
         )
     }.stateIn(
         viewModelScope,
@@ -82,6 +91,7 @@ class SettingsViewModel @Inject constructor(
             currencyCode = SettingsRepository.DEFAULT_CURRENCY_CODE,
             themeMode = SettingsRepository.DEFAULT_THEME_MODE,
             groupCount = 0,
+            claimLinksAlpha = false,
         ),
     )
 
@@ -99,6 +109,11 @@ class SettingsViewModel @Inject constructor(
 
     fun saveThemeMode(mode: String) {
         viewModelScope.launch { settings.setThemeMode(mode) }
+    }
+
+    /** Toggle the alpha "Let everyone claim" links entry point (Settings › Labs). */
+    fun setClaimLinksAlpha(enabled: Boolean) {
+        viewModelScope.launch { settings.setClaimLinksAlpha(enabled) }
     }
 
     /** Wipe all device-local settings (profile, currency, theme, joined groups). */

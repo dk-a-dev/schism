@@ -258,6 +258,29 @@ fun SettingsScreen(
             // ── On-device AI ───────────────────────────────────────────────
             AiSection()
 
+            // ── Labs ───────────────────────────────────────────────────────
+            SettingsSection("Labs") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Claim links (alpha)", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Let everyone in a group claim what they had off a scanned bill instead of " +
+                                "you assigning it for them.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = state.claimLinksAlpha,
+                        onCheckedChange = viewModel::setClaimLinksAlpha,
+                    )
+                }
+            }
+
             // ── Account ────────────────────────────────────────────────────
             AccountSection()
 

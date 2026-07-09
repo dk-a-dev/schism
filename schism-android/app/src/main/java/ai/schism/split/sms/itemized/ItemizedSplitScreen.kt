@@ -70,6 +70,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun ItemizedSplitScreen(
     onBack: () -> Unit,
     onDone: () -> Unit,
+    onClaimSessionCreated: (String) -> Unit = {},
     viewModel: ItemizedSplitViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -184,6 +185,17 @@ fun ItemizedSplitScreen(
                             SchismSecondaryButton(onClick = { addingItem = true }, modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Filled.Add, contentDescription = null)
                                 Text("  Add item")
+                            }
+                            if (state.claimLinksAlpha && state.items.isNotEmpty()) {
+                                SchismSecondaryButton(
+                                    onClick = {
+                                        viewModel.startClaimSession { sid -> onClaimSessionCreated(sid) }
+                                    },
+                                    enabled = !state.creatingClaimSession,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(if (state.creatingClaimSession) "Creating…" else "Let everyone claim (alpha)")
+                                }
                             }
                             if (state.items.isEmpty()) {
                                 Text(

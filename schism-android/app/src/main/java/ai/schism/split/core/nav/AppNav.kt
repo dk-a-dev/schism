@@ -256,6 +256,7 @@ fun AppNav() {
                             navController.popBackStack()
                         }
                     },
+                    onClaimSessionCreated = { sid -> navController.navigate(Routes.claim(sid)) },
                 )
             }
             composable(

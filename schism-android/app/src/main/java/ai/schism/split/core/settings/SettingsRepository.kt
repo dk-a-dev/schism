@@ -65,6 +65,16 @@ class SettingsRepository @Inject constructor(
         ds.edit { it[KEY_AI_ENABLED] = enabled }
     }
 
+    /**
+     * Alpha "Let everyone claim" links (Settings › Labs). Off by default — gates the entry point on
+     * [ai.schism.split.sms.itemized.ItemizedSplitScreen]; backend endpoints are always live.
+     */
+    val claimLinksAlpha: Flow<Boolean> = ds.data.map { it[KEY_CLAIM_LINKS_ALPHA] ?: false }
+
+    suspend fun setClaimLinksAlpha(enabled: Boolean) {
+        ds.edit { it[KEY_CLAIM_LINKS_ALPHA] = enabled }
+    }
+
     suspend fun setProfileName(name: String) {
         ds.edit { it[KEY_NAME] = name.trim() }
     }
@@ -162,5 +172,6 @@ class SettingsRepository @Inject constructor(
         private val KEY_AI_MODEL_URL = stringPreferencesKey("ai_model_url")
         private val KEY_AI_MODEL_TOKEN = stringPreferencesKey("ai_model_token")
         private val KEY_AI_ENABLED = booleanPreferencesKey("ai_enabled")
+        private val KEY_CLAIM_LINKS_ALPHA = booleanPreferencesKey("claim_links_alpha")
     }
 }

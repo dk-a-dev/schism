@@ -1,9 +1,12 @@
 package ai.schism.split.sms.itemized
 
+import ai.schism.split.core.net.ClaimItemDto
+import ai.schism.split.core.net.CreateClaimSessionRequest
 import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.expense.data.ExpenseRepository
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.GroupRepository
+import ai.schism.split.sms.itemized.claim.ClaimSessionRepository
 import ai.schism.split.sms.receipt.ReceiptDraft
 import ai.schism.split.sms.receipt.ReceiptLineItem
 import androidx.lifecycle.SavedStateHandle
@@ -35,6 +38,9 @@ data class ItemizedSplitUiState(
     val notes: String = "",
     val submitting: Boolean = false,
     val error: String? = null,
+    /** Settings › Labs "Claim links (alpha)" flag — gates the "Let everyone claim" entry point. */
+    val claimLinksAlpha: Boolean = false,
+    val creatingClaimSession: Boolean = false,
 ) {
     val selectedGroup: Group? get() = groups.firstOrNull { it.id == selectedGroupId }
     val taxMinor: Long get() = draft?.taxMinor ?: 0L
@@ -79,6 +85,7 @@ class ItemizedSplitViewModel @Inject constructor(
     private val expenseRepo: ExpenseRepository,
     private val settings: SettingsRepository,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
+    private val claimSessionRepo: ClaimSessionRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -97,6 +104,10 @@ class ItemizedSplitViewModel @Inject constructor(
         viewModelScope.launch {
             val aiActive = llmParser.isAvailable && settings.aiEnabled.first()
             _state.update { it.copy(aiActive = aiActive) }
+        }
+
+        viewModelScope.launch {
+            settings.claimLinksAlpha.collect { enabled -> _state.update { it.copy(claimLinksAlpha = enabled) } }
         }
 
         viewModelScope.launch {
@@ -202,6 +213,45 @@ class ItemizedSplitViewModel @Inject constructor(
             val items = s.items + ReceiptLineItem(name.trim().take(60), amountMinor, qty.coerceIn(1, 99))
             val everyone = s.selectedGroup?.participants?.associate { it.id to 1L } ?: emptyMap()
             s.copy(items = items, assignments = s.assignments + (items.lastIndex to everyone), error = null)
+        }
+    }
+
+    /**
+     * Creates a claim session from the current draft's items + tax so everyone in the group can claim
+     * what they had, instead of assigning shares here. Gated behind Settings › Labs (see
+     * [ItemizedSplitUiState.claimLinksAlpha]). Reports the new session id via [onCreated].
+     */
+    fun startClaimSession(onCreated: (String) -> Unit) {
+        val s = _state.value
+        val group = s.selectedGroup
+        if (group == null) {
+            _state.update { it.copy(error = "Pick a group to split into") }
+            return
+        }
+        if (s.items.isEmpty()) {
+            _state.update { it.copy(error = "Add at least one item first") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(creatingClaimSession = true, error = null) }
+            val items = s.items.mapIndexed { index, item -> ClaimItemDto(index, item.name, item.qty, item.amountMinor) }
+            val request = CreateClaimSessionRequest(
+                title = s.title.trim().ifBlank { s.draft?.merchant ?: "Receipt" },
+                currency = s.draft?.currency ?: "₹",
+                items = items,
+                taxMinor = s.taxMinor,
+            )
+            claimSessionRepo.createSession(group.id, request).fold(
+                onSuccess = { session ->
+                    _state.update { it.copy(creatingClaimSession = false) }
+                    onCreated(session.id)
+                },
+                onFailure = { e ->
+                    _state.update {
+                        it.copy(creatingClaimSession = false, error = e.message ?: "Couldn't create claim link")
+                    }
+                },
+            )
         }
     }
 
