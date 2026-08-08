@@ -37,7 +37,7 @@ personal-finance side. Kotlin + Jetpack Compose (Material 3 Expressive), MVVM, o
 ### On-device capture & AI
 - **Bank-SMS → split bridge** — incoming bank SMS parsed entirely on-device (`:parser-core`) into an
   **Inbox**; keep personal or **push into a group** as a shared expense.
-- **Receipt OCR** — photograph a bill, ML Kit reads the line items, hand off to the itemised split.
+- **Receipt OCR** — photograph a bill, PP-OCRv6 reads it fully on-device, hand off to the itemised split.
   Reachable from the **Groups home ("Scan a bill")** and the Inbox.
 - **Voice quick-add** — "paid 800 for dinner, split with Riya and Sam", transcribed by the on-device
   `SpeechRecognizer` and parsed by an offline NLP parser into an expense draft.
@@ -65,7 +65,7 @@ personal-finance side. Kotlin + Jetpack Compose (Material 3 Expressive), MVVM, o
 
 Jetpack Compose (BOM 2024.12.01, Material 3 + expressive patterns) · Hilt DI · Retrofit +
 kotlinx.serialization · Room (offline cache) · DataStore (settings) · WorkManager (SMS scan) ·
-Navigation Compose · ML Kit text-recognition (OCR) + code-scanner (QR) · ZXing (QR gen) ·
+Navigation Compose · PaddleOCR/ONNX Runtime (OCR) · ML Kit code-scanner (QR) · ZXing (QR gen) ·
 `SpeechRecognizer` (voice) · ContactsContract (contacts).
 
 ## Module & package layout

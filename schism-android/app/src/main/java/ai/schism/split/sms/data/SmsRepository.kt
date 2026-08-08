@@ -46,7 +46,7 @@ class SmsRepository @Inject constructor(
     }
 
     /**
-     * Records a receipt scanned on-device (via ML Kit OCR + [ai.schism.split.sms.receipt.parseReceipt])
+     * Records a receipt scanned on-device (via PaddleOCR + [ai.schism.split.sms.receipt.parseReceipt])
      * as an unassigned transaction, so it flows through the same keep-personal / split-to-group triage.
      * Deduped by a stable hash of its fields. Returns the transaction id.
      */

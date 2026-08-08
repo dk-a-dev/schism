@@ -1,52 +1,127 @@
 package ai.schism.split.sms.receipt
 
-import ai.schism.split.sms.receipt.engine.Cell
 import ai.schism.split.sms.receipt.engine.Row
-import ai.schism.split.sms.receipt.engine.groupIntoRows
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.suspendCancellableCoroutine
+import androidx.exifinterface.media.ExifInterface
+import com.paddle.ocr.EngineConfig
+import com.paddle.ocr.PaddleOCR
+import com.paddle.ocr.PaddleOCRConfig
+import com.paddle.ocr.util.OpenCVUtils
+import java.io.ByteArrayInputStream
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 
 /**
- * On-device receipt OCR via ML Kit's bundled Latin text recognizer. The image and its text never
- * leave the device — there is no cloud vision call.
+ * Fully on-device receipt OCR using the tiny PP-OCRv6 detector and recognizer through ONNX
+ * Runtime. Images and recognized text never leave the device.
  *
- * ML Kit returns text grouped in *blocks*, which on a two-column receipt (item names left, amounts
- * right) often yields all the names first and all the amounts after — destroying the name↔price
- * pairing. So instead of trusting block order, we reconstruct **visual rows**: every recognized line
- * is placed by its bounding box as a [Cell], cells whose vertical centers overlap are grouped into
- * one [Row] by [groupIntoRows], and each row is joined left→right. That gives [parseReceipt] lines
- * like "Sober Picante  1  248.00".
+ * Paddle returns a quadrilateral for every recognized text line. Those boxes are retained and
+ * reconstructed into visual rows so item names and prices keep their left-to-right relationship.
  */
 @Singleton
 class ReceiptScanner @Inject constructor() {
-    // Lazy so merely constructing the scanner (e.g. in tests / DI) doesn't touch the ML Kit runtime;
-    // the recognizer is created on first real scan.
-    private val recognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+    private val engineMutex = Mutex()
+    private var engine: PaddleOCR? = null
 
     suspend fun recognizeCells(context: Context, uri: Uri): List<Row> {
-        val image = InputImage.fromFilePath(context, uri)
-        val text = suspendCancellableCoroutine { cont ->
-            recognizer.process(image)
-                .addOnSuccessListener { cont.resume(it) }
-                .addOnFailureListener { cont.resumeWithException(it) }
+        val bitmap = decodeBitmap(context, uri)
+        engineMutex.lock()
+        return try {
+            val result = getOrCreateEngine(context).recognize(bitmap)
+            val detections = result.results.mapNotNull { recognized ->
+                val points = recognized.box.points
+                if (points.size != 4 || points.any { !it.x.isFinite() || !it.y.isFinite() }) {
+                    return@mapNotNull null
+                }
+                DetectedLine(
+                    text = recognized.text,
+                    left = points.minOf { it.x }.toInt(),
+                    right = points.maxOf { it.x }.toInt(),
+                    top = points.minOf { it.y }.toInt(),
+                    bottom = points.maxOf { it.y }.toInt(),
+                )
+            }
+            detectedLinesToRows(detections)
+        } finally {
+            engineMutex.unlock()
+            bitmap.recycle()
         }
-        val cells = text.textBlocks.flatMap { it.lines }.mapNotNull { line ->
-            line.boundingBox?.let { b -> Cell(line.text.trim(), b.left, b.right, b.centerY()) }
-        }
-        if (cells.isEmpty()) return emptyList()
-        val medianH = text.textBlocks.flatMap { it.lines }.mapNotNull { it.boundingBox?.height() }
-            .sorted().let { if (it.isEmpty()) 30 else it[it.size / 2] }
-        return groupIntoRows(cells, medianH)
     }
 
     suspend fun recognizeLines(context: Context, uri: Uri): List<String> =
         recognizeCells(context, uri).map { it.text }
+
+    private suspend fun getOrCreateEngine(context: Context): PaddleOCR {
+        engine?.let { return it }
+        check(OpenCVUtils.init(context.applicationContext)) { "Unable to initialize OpenCV for PaddleOCR" }
+        return PaddleOCR.create(
+            context = context.applicationContext,
+            config = PaddleOCRConfig(
+                detLimitSideLen = DETECTION_EDGE_PX,
+                detLimitType = "max",
+                detMaxSideLimit = DETECTION_EDGE_PX,
+                recScoreThresh = MIN_RECOGNITION_CONFIDENCE,
+                recBatchSize = 1,
+            ),
+            engineConfig = EngineConfig(
+                numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+            ),
+        ).also { engine = it }
+    }
+
+    private suspend fun decodeBitmap(context: Context, uri: Uri): Bitmap = withContext(Dispatchers.IO) {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IOException("Unable to open receipt image")
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IOException("Unable to decode receipt image")
+        }
+
+        var sampleSize = 1
+        val longestEdge = maxOf(bounds.outWidth, bounds.outHeight)
+        while (longestEdge / sampleSize > MAX_DECODED_EDGE_PX) sampleSize *= 2
+
+        val bitmap = BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            },
+        ) ?: throw IOException("Unable to decode receipt image")
+
+        val exif = runCatching { ExifInterface(ByteArrayInputStream(bytes)) }.getOrNull()
+        transformForExif(bitmap, exif)
+    }
+
+    private fun transformForExif(bitmap: Bitmap, exif: ExifInterface?): Bitmap {
+        val rotation = exif?.rotationDegrees ?: 0
+        val flipped = exif?.isFlipped ?: false
+        if (rotation == 0 && !flipped) return bitmap
+
+        val matrix = Matrix().apply {
+            if (flipped) postScale(-1f, 1f)
+            if (rotation != 0) postRotate(rotation.toFloat())
+        }
+        val transformed = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (transformed !== bitmap) bitmap.recycle()
+        return transformed
+    }
+
+    private companion object {
+        const val MAX_DECODED_EDGE_PX = 2400
+        const val DETECTION_EDGE_PX = 1280
+        const val MIN_RECOGNITION_CONFIDENCE = 0.35f
+    }
 }

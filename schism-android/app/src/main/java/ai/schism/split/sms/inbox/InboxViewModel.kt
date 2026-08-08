@@ -100,7 +100,7 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch { repo.keepPersonal(id) }
     }
 
-    /** Scan a receipt image on-device (ML Kit OCR → parse) and add it to the inbox to split/keep. */
+    /** Scan a receipt image on-device (PaddleOCR → parse) and add it to the inbox to split/keep. */
     fun scanReceipt(uri: Uri) {
         viewModelScope.launch {
             _scanningReceipt.value = true
