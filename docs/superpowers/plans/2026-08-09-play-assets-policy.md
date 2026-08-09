@@ -56,15 +56,21 @@ Expected: FAIL because package/routes/config do not exist.
 - [ ] **Step 3: Implement one factual source and accessible templates**
 
 Write `data-flow.md` first: account name/email/optional phone, session data, group/expense/claim data,
-on-device-only SMS/receipt/OCR/audio, model-download request metadata, purposes, encryption in transit,
-retention, deletion, and no advertising/sale. Render concise responsive pages with semantic HTML,
-visible focus, cream/green brand tokens, system fonts, no cookies/analytics/scripts, and support email
-injected by config. State that financial records may be retained only when legally required and the
-owner must supply the actual jurisdictional wording during legal review.
+on-device-only SMS/receipt/OCR/audio, model-download request metadata, Google Play purchase token,
+product/subscription status, and Mobile Ads/UMP SDK data disclosures (including IP-derived general
+location, app interactions, diagnostics, and device/account identifiers as applicable). Document
+purposes, recipients, encryption in transit, retention, deletion, consent controls, and no sale of
+personal data. State that Schism does not receive payment-card details. Render concise responsive pages
+with semantic HTML, visible focus, cream/green brand tokens, system fonts, no first-party analytics,
+and support email injected by config. The legal site itself uses no cookies; describe ad consent and
+Privacy choices inside the Android app. State that financial records may be retained only when legally
+required and the owner must supply the actual jurisdictional wording during legal review. Account
+deletion explains that Play subscription cancellation and Schism account deletion are separate actions,
+with working instructions for both.
 
 - [ ] **Step 4: Verify pages locally and over deployed-like HTTPS proxy**
 
-Run: `cd schism-backend && gofmt -w cmd internal && go test ./... -count=1`; the legal route integration tests start an `httptest.Server` with `SUPPORT_EMAIL=owner@example.test` and fetch all four pages to validate links/headers. The `.test` value is local verification only and is never a production default.
+Run: `cd schism-backend && gofmt -w cmd internal && go test ./... -count=1`; the legal route integration tests start an `httptest.Server` with `SCHISM_SUPPORT_EMAIL=owner@example.test` and fetch all four pages to validate links/headers. The `.test` value is local verification only and is never a production default.
 
 Expected: pages pass tests and startup rejects an absent production support email.
 
@@ -96,8 +102,10 @@ git commit -m "feat(web): add Play policy and support pages"
 
 Assert policy URLs are fixed backend-relative HTTPS paths, no user-controlled URL, settings exposes
 all four, onboarding links privacy/terms before account creation, deletion remains visible while
-logged out, and SMS disclosure states: transaction SMS read automatically; parsing stays on device;
-only expenses the user chooses to share are uploaded; denial leaves manual/receipt entry available.
+logged out, and SMS is visibly disabled on a fresh install. Assert disclosure states: transaction SMS
+are read automatically only after opt-in; parsing stays on device; only expenses the user chooses to
+share are uploaded; denial leaves manual/receipt entry available. Assert disabling immediately stops
+import, does not delete parsed transactions, and permission revocation/data deletion are separate actions.
 
 - [ ] **Step 2: Run tests and confirm failure**
 
@@ -109,8 +117,10 @@ Expected: FAIL because policy link component and final disclosure do not exist.
 
 Open HTTPS pages with a browsable ACTION_VIEW intent and handle no-browser failure. Use a modal or
 full sheet for SMS disclosure with Not now/Enable automatic import; never obscure/auto-advance the
-copy. Settings shows current permission state and revoke instructions. Avoid promising guaranteed OCR
-accuracy or that all financial SMS formats are supported.
+copy. Never request SMS permission from onboarding or a walkthrough hint. Settings shows the opt-in
+toggle separately from current Android permission, offers Disable, revoke instructions/action, and a
+confirmed delete-imported-data action. Avoid promising guaranteed OCR accuracy or that all financial
+SMS formats are supported.
 
 - [ ] **Step 4: Run UI-state/accessibility tests**
 
@@ -148,8 +158,9 @@ git commit -m "feat(android): add privacy and SMS disclosure surfaces"
 Assert app name ≤30 characters, short description ≤80, full description ≤4000, release notes ≤500,
 no ranking/price/testimonial claims, required support/privacy/deletion URL keys, SMS declaration names
 exact permissions and core use, Data safety accounts for account/shared expense data and third-party
-SDK review, and reviewer instructions contain a safe test account/fixture setup without committed
-credentials.
+SDK review, including Play Billing and Mobile Ads/UMP fields and purposes. Assert the account-deletion
+instructions distinguish deleting the Schism account from cancelling an active Play subscription,
+and reviewer instructions contain a safe test account/fixture setup without committed credentials.
 
 - [ ] **Step 2: Run validator tests and confirm failure**
 
@@ -162,8 +173,12 @@ Expected: FAIL because files and validator do not exist.
 Use title `Schism: Split Expenses` and short description `Scan bills, track spending and split shared expenses privately.` Full copy leads with scan/review/split, on-device SMS/OCR privacy, group balances,
 and manual fallback; it does not claim universal accuracy or bank affiliation. The SMS declaration
 maps `READ_SMS`/`RECEIVE_SMS` to automatic money-management import, includes the opt-in walkthrough,
-and says raw SMS never reaches Schism servers. Data safety lists account identifiers and user-shared
-expense/group data transmitted encrypted in transit, and explicitly reviews SDK behavior.
+states the feature is disabled until the user explicitly enables it, and says raw SMS never reaches
+Schism servers. Data safety lists account identifiers and user-shared expense/group data transmitted
+encrypted in transit; Play Billing purchase token/product/status used for entitlement; and Mobile
+Ads/UMP collection/sharing that can include IP-derived general location, app interactions, diagnostics,
+and device/account identifiers for advertising, analytics, consent, and fraud prevention. Record the
+exact shipped SDK versions and Play Data safety answers after inspecting the final dependency graph.
 
 - [ ] **Step 4: Validate copy and cross-check the release manifest**
 

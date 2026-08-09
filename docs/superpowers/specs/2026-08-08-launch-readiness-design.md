@@ -247,8 +247,12 @@ Content-Range, ETag, and cancellation and uses a bounded upstream client.
 - Maintain an idempotent message fingerprint so a broadcast and later inbox scan cannot create the
   same transaction twice.
 - Expand parser fixtures for major Indian banks/UPI formats while redacting all real PII.
-- Ask for SMS permission only immediately before enabling automatic import, support denial and
-  "don't ask again," and keep manual/receipt entry fully usable without it.
+- Keep automatic SMS import disabled on every fresh install. Ask for SMS permission only after the
+  user explicitly taps Enable on the prominent disclosure; never prompt during onboarding. Support
+  denial, external revocation, and "don't ask again," and keep manual/receipt entry fully usable.
+- A Settings toggle immediately disables receiver/worker ingestion and cancels queued SMS work even
+  if Android permission remains granted. Offer a separate permission-revocation action. Disabling must
+  not delete already imported parsed transactions; deletion is an independent confirmed action.
 
 ### Deterministic 100-receipt OCR evaluation
 

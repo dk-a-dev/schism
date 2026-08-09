@@ -234,6 +234,8 @@ git commit -m "feat(android): redeem secure participant invitations"
 
 **Files:**
 - Create: `schism-android/app/src/main/java/ai/schism/split/sms/ingest/SmsEnvelope.kt`
+- Create: `schism-android/app/src/main/java/ai/schism/split/sms/settings/SmsImportPreference.kt`
+- Create: `schism-android/app/src/test/java/ai/schism/split/sms/settings/SmsImportPreferenceTest.kt`
 - Create: `schism-android/app/src/test/java/ai/schism/split/sms/ingest/SmsReceiverTest.kt`
 - Create: `schism-android/app/src/test/java/ai/schism/split/sms/ingest/SmsIngestWorkerTest.kt`
 - Modify: `schism-android/app/src/main/java/ai/schism/split/sms/ingest/SmsReceiver.kt`
@@ -242,6 +244,8 @@ git commit -m "feat(android): redeem secure participant invitations"
 - Modify: `schism-android/app/src/main/java/ai/schism/split/sms/data/SmsRepository.kt`
 - Modify: `schism-android/app/src/main/java/ai/schism/split/sms/data/TransactionDao.kt`
 - Modify: `schism-android/app/src/main/java/ai/schism/split/sms/inbox/InboxScreen.kt`
+- Modify: `schism-android/app/src/main/java/ai/schism/split/core/settings/SettingsRepository.kt`
+- Modify: `schism-android/app/src/main/java/ai/schism/split/settings/SettingsScreen.kt`
 - Modify: `schism-android/app/src/main/java/ai/schism/split/onboarding/OnboardingScreen.kt`
 - Modify: `schism-android/app/src/main/res/values/strings.xml`
 - Create: `schism-android/parser-core/src/test/resources/sms/debit.txt`
@@ -253,7 +257,8 @@ git commit -m "feat(android): redeem secure participant invitations"
 
 **Interfaces:**
 - Produces: `SmsEnvelope(sender, body, timestamp, fingerprint)`, unique work name built as
-  `"sms_ingest_${fingerprint}"`, and an explicit SMS import opt-in/rationale state.
+  `"sms_ingest_${fingerprint}"`, plus one synchronous device-local `SmsImportPreference` whose
+  default is disabled and which is shared by Settings, receiver, and workers.
 - Consumes: existing stable parser transaction IDs and Room `INSERT IGNORE` as the second dedup layer.
 
 - [ ] **Step 1: Add failing SMS edge-case tests**
@@ -261,7 +266,11 @@ git commit -m "feat(android): redeem secure participant invitations"
 Cover multipart segments grouped by sender and timestamp, two senders in one intent retaining their
 own timestamps, duplicate broadcast+inbox scan, reordered multipart segments, empty origin/body,
 8-KiB body limit, process retry, permission deny/revoke/don't-ask-again, and representative redacted
-debit/refund/reversal/pending/UPI/card fixtures across major Indian formats.
+debit/refund/reversal/pending/UPI/card fixtures across major Indian formats. Also assert: a fresh
+install never prompts and both receiver/workers no-op while disabled; Enable shows the prominent
+disclosure before the system dialog; denial or external revocation makes effective state disabled;
+disabling cancels queued unique SMS work and a worker already starting checks the flag again; parsed
+transactions remain after disabling; and the explicit delete-imported-data action requires confirmation.
 
 - [ ] **Step 2: Run tests and confirm failures**
 
@@ -273,15 +282,23 @@ Expected: FAIL on per-sender timestamps, unique work, and permission-state behav
 
 Build the envelope fingerprint with SHA-256 of normalized sender, exact body, and timestamp bucket;
 enqueue unique work with `ExistingWorkPolicy.KEEP`; keep parser transaction ID plus DAO `IGNORE` as
-database idempotency. Reject oversize worker data before WorkManager's 10-KiB limit. Do not request
-SMS during onboarding: show an inbox enable card, explain local-only parsing and shared-expense data,
-then request immediately after user taps Enable. Keep manual/receipt paths visible after denial.
+database idempotency. Reject oversize worker data before WorkManager's 10-KiB limit. Store only the
+non-sensitive enable bit in a dedicated synchronous SharedPreferences boundary so the broadcast
+receiver cannot race an asynchronous DataStore read; expose it through `SettingsRepository` for UI.
+Every receiver and worker checks the flag before reading or parsing. Disabling first writes false,
+then cancels all uniquely tagged SMS work. Do not request SMS during onboarding: show an inbox enable
+card, explain local-only parsing and shared-expense data, then request immediately after user taps
+Enable. Keep manual/receipt paths visible after denial or external revocation. Offer `Disable import`
+and a separate `Disable and revoke Android permission` action where supported, with a safe app-settings
+fallback on older Android; never delete previously imported parsed transactions implicitly. Put deletion
+behind its own destructive confirmation.
 
 - [ ] **Step 4: Run all parser/SMS/UI state tests**
 
 Run: `cd schism-android && ./gradlew :parser-core:test :app:testStandaloneDebugUnitTest --tests '*Sms*' --tests '*Inbox*'`.
 
-Expected: PASS with no raw SMS logged or persisted outside parsed fields.
+Expected: PASS with import default-off, disabled receivers/workers inert, and no raw SMS logged or
+persisted outside parsed fields.
 
 - [ ] **Step 5: Commit**
 
