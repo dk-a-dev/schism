@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -34,8 +35,14 @@ class ExportViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
+    /**
+     * Whether export is available. It is a Plus convenience, but only while Plus can actually be
+     * bought: with monetization switched off there is no upgrade path, so locking a local,
+     * on-device export behind an impossible purchase would just be a dead end.
+     */
     val plus: StateFlow<Boolean> = entitlements.state
         .map { it.isPlus }
+        .combine(entitlements.config) { isPlus, config -> isPlus || !config.plusEnabled }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private val _share = MutableStateFlow<Intent?>(null)

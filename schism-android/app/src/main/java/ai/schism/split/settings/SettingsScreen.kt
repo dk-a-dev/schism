@@ -481,6 +481,14 @@ private fun PlusSection(viewModel: PlusViewModel = hiltViewModel()) {
 
     if (showSheet) PlusSheet(onDismiss = { showSheet = false })
 
+    // Before Plus is live there is nothing to buy, restore or manage. Showing "Restore purchases"
+    // and "Manage subscription" anyway would be three dead ends and a purchase surface Play review
+    // would reasonably question. Anyone who already holds Plus keeps the controls.
+    if (!state.plusEnabled && !state.isPlus) {
+        PrivacyChoicesSection()
+        return
+    }
+
     SettingsSection(stringResource(R.string.plus_title)) {
         Text(
             when {
@@ -514,6 +522,14 @@ private fun PlusSection(viewModel: PlusViewModel = hiltViewModel()) {
 
         PrivacyChoicesRow()
     }
+}
+
+/** Ads consent lives outside the Plus block, so it survives Plus being switched off. */
+@Composable
+private fun PrivacyChoicesSection(adSlot: AdSlotViewModel = hiltViewModel()) {
+    val required by adSlot.consent.privacyOptionsRequired.collectAsState()
+    if (!required) return
+    SettingsSection(stringResource(R.string.ads_privacy_choices)) { PrivacyChoicesRow() }
 }
 
 @Composable

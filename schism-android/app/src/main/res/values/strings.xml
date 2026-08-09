@@ -24,6 +24,8 @@
     <string name="onboarding_phone_label">Phone (optional)</string>
     <string name="onboarding_phone_supporting">Add a number only if you want to. You can use Schism without it.</string>
     <string name="onboarding_password_supporting">At least 8 characters</string>
+    <string name="onboarding_password_show">Show password</string>
+    <string name="onboarding_password_hide">Hide password</string>
 
     <!-- ── Schism Plus ─────────────────────────────────────────────────── -->
     <string name="plus_title">Schism Plus</string>

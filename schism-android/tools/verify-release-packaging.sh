@@ -16,7 +16,7 @@ apkanalyzer=$(find "$sdk_root/cmdline-tools" -type f -name apkanalyzer | head -1
 signer_output=$("$apksigner" verify --verbose "$apk")
 grep -q '^Verifies$' <<<"$signer_output"
 [[ $("$apkanalyzer" manifest application-id "$apk") == "ai.schism.split" ]]
-[[ $("$apkanalyzer" manifest version-code "$apk") == "10300" ]]
+[[ $("$apkanalyzer" manifest version-code "$apk") == "10301" ]]
 [[ $("$apkanalyzer" manifest target-sdk "$apk") == "36" ]]
 [[ $("$apkanalyzer" manifest debuggable "$apk") == "false" ]]
 "$zipalign" -c -P 16 4 "$apk" >/dev/null

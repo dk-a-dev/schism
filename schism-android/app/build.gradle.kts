@@ -49,8 +49,8 @@ android {
         applicationId = "ai.schism.split"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10300
-        versionName = "1.3.0"
+        versionCode = 10301
+        versionName = "1.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
         // Test ids by default; the release build type below swaps in the production pair.
