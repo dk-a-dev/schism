@@ -284,15 +284,60 @@ func postJSON(ctx context.Context, client *http.Client, name, endpoint string, h
 	}
 }
 
-// Select returns the provider a deployment has configured: Gemini when its key is present,
-// otherwise Groq, or nil when neither key is set (cloud extraction stays off).
+// Select returns the provider a deployment has configured. With both keys set it returns a Chain
+// that tries Gemini first and falls back to Groq; with one key, just that provider; with neither,
+// nil, which leaves cloud extraction off entirely.
 func Select(geminiKey, geminiModel, groqKey, groqModel string) Provider {
-	switch {
-	case strings.TrimSpace(geminiKey) != "":
-		return NewGemini(geminiKey, geminiModel)
-	case strings.TrimSpace(groqKey) != "":
-		return NewGroq(groqKey, groqModel)
-	default:
-		return nil
+	var configured []Provider
+	if strings.TrimSpace(geminiKey) != "" {
+		configured = append(configured, NewGemini(geminiKey, geminiModel))
 	}
+	if strings.TrimSpace(groqKey) != "" {
+		configured = append(configured, NewGroq(groqKey, groqModel))
+	}
+	switch len(configured) {
+	case 0:
+		return nil
+	case 1:
+		return configured[0]
+	default:
+		return Chain(configured)
+	}
+}
+
+// Chain tries each provider in order and returns the first successful read.
+//
+// It only falls through on ErrUnavailable — the provider was rate-limited, timed out, or broke.
+// ErrRejected is deliberately terminal: that means the image itself is not readable (wrong type,
+// too blurry, not a bill), and asking a second provider to look at the same unreadable photo just
+// spends money and latency to fail twice. A validation failure is likewise not retried, because
+// both providers are being asked for the same schema.
+type Chain []Provider
+
+func (c Chain) Name() string {
+	names := make([]string, 0, len(c))
+	for _, p := range c {
+		names = append(names, p.Name())
+	}
+	return strings.Join(names, "+")
+}
+
+func (c Chain) Extract(ctx context.Context, image []byte, mimeType string) (Draft, error) {
+	var lastErr error
+	for _, p := range c {
+		draft, err := p.Extract(ctx, image, mimeType)
+		if err == nil {
+			return draft, nil
+		}
+		lastErr = err
+		if !errors.Is(err, ErrUnavailable) {
+			return Draft{}, err
+		}
+		// A cancelled or expired request context will not be any healthier at the next
+		// provider; stop rather than burning the caller's remaining deadline.
+		if ctx.Err() != nil {
+			return Draft{}, err
+		}
+	}
+	return Draft{}, lastErr
 }

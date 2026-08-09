@@ -263,7 +263,7 @@ func TestSelectPrefersGeminiAndDefaultsModels(t *testing.T) {
 		{name: "nothing configured"},
 		{name: "gemini only", geminiKey: "g", wantProvider: "gemini", wantModel: DefaultGeminiModel},
 		{name: "groq only", groqKey: "q", wantProvider: "groq", wantModel: DefaultGroqModel},
-		{name: "both: gemini wins", geminiKey: "g", groqKey: "q", wantProvider: "gemini", wantModel: DefaultGeminiModel},
+		{name: "both: chain, gemini first", geminiKey: "g", groqKey: "q", wantProvider: "gemini+groq"},
 		{name: "model override", groqKey: "q", groqModel: "meta-llama/llama-4-maverick-17b-128e-instruct",
 			wantProvider: "groq", wantModel: "meta-llama/llama-4-maverick-17b-128e-instruct"},
 		{name: "blank key is unconfigured", geminiKey: "  ", groqKey: "q", wantProvider: "groq", wantModel: DefaultGroqModel},
@@ -282,6 +282,10 @@ func TestSelectPrefersGeminiAndDefaultsModels(t *testing.T) {
 				require.Equal(t, tc.wantModel, v.Model)
 			case *Groq:
 				require.Equal(t, tc.wantModel, v.Model)
+			case Chain:
+				// Order is the contract: Gemini is tried first, Groq only covers for it.
+				require.IsType(t, &Gemini{}, v[0])
+				require.IsType(t, &Groq{}, v[1])
 			default:
 				t.Fatalf("unexpected provider type %T", p)
 			}
@@ -309,4 +313,77 @@ func TestSupportedMIME(t *testing.T) {
 // The prompt must keep saying "JSON": Groq's json_object mode requires the word in the prompt.
 func TestPromptMentionsJSONForGroqObjectMode(t *testing.T) {
 	require.True(t, strings.Contains(prompt, "JSON"))
+}
+
+// stubProvider records that it was called and returns whatever it was told to.
+type stubProvider struct {
+	name   string
+	draft  Draft
+	err    error
+	called *int
+}
+
+func (s stubProvider) Name() string { return s.name }
+func (s stubProvider) Extract(context.Context, []byte, string) (Draft, error) {
+	*s.called++
+	return s.draft, s.err
+}
+
+func TestChainFallsBackOnlyWhenRetryingCanHelp(t *testing.T) {
+	good := Draft{Merchant: "Cafe", TotalMinor: 1000, SubtotalMinor: 1000,
+		Items: []Item{{Name: "Tea", Qty: 1, AmountMinor: 1000}}}
+
+	cases := []struct {
+		name             string
+		firstErr         error
+		wantSecondCalled int
+		wantErrIs        error
+	}{
+		{
+			// The whole point of the chain: Gemini rate-limited or broken, Groq covers.
+			name:     "unavailable falls through",
+			firstErr: ErrUnavailable, wantSecondCalled: 1,
+		},
+		{
+			// The image is not readable. Paying a second provider to fail on the same photo
+			// costs money and latency to reach the same answer.
+			name:     "rejected is terminal",
+			firstErr: ErrRejected, wantSecondCalled: 0, wantErrIs: ErrRejected,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			first, second := 0, 0
+			c := Chain{
+				stubProvider{name: "first", err: tc.firstErr, called: &first},
+				stubProvider{name: "second", draft: good, called: &second},
+			}
+			got, err := c.Extract(context.Background(), []byte("x"), "image/jpeg")
+			require.Equal(t, 1, first, "first provider must always be tried")
+			require.Equal(t, tc.wantSecondCalled, second)
+			if tc.wantErrIs != nil {
+				require.ErrorIs(t, err, tc.wantErrIs)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "Cafe", got.Merchant)
+		})
+	}
+}
+
+func TestChainStopsWhenContextIsDone(t *testing.T) {
+	first, second := 0, 0
+	c := Chain{
+		stubProvider{name: "first", err: ErrUnavailable, called: &first},
+		stubProvider{name: "second", called: &second},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := c.Extract(ctx, []byte("x"), "image/jpeg")
+	require.Error(t, err)
+	require.Equal(t, 0, second, "a dead deadline will not be healthier at the next provider")
+}
+
+func TestChainNameListsProvidersInOrder(t *testing.T) {
+	require.Equal(t, "gemini+groq", Chain{NewGemini("k", ""), NewGroq("k", "")}.Name())
 }
