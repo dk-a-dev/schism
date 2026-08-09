@@ -61,11 +61,19 @@ func main() {
 	if err := store.RunMigrations(cfg.DatabaseURL); err != nil {
 		log.Fatal(err)
 	}
-	pool, err := store.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := store.NewPoolWithOptions(ctx, cfg.DatabaseURL, store.PoolOptions{
+		MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns, MaxConnLifetime: cfg.DBMaxConnLifetime,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
+	pingCtx, cancelPing := context.WithTimeout(ctx, 5*time.Second)
+	if err := pool.Ping(pingCtx); err != nil {
+		cancelPing()
+		log.Fatal(err)
+	}
+	cancelPing()
 
 	r := chi.NewRouter()
 	r.Get("/ready", func(w http.ResponseWriter, req *http.Request) {

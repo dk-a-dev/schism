@@ -73,6 +73,13 @@ Unit tests (`internal/split`, `internal/analytics`, `internal/config`, `internal
 - `ADDR` — listen address (default `:8080`)
 - `LOG_REQUESTS` — `true/1/yes/on` enables per-request access logging (**off by default**; leave
   unset in production)
+- `DB_MAX_CONNS` — PostgreSQL pool ceiling (default `20`)
+- `DB_MIN_CONNS` — warm connections (default `2`)
+- `DB_MAX_CONN_LIFETIME` — Go duration (default `30m`)
+
+Production ingress should enforce the same 1 MiB body limit and server-aligned timeouts. Recommended
+per-key limits are auth `5/min`, invite redemption `10/min`, and OCR manifest `60/min`; the process
+also applies local register/login burst limits. `/health` is liveness and `/ready` verifies Postgres.
 
 ## API
 See [`docs/api-contract.md`](docs/api-contract.md) for the full frontend contract (endpoints,
