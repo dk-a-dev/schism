@@ -16,3 +16,5 @@ rootProject.name = "schism-android"
 include(":app")
 include(":parser-core")
 include(":ppocr-sdk")
+include(":ocr-contract")
+include(":ocr-impl")
