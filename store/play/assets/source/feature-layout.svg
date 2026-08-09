@@ -1,0 +1,20 @@
+<!-- Layout reference for store/play/assets/feature-1024x500.png and the landscape promo.
+     tools/store/export_assets.py redraws this with Pillow (no SVG rasteriser is available without
+     adding a dependency), so keep the two in sync. Text stays vector here and is re-rendered, never
+     stretched from a bitmap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <rect width="1024" height="500" fill="#FBFAF4"/>
+  <rect width="338" height="500" fill="#B6ECCE"/>
+  <rect x="338" width="4" height="500" fill="#14874F"/>
+
+  <!-- Split coin, 108-unit mark scaled to a 150px half-disc radius at (169,250). -->
+  <g transform="translate(169 250) scale(5.769) translate(-54 -54)">
+    <path fill="#B6ECCE" d="M50 26a26 26 0 0 0 0 52Z" stroke="#14874F" stroke-width="1.2"/>
+    <path fill="#FBFAF4" d="M58 30a26 26 0 0 1 0 52Z"/>
+  </g>
+
+  <text x="403" y="238" font-family="Avenir Next, Helvetica Neue, sans-serif" font-weight="600"
+        font-size="57" fill="#1A1A16">Split expenses. Keep the context.</text>
+  <text x="403" y="300" font-family="Avenir Next, Helvetica Neue, sans-serif"
+        font-size="24" fill="#9A7A2E">Private receipt and SMS understanding, on your phone.</text>
+</svg>

@@ -1,0 +1,11 @@
+<!-- Schism app mark. Geometry copied from
+     schism-android/app/src/main/res/drawable/ic_launcher_foreground.xml (half-discs r=26 centred at
+     50,52 and 58,56) and ic_launcher_background.xml (field #128049, halo #16925A r=42).
+     Edit here and in tools/store/export_assets.py together. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img" aria-labelledby="title">
+  <title id="title">Schism split coin</title>
+  <rect width="108" height="108" fill="#128049"/>
+  <circle cx="54" cy="54" r="42" fill="#16925A"/>
+  <path fill="#B6ECCE" d="M50 26a26 26 0 0 0 0 52Z"/>
+  <path fill="#FBFAF4" d="M58 30a26 26 0 0 1 0 52Z"/>
+</svg>

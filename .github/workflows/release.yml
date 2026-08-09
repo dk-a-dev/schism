@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and verify without publishing
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.2
+          cache-dependency-path: schism-backend/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Test backend
+        working-directory: schism-backend
+        run: go test ./... -count=1
+      - name: Restore release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        working-directory: schism-android
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64"
+          key_file="$RUNNER_TEMP/schism-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$key_file"
+          chmod 600 "$key_file"
+          {
+            echo "storeFile=$key_file"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+      - name: Build Android release
+        working-directory: schism-android
+        # Single default variant: no product flavors, no feature modules.
+        run: ./gradlew test :app:lintRelease :app:bundleRelease :app:assembleRelease
+      - name: Verify artifacts
+        env:
+          EXPECTED_SIGNER_SHA256: ${{ secrets.RELEASE_SIGNER_SHA256 }}
+        run: |
+          tools/release/verify_android_artifacts.sh \
+            schism-android/app/build/outputs/bundle/release/app-release.aab \
+            schism-android/app/build/outputs/apk/release/app-release.apk
+      - name: Checksums and manifest
+        env:
+          EXPECTED_SIGNER_SHA256: ${{ secrets.RELEASE_SIGNER_SHA256 }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          mkdir -p dist
+          cp schism-android/app/build/outputs/apk/release/app-release.apk dist/schism-v1.3.0.apk
+          cp schism-android/app/build/outputs/bundle/release/app-release.aab dist/schism-v1.3.0.aab
+          tools/release/generate_checksums.sh dist
+      - name: Destroy signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/schism-release.jks" schism-android/keystore.properties
+      - id: version
+        run: echo "value=${GITHUB_REF_NAME:-v1.3.0}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ needs.build.outputs.version }}" dist/* --verify-tag --generate-notes --prerelease
+

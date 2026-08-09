@@ -1,0 +1,61 @@
+name: Backend
+
+on:
+  pull_request:
+    paths: ["schism-backend/**", ".github/workflows/backend.yml"]
+  push:
+    branches: [main]
+    paths: ["schism-backend/**", ".github/workflows/backend.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: schism-backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: schism
+          POSTGRES_PASSWORD: schism
+          POSTGRES_DB: schism_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U schism -d schism_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Disposable CI database. Without this the store/api tests call t.Skip and the job
+      # reports green while never touching auth, membership, or invite code.
+      DATABASE_URL: postgres://schism:schism@127.0.0.1:5432/schism_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.2
+          cache-dependency-path: schism-backend/go.sum
+      - name: Format
+        run: test -z "$(gofmt -l .)"
+      - name: Tests (fails if database-backed tests were skipped)
+        run: |
+          set -euo pipefail
+          # -p 1: store and api migrate the same database, so packages must not run concurrently.
+          go test ./... -count=1 -p 1 -v 2>&1 | tee "$RUNNER_TEMP/go-test.log"
+          ! grep -q 'DATABASE_URL not set' "$RUNNER_TEMP/go-test.log"
+      - name: Race tests
+        run: go test -race -p 1 ./... -count=1
+      - name: Vet
+        run: go vet ./...
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...

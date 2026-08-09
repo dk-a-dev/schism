@@ -1,0 +1,5 @@
+Receipt photos are now read on your phone. The small model downloads only when you choose to scan, can wait for Wi-Fi, and works offline afterwards. Photos and the text read from them are not uploaded.
+
+Bank message import stays optional and off on a fresh install, is explained before the SMS permission is requested, and has separate controls to disable it, revoke the permission, and delete imported transactions.
+
+Also: stronger account security and Android 16 support.

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dk-a-dev/schism/docs/release/v1.3/artifact-manifest.schema.json",
+  "title": "Schism Android release artifact manifest",
+  "description": "Provenance for the artifacts published with a Schism Android release. Written by tools/release/generate_checksums.sh.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "versionName",
+    "versionCode",
+    "targetSdk",
+    "minSdk",
+    "abis",
+    "bundledOcrModels",
+    "source",
+    "signerSha256",
+    "tools",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "applicationId": { "const": "ai.schism.split" },
+    "versionName": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "versionCode": { "type": "integer", "minimum": 1 },
+    "targetSdk": { "type": "integer", "minimum": 36 },
+    "minSdk": { "type": "integer", "minimum": 26 },
+    "abis": {
+      "description": "ABIs packaged in the release artifacts. Release ships arm64-v8a only.",
+      "type": "array",
+      "items": { "const": "arm64-v8a" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "bundledOcrModels": {
+      "description": "Always false: OCR models are downloaded from the backend catalog at runtime and never packaged into a build.",
+      "const": false
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tag", "committedAt"],
+      "properties": {
+        "commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+        "tag": { "type": ["string", "null"] },
+        "committedAt": {
+          "description": "Commit timestamp, not build time, so the manifest is reproducible.",
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "signerSha256": {
+      "description": "SHA-256 digest of the signing certificate, supplied through protected CI configuration. Null when the digest was not pinned for this run.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-fA-F:]{64,95}$"
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "null"] },
+      "required": ["androidBuildTools", "gradle", "java"]
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256", "size"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[^/]+$" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

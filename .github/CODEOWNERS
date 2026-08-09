@@ -1,0 +1,23 @@
+# Every change needs an owner review. Paths below are security-sensitive and are
+# listed explicitly so a future second maintainer cannot be added to the repo
+# without also being added to (or deliberately left out of) these lines.
+* @dk-a-dev
+
+# CI, release signing, and release tooling.
+/.github/ @dk-a-dev
+/tools/release/ @dk-a-dev
+/docs/security/ @dk-a-dev
+
+# Android: signing config, permissions/manifest, dependency pins, R8 rules.
+/schism-android/app/build.gradle.kts @dk-a-dev
+/schism-android/app/proguard-rules.pro @dk-a-dev
+/schism-android/app/src/main/AndroidManifest.xml @dk-a-dev
+/schism-android/gradle/libs.versions.toml @dk-a-dev
+
+# Backend: auth/session handling, config surface, schema, OCR model catalog.
+/schism-backend/internal/api/ @dk-a-dev
+/schism-backend/internal/config/ @dk-a-dev
+/schism-backend/internal/store/ @dk-a-dev
+/schism-backend/internal/modelcatalog/ @dk-a-dev
+/schism-backend/go.mod @dk-a-dev
+/schism-backend/go.sum @dk-a-dev
