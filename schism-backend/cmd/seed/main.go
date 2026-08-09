@@ -13,6 +13,11 @@ import (
 )
 
 func main() {
+	// `seed demo ...` drives the public HTTP API instead of the database — see demo.go.
+	if len(os.Args) > 1 && os.Args[1] == "demo" {
+		demoMain(os.Args[2:])
+		return
+	}
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		log.Fatal("DATABASE_URL is required")

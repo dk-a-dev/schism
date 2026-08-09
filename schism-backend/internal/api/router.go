@@ -55,6 +55,7 @@ func NewRouterWithMonetization(s *store.Store, logRequests bool, m Monetization,
 	// Public invite landing (https so messengers linkify it) → bounces into the app.
 	r.Get("/g/{groupID}", h.inviteLanding)
 	r.Get("/i/{token}", h.participantInviteLanding)
+	r.Get("/i/g/{token}", h.groupInviteLanding)
 
 	// Public claim-session landing → bounces into the app's claim screen.
 	r.Get("/c/{sid}", h.claimLanding)
@@ -102,10 +103,14 @@ func NewRouterWithMonetization(s *store.Store, logRequests bool, m Monetization,
 					})
 					r.Post("/claim-sessions", h.createClaimSession)
 					r.Post("/participants/{participantID}/invite", h.createParticipantInvite)
+					r.Post("/invite-link", h.createGroupInvite)
+					r.Delete("/invite-link", h.revokeGroupInvite)
 				})
 			})
 			r.Get("/invites/{token}", h.previewParticipantInvite)
 			r.Post("/invites/{token}/redeem", h.redeemParticipantInvite)
+			r.Get("/group-invites/{token}", h.previewGroupInvite)
+			r.Post("/group-invites/{token}/redeem", h.redeemGroupInvite)
 			r.Route("/claim-sessions/{sid}", func(r chi.Router) {
 				r.Get("/", h.getClaimSession)
 				r.Put("/claims", h.putClaims)

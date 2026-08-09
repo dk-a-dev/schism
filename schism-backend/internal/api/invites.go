@@ -14,6 +14,8 @@ func writeInviteError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusNotFound, "invite not found")
 	case errors.Is(err, store.ErrInviteExpired):
 		writeErr(w, http.StatusGone, "invite expired")
+	case errors.Is(err, store.ErrInviteRevoked):
+		writeErr(w, http.StatusGone, "invite revoked")
 	case errors.Is(err, store.ErrInviteUsed), errors.Is(err, store.ErrParticipantLinked), errors.Is(err, store.ErrAlreadyGroupMember):
 		writeErr(w, http.StatusConflict, "invite cannot be redeemed")
 	case errors.Is(err, store.ErrNotGroupMember):
