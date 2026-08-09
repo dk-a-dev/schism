@@ -19,7 +19,6 @@ set -euo pipefail
 
 : "${EXPECTED_SIGNER_SHA256:=666bdaa2a45dfbb29f861fa262ce7c34673705b9ee76e079fcd160308f81ad0a}"
 
-APPLICATION_ID=ai.schism.split
 TARGET_SDK=36
 MIN_SDK=26
 
@@ -31,8 +30,9 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 gradle_file=$repo_root/schism-android/app/build.gradle.kts
 VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$gradle_file")
 VERSION_CODE=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$gradle_file")
-[[ -n $VERSION_NAME && -n $VERSION_CODE ]] ||
-    { echo "verify: cannot read versionName/versionCode from $gradle_file" >&2; exit 1; }
+APPLICATION_ID=$(sed -n 's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$gradle_file")
+[[ -n $VERSION_NAME && -n $VERSION_CODE && -n $APPLICATION_ID ]] ||
+    { echo "verify: cannot read applicationId/versionName/versionCode from $gradle_file" >&2; exit 1; }
 structure_only=0
 if [[ ${1:-} == --structure-only ]]; then
     # ponytail: exists so test_release_tools.sh can exercise the structural rules on synthetic

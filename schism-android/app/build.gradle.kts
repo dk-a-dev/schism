@@ -46,7 +46,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "ai.schism.split"
+        applicationId = "com.dkadev.schism"
         minSdk = 26
         targetSdk = 36
         versionCode = 10302

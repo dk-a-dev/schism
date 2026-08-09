@@ -20,7 +20,7 @@ const (
 )
 
 // PackageName is the only Android package whose purchases are accepted.
-const PackageName = "ai.schism.split"
+const PackageName = "com.dkadev.schism"
 
 // ProductID is the only subscription product that grants Plus.
 const ProductID = "schism_plus"

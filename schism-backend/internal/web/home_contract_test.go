@@ -35,8 +35,8 @@ func TestHomeContractAndAccessibility(t *testing.T) {
 }
 
 func TestHomeUsesConfiguredPlayCTA(t *testing.T) {
-	rec := get(t, newTestSite(t, "https://play.google.com/store/apps/details?id=ai.schism.split"), "/")
-	require.Contains(t, rec.Body.String(), `href="https://play.google.com/store/apps/details?id=ai.schism.split"`)
+	rec := get(t, newTestSite(t, "https://play.google.com/store/apps/details?id=com.dkadev.schism"), "/")
+	require.Contains(t, rec.Body.String(), `href="https://play.google.com/store/apps/details?id=com.dkadev.schism"`)
 	require.Contains(t, rec.Body.String(), `Get Schism on Google Play`)
 	require.NotContains(t, rec.Body.String(), `Coming soon on Google Play`)
 }

@@ -36,10 +36,21 @@ SCHISM_BUILD_TOOLS=$build_tools \
 SCHISM_GRADLE=$gradle_version \
 SCHISM_JAVA=$(java -version 2>&1 | head -1 | tr -d '"') \
 SCHISM_SIGNER=${EXPECTED_SIGNER_SHA256:-} \
-python3 - "$dir" <<'PY'
-import hashlib, json, os, pathlib, sys
+python3 - "$dir" "$repo_root/schism-android/app/build.gradle.kts" <<'PY'
+import hashlib, json, os, pathlib, re, sys
 
 release_dir = pathlib.Path(sys.argv[1])
+
+# applicationId/versionName/versionCode are read from the build file, never pinned here. This
+# manifest previously claimed 1.3.0/10300 two releases after that stopped being true, because a
+# second copy of a fact is a copy that goes stale silently.
+gradle = pathlib.Path(sys.argv[2]).read_text()
+def gradle_value(key, quoted=True):
+    pattern = rf'^\s*{key}\s*=\s*"([^"]+)"' if quoted else rf'^\s*{key}\s*=\s*(\d+)'
+    match = re.search(pattern, gradle, re.MULTILINE)
+    if not match:
+        raise SystemExit(f"checksums: cannot read {key} from {sys.argv[2]}")
+    return match.group(1)
 artifacts = []
 for line in (release_dir / "SHA256SUMS").read_text().splitlines():
     digest, name = line.split("  ", 1)
@@ -55,9 +66,9 @@ def env(key):
 
 manifest = {
     "schemaVersion": 1,
-    "applicationId": "ai.schism.split",
-    "versionName": "1.3.0",
-    "versionCode": 10300,
+    "applicationId": gradle_value("applicationId"),
+    "versionName": gradle_value("versionName"),
+    "versionCode": int(gradle_value("versionCode", quoted=False)),
     "targetSdk": 36,
     "minSdk": 26,
     "abis": ["arm64-v8a"],

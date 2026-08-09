@@ -17,9 +17,9 @@ import (
 )
 
 func TestCheckAcceptsOnlySchismPlus(t *testing.T) {
-	require.NoError(t, Check("ai.schism.split", "schism_plus"))
+	require.NoError(t, Check("com.dkadev.schism", "schism_plus"))
 	require.ErrorIs(t, Check("com.attacker.app", "schism_plus"), ErrProductMismatch)
-	require.ErrorIs(t, Check("ai.schism.split", "schism_gold"), ErrProductMismatch)
+	require.ErrorIs(t, Check("com.dkadev.schism", "schism_gold"), ErrProductMismatch)
 	require.ErrorIs(t, Check("", ""), ErrProductMismatch)
 }
 
@@ -63,7 +63,7 @@ func newTestGoogle(t *testing.T, playHandler http.HandlerFunc) *Google {
 		"token_uri":    tokenSrv.URL,
 	})
 	require.NoError(t, err)
-	g, err := NewGoogle("ai.schism.split", string(sa))
+	g, err := NewGoogle("com.dkadev.schism", string(sa))
 	require.NoError(t, err)
 	g.BaseURL = playSrv.URL
 	return g
@@ -71,7 +71,7 @@ func newTestGoogle(t *testing.T, playHandler http.HandlerFunc) *Google {
 
 func TestNewGoogleRejectsBadServiceAccounts(t *testing.T) {
 	for _, bad := range []string{"", "{", `{"client_email":"a@b"}`, `{"client_email":"a@b","private_key":"nope"}`} {
-		_, err := NewGoogle("ai.schism.split", bad)
+		_, err := NewGoogle("com.dkadev.schism", bad)
 		require.Error(t, err, "input %q", bad)
 	}
 }
@@ -98,7 +98,7 @@ func TestGoogleVerifyMapsPlayResponses(t *testing.T) {
 	require.False(t, got.AutoRenewing)
 	require.False(t, got.Acknowledged)
 	require.Equal(t, "Bearer fake-access", gotAuth)
-	require.Contains(t, gotPath, "/applications/ai.schism.split/purchases/subscriptionsv2/tokens/tok-123")
+	require.Contains(t, gotPath, "/applications/com.dkadev.schism/purchases/subscriptionsv2/tokens/tok-123")
 }
 
 func TestGoogleVerifyRejectsForeignPackageBeforeCallingPlay(t *testing.T) {

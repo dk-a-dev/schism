@@ -205,7 +205,7 @@ also refreshes purchase records older than six hours or past their expiry.
 
 `POST /v1/billing/verify` with `{"productId":"schism_plus","purchaseToken":"..."}` verifies the token
 with Google, records it (AES-256-GCM encrypted; the token is never logged or echoed) and returns the
-same body as `GET /v1/entitlement`. Only package `ai.schism.split`, product `schism_plus`, and a
+same body as `GET /v1/entitlement`. Only package `com.dkadev.schism`, product `schism_plus`, and a
 `PURCHASED` state grant Plus. Rejections: `400 purchase_not_verified` (wrong package/product or
 unknown token), `409 purchase_already_linked` (token belongs to another Schism account),
 `502 purchase_verification_unavailable` (transient Google failure — the caller should retry, and any

@@ -110,7 +110,7 @@ Store it once. Rotating it makes existing stored purchase tokens undecryptable.
 ```
 PURCHASES_ENABLED=true
 PLUS_ENABLED=true
-PLAY_PACKAGE_NAME=ai.schism.split
+PLAY_PACKAGE_NAME=com.dkadev.schism
 BILLING_TOKEN_KEY=<base64 of 32 random bytes>
 PLAY_SERVICE_ACCOUNT_JSON=<the entire JSON key file contents>
 ```

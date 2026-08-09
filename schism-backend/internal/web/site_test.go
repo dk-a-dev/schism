@@ -41,15 +41,15 @@ func TestHomeIsSemanticUTF8HTML(t *testing.T) {
 }
 
 func TestHomeEscapesConfiguredPlayURL(t *testing.T) {
-	h := newTestSite(t, "https://play.google.com/store/apps/details?id=ai.schism.split&referrer=launch")
+	h := newTestSite(t, "https://play.google.com/store/apps/details?id=com.dkadev.schism&referrer=launch")
 	rec := get(t, h, "/")
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), `id=ai.schism.split&amp;referrer=launch`)
-	require.NotContains(t, rec.Body.String(), `id=ai.schism.split&referrer=launch`)
+	require.Contains(t, rec.Body.String(), `id=com.dkadev.schism&amp;referrer=launch`)
+	require.NotContains(t, rec.Body.String(), `id=com.dkadev.schism&referrer=launch`)
 }
 
 func TestSiteHasNoScriptsCookiesOrExternalAssets(t *testing.T) {
-	h := newTestSite(t, "https://play.google.com/store/apps/details?id=ai.schism.split")
+	h := newTestSite(t, "https://play.google.com/store/apps/details?id=com.dkadev.schism")
 	for _, path := range []string{"/", "/privacy", "/terms", "/support", "/account-deletion"} {
 		rec := get(t, h, path)
 		body := strings.ToLower(rec.Body.String())

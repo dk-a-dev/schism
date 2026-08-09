@@ -15,8 +15,9 @@ apkanalyzer=$(find "$sdk_root/cmdline-tools" -type f -name apkanalyzer | head -1
 # script exited 1 silently for exactly that reason after 10301 became 10302.
 gradle_file=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/app/build.gradle.kts
 expected_version_code=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$gradle_file")
-[[ -n $expected_version_code ]] ||
-    { echo "cannot read versionCode from $gradle_file" >&2; exit 1; }
+expected_application_id=$(sed -n 's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$gradle_file")
+[[ -n $expected_version_code && -n $expected_application_id ]] ||
+    { echo "cannot read applicationId/versionCode from $gradle_file" >&2; exit 1; }
 
 # Every check below reports what it saw. A gate that fails without saying why costs more time than
 # it saves.
@@ -30,7 +31,7 @@ expect() {
 # SIGPIPE and failing the script with 141 on a perfectly good APK.
 signer_output=$("$apksigner" verify --verbose "$apk")
 grep -q '^Verifies$' <<<"$signer_output" || { echo "$apk: signature does not verify" >&2; exit 1; }
-expect "application id" "$("$apkanalyzer" manifest application-id "$apk")" "ai.schism.split"
+expect "application id" "$("$apkanalyzer" manifest application-id "$apk")" "$expected_application_id"
 expect "versionCode" "$("$apkanalyzer" manifest version-code "$apk")" "$expected_version_code"
 expect "targetSdk" "$("$apkanalyzer" manifest target-sdk "$apk")" "36"
 expect "debuggable" "$("$apkanalyzer" manifest debuggable "$apk")" "false"

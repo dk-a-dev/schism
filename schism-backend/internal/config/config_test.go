@@ -83,13 +83,13 @@ func TestLoadPublicURLAndPlayURL(t *testing.T) {
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "support@schism.test")
 	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	t.Setenv("SCHISM_PUBLIC_URL", "https://schism.test")
-	t.Setenv("SCHISM_PLAY_URL", "https://play.google.com/store/apps/details?id=ai.schism.split")
+	t.Setenv("SCHISM_PLAY_URL", "https://play.google.com/store/apps/details?id=com.dkadev.schism")
 
 	c, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, "support@schism.test", c.SupportEmail)
 	require.Equal(t, "https://schism.test", c.PublicURL)
-	require.Equal(t, "https://play.google.com/store/apps/details?id=ai.schism.split", c.PlayURL)
+	require.Equal(t, "https://play.google.com/store/apps/details?id=com.dkadev.schism", c.PlayURL)
 }
 
 func TestLoadAcceptsEmptyPlayURL(t *testing.T) {
@@ -177,7 +177,7 @@ func TestPurchasesEnabledRequiresBillingConfiguration(t *testing.T) {
 			monetizationEnv(t)
 			t.Setenv("PURCHASES_ENABLED", "true")
 			t.Setenv("BILLING_TOKEN_KEY", key)
-			t.Setenv("PLAY_PACKAGE_NAME", "ai.schism.split")
+			t.Setenv("PLAY_PACKAGE_NAME", "com.dkadev.schism")
 			t.Setenv("PLAY_SERVICE_ACCOUNT_JSON", sa)
 			t.Setenv(missing, "")
 			_, err := Load()
@@ -188,12 +188,12 @@ func TestPurchasesEnabledRequiresBillingConfiguration(t *testing.T) {
 	monetizationEnv(t)
 	t.Setenv("PURCHASES_ENABLED", "true")
 	t.Setenv("BILLING_TOKEN_KEY", key)
-	t.Setenv("PLAY_PACKAGE_NAME", "ai.schism.split")
+	t.Setenv("PLAY_PACKAGE_NAME", "com.dkadev.schism")
 	t.Setenv("PLAY_SERVICE_ACCOUNT_JSON", sa)
 	c, err := Load()
 	require.NoError(t, err)
 	require.True(t, c.PurchasesEnabled)
-	require.Equal(t, "ai.schism.split", c.PlayPackageName)
+	require.Equal(t, "com.dkadev.schism", c.PlayPackageName)
 }
 
 func TestLoadRejectsMissingSupportEmail(t *testing.T) {
@@ -226,10 +226,10 @@ func TestLoadRejectsInvalidPublicURL(t *testing.T) {
 
 func TestLoadRejectsInvalidPlayURL(t *testing.T) {
 	for _, value := range []string{
-		"http://play.google.com/store/apps/details?id=ai.schism.split",
-		"play.google.com/store/apps/details?id=ai.schism.split",
-		"https://user@play.google.com/store/apps/details?id=ai.schism.split",
-		"https://play.google.com/store/apps/details?id=ai.schism.split#details",
+		"http://play.google.com/store/apps/details?id=com.dkadev.schism",
+		"play.google.com/store/apps/details?id=com.dkadev.schism",
+		"https://user@play.google.com/store/apps/details?id=com.dkadev.schism",
+		"https://play.google.com/store/apps/details?id=com.dkadev.schism#details",
 	} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("DATABASE_URL", "postgres://x")

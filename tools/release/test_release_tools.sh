@@ -34,8 +34,15 @@ expect_fail() {
     fi
 }
 
-python3 - "$tmp" <<'PY'
+gradle_file=$repo_root/schism-android/app/build.gradle.kts
+app_id=$(sed -n 's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$gradle_file")
+version_code=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$gradle_file")
+version_name=$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$gradle_file")
+
+python3 - "$tmp" "$app_id" <<'PY'
 import struct, sys, zipfile
+
+APP_ID = sys.argv[2]
 from pathlib import Path
 
 out = Path(sys.argv[1])
@@ -64,22 +71,22 @@ def zip_at(name, entries):
     return path
 
 APK_OK = {
-    "AndroidManifest.xml": b"ai.schism.split",
+    "AndroidManifest.xml": APP_ID.encode(),
     "lib/arm64-v8a/libonnxruntime.so": ALIGNED,
     "lib/arm64-v8a/libopencv_java4.so": ALIGNED,
 }
 zip_at("good.apk", APK_OK)
 zip_at("models.apk", dict(APK_OK, **{"assets/models/det/inference.onnx": b"leaked"}))
 zip_at("badabi.apk", dict(APK_OK, **{"lib/armeabi-v7a/libonnxruntime.so": ALIGNED}))
-zip_at("noarm64.apk", {"AndroidManifest.xml": b"ai.schism.split"})
+zip_at("noarm64.apk", {"AndroidManifest.xml": APP_ID.encode()})
 zip_at("noruntime.apk", {"lib/arm64-v8a/libsomething.so": ALIGNED})
 zip_at("unaligned.apk", dict(APK_OK, **{"lib/arm64-v8a/libonnxruntime.so": UNALIGNED}))
 zip_at("good.aab", {
-    "base/manifest/AndroidManifest.xml": b"\x0a\x0fai.schism.split",
+    "base/manifest/AndroidManifest.xml": b"\x0a\x0f" + APP_ID.encode(),
     "base/lib/arm64-v8a/libonnxruntime.so": ALIGNED,
 })
 zip_at("models.aab", {
-    "base/manifest/AndroidManifest.xml": b"ai.schism.split",
+    "base/manifest/AndroidManifest.xml": APP_ID.encode(),
     "base/lib/arm64-v8a/libonnxruntime.so": ALIGNED,
     "base/assets/models/rec/inference.onnx": b"leaked",
 })
@@ -131,20 +138,21 @@ expect_pass "regenerating is byte-identical" bash -c \
 
 expect_pass "manifest satisfies the published schema's required keys" python3 -c '
 import json, sys
+APP_ID, VERSION_CODE, VERSION_NAME = sys.argv[3], int(sys.argv[4]), sys.argv[5]
 schema = json.load(open(sys.argv[1]))
 manifest = json.load(open(sys.argv[2]))
 missing = [k for k in schema["required"] if k not in manifest]
 missing += ["source." + k for k in schema["properties"]["source"]["required"] if k not in manifest["source"]]
 missing += ["tools." + k for k in schema["properties"]["tools"]["required"] if k not in manifest["tools"]]
 assert not missing, missing
-assert manifest["applicationId"] == "ai.schism.split"
-assert manifest["versionCode"] == 10300 and manifest["versionName"] == "1.3.0"
+assert manifest["applicationId"] == APP_ID
+assert manifest["versionCode"] == VERSION_CODE and manifest["versionName"] == VERSION_NAME
 assert manifest["targetSdk"] == 36 and manifest["minSdk"] == 26
 assert manifest["abis"] == ["arm64-v8a"] and manifest["bundledOcrModels"] is False
 assert len(manifest["artifacts"]) == 2
 for a in manifest["artifacts"]:
     assert len(a["sha256"]) == 64 and a["size"] > 0
-' "$repo_root/docs/release/v1.3/artifact-manifest.schema.json" "$dist/artifact-manifest.json"
+' "$repo_root/docs/release/v1.3/artifact-manifest.schema.json" "$dist/artifact-manifest.json" "$app_id" "$version_code" "$version_name"
 
 printf 'tampered' >> "$dist/schism-v1.3.0.apk"
 expect_fail "SHA256SUMS catches a tampered artifact" "FAILED" bash -c \

@@ -1,6 +1,6 @@
 # Play Store listing — en-US
 
-App: Schism (`ai.schism.split`) · versionName 1.3.2 · versionCode 10302
+App: Schism (`com.dkadev.schism`) · versionName 1.3.2 · versionCode 10302
 
 Every line below is checked against shipped code. `tools/store/validate_copy.py` enforces the
 Play character limits and the prohibited-claim list.
