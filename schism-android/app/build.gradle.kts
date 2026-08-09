@@ -166,6 +166,19 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+    implementation(libs.sqlcipher.android)
+    constraints {
+        implementation("androidx.sqlite:sqlite") {
+            version { strictly("2.4.0") }
+            because(
+                "SQLCipher requests androidx.sqlite 2.6.x, which would pair Room 2.6.1's own " +
+                    "sqlite-framework 2.4.0 with a mismatched sqlite API. SQLCipher only touches " +
+                    "the androidx.sqlite.db.* surface that has been stable since 2.0, so pin the " +
+                    "version Room ships against. A Room upgrade will fail here loudly rather " +
+                    "than silently mixing the two.",
+            )
+        }
+    }
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.work.runtime)
     implementation(project(":parser-core"))
