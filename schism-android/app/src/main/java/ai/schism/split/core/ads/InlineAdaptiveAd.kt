@@ -39,6 +39,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -64,6 +65,16 @@ class AdSlotViewModel @Inject constructor(
         val installed = context.packageManager.getPackageInfo(context.packageName, 0).firstInstallTime
         TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - installed).toInt()
     }.getOrDefault(0)
+
+    /**
+     * Whether the backend has ads switched on at all. Gathering consent is only lawful and only
+     * makes sense once ads can actually be served, so the UMP call is gated on this rather than on
+     * the ad surface merely being composed — otherwise a build with `ADS_ENABLED` off still asks
+     * people in consent regions to make an advertising choice that can have no effect.
+     */
+    val adsEnabledByBackend: StateFlow<Boolean> = entitlements.config
+        .map { it.adsEnabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val eligible: StateFlow<Boolean> = combine(
         entitlements.state,
@@ -106,10 +117,14 @@ fun InlineAdaptiveAd(
     val context = LocalContext.current
     val activity = context.findActivity()
     val eligible by viewModel.eligible.collectAsState()
+    val adsEnabled by viewModel.adsEnabledByBackend.collectAsState()
 
     // Gathering consent is what makes an ad request lawful, so ask before the first request — but
-    // only on the surface that can actually show one.
-    LaunchedEffect(activity) { activity?.let { viewModel.consent.refresh(it) } }
+    // only on the surface that can show one, and only once ads are actually switched on. Eligibility
+    // depends on consent, so this still runs strictly before any ad request.
+    LaunchedEffect(activity, adsEnabled) {
+        if (adsEnabled) activity?.let { viewModel.consent.refresh(it) }
+    }
 
     if (!eligible || activity == null) return
 

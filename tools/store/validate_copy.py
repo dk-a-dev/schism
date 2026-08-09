@@ -125,16 +125,19 @@ def check(root):
     if not re.search(r"^- Support email:\s*[^@\s]+@[^@\s]+\.\w+$", urls, re.MULTILINE):
         errors.append("listing.md: no 'Support email' entry with a real address")
 
-    notes_path = root / "en-US/release-notes/10300.txt"
-    if notes_path.is_file():
+    # Every release-notes file is checked, not just the one named in REQUIRED_FILES: the notes for
+    # the version actually being submitted are the ones a reviewer reads.
+    notes_dir = root / "en-US/release-notes"
+    for notes_path in sorted(notes_dir.glob("*.txt")):
+        label = f"release-notes/{notes_path.name}"
         notes = notes_path.read_text(encoding="utf-8").strip()
         if not notes:
-            errors.append("release-notes/10300.txt is empty")
+            errors.append(f"{label} is empty")
         elif len(notes) > RELEASE_NOTES_LIMIT:
-            errors.append(f"release-notes/10300.txt is {len(notes)} chars, limit {RELEASE_NOTES_LIMIT}")
+            errors.append(f"{label} is {len(notes)} chars, limit {RELEASE_NOTES_LIMIT}")
         for pattern in BANNED:
             if re.search(pattern, notes, re.IGNORECASE):
-                errors.append(f"release-notes/10300.txt: prohibited claim matching /{pattern}/")
+                errors.append(f"{label}: prohibited claim matching /{pattern}/")
 
     for pattern in BANNED:
         if re.search(pattern, listing, re.IGNORECASE):

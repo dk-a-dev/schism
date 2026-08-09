@@ -1,4 +1,4 @@
-# Data safety answers — Schism 1.3.0
+# Data safety answers — Schism 1.3.1
 
 Source of truth: `schism-backend/internal/api/*.go`, `schism-android/app/src/main/AndroidManifest.xml`,
 `schism-android/app/src/main/java/ai/schism/split/core/net/ApiService.kt`, and the published privacy
@@ -21,10 +21,28 @@ page (`schism-backend/internal/web/templates/privacy.html`). Contact: dev.keshwa
 | Phone number | Yes | Yes, with group members when supplied for a participant | Optional | App functionality (matching a participant to an account) |
 | User IDs | Yes | No | Required | App functionality, account management |
 | Other user-generated content (group names, expense titles, notes, amounts, splits, claims, activity) | Yes | Yes, with members of the group | Required for shared groups | App functionality |
-| Purchase history (Google Play purchase token, product ID, subscription state) | Yes | No | Required for subscribers | App functionality, fraud prevention |
-| App info and performance (crash/diagnostic signals from the ads SDK) | Yes, via SDK | Yes, with Google | Required | Analytics, fraud prevention |
-| Approximate location (IP-derived, ads SDK) | Yes, via SDK | Yes, with Google | Required | Advertising |
-| Device or other IDs (ads/consent SDK) | Yes, via SDK | Yes, with Google | Required | Advertising, fraud prevention |
+
+### Not collected at launch — monetization is off
+
+1.3.1 launches free. `PLUS_ENABLED`, `PURCHASES_ENABLED` and `ADS_ENABLED` are all off server-side,
+and the app treats them as off until an authenticated config says otherwise, so on a fresh install
+none of the rows below collect anything:
+
+- **Play Billing** is never invoked: nothing reaches a purchase flow, so no purchase token exists.
+- **Mobile Ads** is never initialised. `InlineAdaptiveAd` calls `MobileAds.initialize` only after
+  the eligibility gate passes, and that gate requires `adsEnabledByBackend`.
+- **UMP consent** is never requested. `ConsentManager.refresh` is gated on the same
+  `adsEnabledByBackend` flag, so no consent form is shown and no consent identifier is processed.
+
+Answer these four rows **No** for the launch build. Turning any of the flags on server-side makes
+them true without an app update — update the form in the same change.
+
+| Data type | Collected | Shared | Optional | Purpose |
+| --- | --- | --- | --- | --- |
+| Purchase history (Google Play purchase token, product ID, subscription state) | Only if `PURCHASES_ENABLED` | No | Required for subscribers | App functionality, fraud prevention |
+| App info and performance (crash/diagnostic signals from the ads SDK) | Only if `ADS_ENABLED` | Yes, with Google | Required | Analytics, fraud prevention |
+| Approximate location (IP-derived, ads SDK) | Only if `ADS_ENABLED` | Yes, with Google | Required | Advertising |
+| Device or other IDs (ads/consent SDK) | Only if `ADS_ENABLED` | Yes, with Google | Required | Advertising, fraud prevention |
 
 Passwords are transmitted for register/login and stored only as a hash — declare as "collected", type
 "User IDs"/account credentials per Play's account-management guidance; never shared.
@@ -72,7 +90,16 @@ page (`schism-backend/internal/web/templates/privacy.html`).
 ## Owner actions before submitting the form
 
 1. Re-check the SDK versions above against the final dependency graph before submitting.
-2. If Play Billing and Mobile Ads do NOT ship in 1.3.0, delete the purchase/ads rows above and the
-   Schism Plus paragraph in `en-US/listing.md`, and set "Contains ads"/"In-app purchases" to no.
+2. Answer the four monetization rows **No** — see "Not collected at launch" above. Set
+   "Contains ads" and "In-app purchases" to **no**, matching `en-US/listing.md`, where the Schism
+   Plus paragraph is already commented out.
 3. Answer Play's "Data collected vs shared" toggles exactly as tabled above; each ads row is
    "shared" because Google processes it as an independent controller in some configurations.
+4. **Advertising ID declaration.** The merged release manifest contains
+   `com.google.android.gms.permission.AD_ID` and the three `ACCESS_ADSERVICES_*` permissions,
+   contributed by the Mobile Ads SDK, so Play will require this declaration even though no ad is
+   served at launch. Two defensible answers, and this is an owner decision:
+   - **Declare it (recommended).** Say the app uses the advertising ID for Advertising. This stays
+     true the moment `ADS_ENABLED` is switched on, which needs no app update.
+   - **Strip it.** Add a `tools:node="remove"` for `AD_ID` in `AndroidManifest.xml` and declare no
+     advertising ID. Then enabling ads later requires a new app release, not just a flag.

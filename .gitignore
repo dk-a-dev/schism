@@ -34,3 +34,10 @@ keystore.properties
 
 # Release build outputs (artifacts are attached to the GitHub release, not committed)
 dist/
+
+# Python bytecode from the store tooling
+__pycache__/
+*.pyc
+
+# Playwright MCP scratch output
+.playwright-mcp/
