@@ -26,7 +26,41 @@ import (
 // same clean URLs the backend does, with no rewrite rules to configure.
 var pages = []string{"/", "/privacy", "/terms", "/support", "/account-deletion"}
 
-var assets = []string{"/assets/site/site.css", "/assets/site/split-coin.svg"}
+// vercelConfig ships with the generated output rather than being kept by hand in the output
+// directory: regenerating into a clean directory must produce a complete, deployable site, and a
+// hand-placed file there is one `rm -rf` away from silently dropping the security headers.
+//
+// The CSP allows no script at all — the site is CSS-only by contract — and images only from this
+// origin, which covers the product screenshots.
+const vercelConfig = `{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+        }
+      ]
+    },
+    {
+      "source": "/assets/site/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}
+`
+
+// assetLister is satisfied by the site handler. Asking it for its own routes keeps the
+// generated site and the served site in step without a second list to maintain here.
+type assetLister interface{ AssetRoutes() []string }
 
 func main() {
 	out := flag.String("out", "dist/site", "directory to write the static site into")
@@ -50,12 +84,20 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	lister, ok := handler.(assetLister)
+	if !ok {
+		log.Fatal("site handler does not expose its asset routes")
+	}
+	assets := lister.AssetRoutes()
 	for _, asset := range assets {
 		if err := write(handler, asset, filepath.Join(*out, filepath.FromSlash(strings.TrimPrefix(asset, "/")))); err != nil {
 			log.Fatal(err)
 		}
 	}
-	fmt.Printf("wrote %d pages and %d assets to %s\n", len(pages), len(assets), *out)
+	if err := os.WriteFile(filepath.Join(*out, "vercel.json"), []byte(vercelConfig), 0o644); err != nil {
+		log.Fatalf("write vercel.json: %v", err)
+	}
+	fmt.Printf("wrote %d pages, %d assets and vercel.json to %s\n", len(pages), len(assets), *out)
 }
 
 func write(handler http.Handler, path, dest string) error {

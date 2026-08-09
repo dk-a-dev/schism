@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"path"
+	"sort"
 	"strings"
 )
 
@@ -59,27 +61,53 @@ func New(config Config) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse site templates: %w", err)
 	}
-	assets := make(map[string]asset, 2)
-	for route, embedded := range map[string]struct {
+	embedded := map[string]struct {
 		path        string
 		contentType string
 	}{
 		"/assets/site/site.css":       {path: "static/site.css", contentType: "text/css; charset=utf-8"},
 		"/assets/site/split-coin.svg": {path: "static/split-coin.svg", contentType: "image/svg+xml"},
-	} {
-		body, readErr := fs.ReadFile(content, embedded.path)
+	}
+	// Product screenshots ship as a directory so adding or replacing a capture is a file
+	// change, not a code change.
+	shots, err := fs.Glob(content, "static/shots/*.png")
+	if err != nil {
+		return nil, fmt.Errorf("list embedded screenshots: %w", err)
+	}
+	for _, shot := range shots {
+		embedded["/assets/site/shots/"+path.Base(shot)] = struct {
+			path        string
+			contentType string
+		}{path: shot, contentType: "image/png"}
+	}
+
+	assets := make(map[string]asset, len(embedded))
+	for route, e := range embedded {
+		body, readErr := fs.ReadFile(content, e.path)
 		if readErr != nil {
-			return nil, fmt.Errorf("read embedded asset %q: %w", embedded.path, readErr)
+			return nil, fmt.Errorf("read embedded asset %q: %w", e.path, readErr)
 		}
 		digest := sha256.Sum256(body)
 		assets[route] = asset{
 			body:        body,
-			contentType: embedded.contentType,
+			contentType: e.contentType,
 			etag:        fmt.Sprintf(`"%x"`, digest[:16]),
 		}
 	}
 
 	return &site{templates: templates, config: config, assets: assets}, nil
+}
+
+// AssetRoutes lists every static asset route this handler serves, sorted. The static-site
+// generator asks the handler rather than keeping its own list, so a newly added screenshot
+// cannot be served by the backend and silently missing from the generated site.
+func (s *site) AssetRoutes() []string {
+	routes := make([]string, 0, len(s.assets))
+	for route := range s.assets {
+		routes = append(routes, route)
+	}
+	sort.Strings(routes)
+	return routes
 }
 
 func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {

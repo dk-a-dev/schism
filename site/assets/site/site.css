@@ -75,6 +75,10 @@ h3 { margin: 0; font-size: 1.6rem; }
 .claim-list strong { color: var(--green-dark); }
 .product-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 8vw, 8rem); }
 .product-gallery > p { align-self: end; padding: 1.5rem; border-inline-start: 4px solid var(--amber); background: rgba(154, 122, 46, 0.08); }
+.shots { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(1.5rem, 4vw, 3rem); margin: clamp(2rem, 5vw, 3.5rem) 0 0; padding: 0; list-style: none; }
+.shots img { display: block; inline-size: 100%; block-size: auto; border: 1px solid var(--rule); border-radius: 20px; background: var(--paper); box-shadow: 0 18px 44px rgba(26, 26, 22, 0.11); }
+.shots p { margin: 1.15rem 0 0; font-size: 0.95rem; line-height: 1.55; }
+.shots strong { display: block; color: var(--green-dark); }
 .final-cta { text-align: center; }
 .final-cta h2 { max-inline-size: 16ch; margin: 0 auto 2.5rem; }
 
@@ -93,6 +97,7 @@ h3 { margin: 0; font-size: 1.6rem; }
   .site-header nav { justify-content: flex-end; }
   .site-header nav > a:not(.cta) { display: none; }
   .hero, .privacy-panel, .live-split, .product-gallery { grid-template-columns: 1fr; }
+  .shots { grid-template-columns: 1fr; max-inline-size: 26rem; margin-inline: auto; }
   .hero { min-block-size: auto; gap: 3rem; }
   .ledger-card { max-inline-size: 30rem; margin-inline: auto; }
   .process-grid { grid-template-columns: 1fr; }
@@ -148,6 +153,8 @@ h3 { margin: 0; font-size: 1.6rem; }
   .process-grid li:hover { background: var(--paper); transform: translateY(-4px); }
   .claim-list div { transition: background-color 220ms ease; }
   .claim-list div:hover { background: rgba(182, 236, 206, 0.35); }
+  .shots img { transition: transform 320ms cubic-bezier(0.22, 0.68, 0.24, 1), box-shadow 320ms ease; }
+  .shots li:hover img { transform: translateY(-0.5rem); box-shadow: 0 26px 56px rgba(26, 26, 22, 0.16); }
   .text-link span { display: inline-block; transition: transform 200ms ease; }
   .text-link:hover span { transform: translateX(0.35rem); }
 
@@ -155,11 +162,20 @@ h3 { margin: 0; font-size: 1.6rem; }
      simply already visible, which is why the default state is never hidden. */
   @supports (animation-timeline: view()) {
     .process > .eyebrow, .process > h2,
-    .privacy-panel > *, .live-copy > *, .product-gallery > *, .final-cta > * {
+    .privacy-panel > *, .live-copy > *, .product-gallery > :not(.shots), .final-cta > * {
       animation: rise 700ms cubic-bezier(0.22, 0.68, 0.24, 1) both;
       animation-timeline: view();
       animation-range: entry 5% cover 26%;
     }
+
+    /* The three screens arrive left to right, the order you'd actually use them in. */
+    .shots li {
+      animation: rise 780ms cubic-bezier(0.22, 0.68, 0.24, 1) both;
+      animation-timeline: view();
+      animation-range: entry 6% cover 30%;
+    }
+    .shots li:nth-child(2) { animation-range: entry 6% cover 35%; }
+    .shots li:nth-child(3) { animation-range: entry 6% cover 40%; }
     .process-grid li {
       animation: rise 760ms cubic-bezier(0.22, 0.68, 0.24, 1) both;
       animation-timeline: view();
