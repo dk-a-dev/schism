@@ -143,8 +143,12 @@ class TemplatesTest {
         val out = applyTemplate(source, rows)
         val items = extractItems(segment(out), detectColumns(out))
         assertEquals(2, items.size)
-        assertEquals("Manchow Soup", items[0].name)
-        assertEquals("Extra Spicy Butter Roti", items[1].name)
+        // The subline is NOT folded by the template (that is the delivery-app path, and this bill is
+        // PAPER) — it reaches [extractItems] as a moneyless fragment. Sitting one line pitch from
+        // both neighbours, it attaches to the item printed above it, which is the same reading the
+        // delivery-app fold would have produced: an option line belongs to the dish it follows.
+        assertEquals("Manchow Soup Extra Spicy", items[0].name)
+        assertEquals("Butter Roti", items[1].name)
     }
 
     // ---- regression coverage for foldOptionSublines swallowing a split totals-label row ----

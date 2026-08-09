@@ -1,0 +1,16 @@
+Chinese Plate
+Food Business Center
+23232, JAVA CITY, SELANGOR
+NY, USA
+TEL : 03-435435435
+Table - 06
+Check #:  622967      Pax(s): 04
+Date   :  11/01/2020  18:34
+Cashier:  David Smith
+4    Chinese Buffet            51.96
+4    Soda                       7.96
+4    Desserts                  15.56
+Subtotal :                     75.48
+Food Tax                        2.90
+Local Tax                       1.28
+Total :                        79.66

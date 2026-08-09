@@ -71,34 +71,59 @@ private fun looksLikeNameText(text: String): Boolean = text.count { it.isLetter(
 private val QTY_SUFFIX = Regex("""(?i)\s+x\s*(\d{1,2})\s*$""")
 
 /**
- * Strips a trailing "xN" quantity suffix off each row's name-shaped cell, extracting [qty]. When
- * qty > 1 a synthetic QTY cell is anchored just left of the row's rightmost money cell (so it
- * lands near the amount column rather than merging into the name column); qty == 1 needs no
- * synthetic cell since that's already [extractItems]' default.
+ * Leading quantity prefix on a printed line: `5 x Hakka Noodles`, `2 × Veg Biryani`, `1 @ 699/ea`.
+ * The separator is required (`x`/`×`/`@`), so a name whose first token is a bare digit ("7 Up",
+ * "500ml Water") is untouched, and something must follow it, so a lone "5 x" isn't consumed.
  */
-private fun stripQtySuffix(rows: List<Row>): List<Row> = rows.map { row ->
+private val QTY_PREFIX = Regex("""^\s*(\d{1,3})\s*[x×@]\s*(?=\S)""", RegexOption.IGNORE_CASE)
+
+/** Rewrites [cell] to hold only [keep], moving its left edge right in proportion to what was cut. */
+private fun Cell.trimmedTo(keep: String): Cell {
+    val cut = text.length - keep.length
+    val perChar = if (text.isEmpty()) 0 else (xRight - xLeft) / text.length
+    return copy(text = keep, xLeft = xLeft + cut * perChar)
+}
+
+/**
+ * Lifts a quantity written INLINE in a row's own text into [Row.qty], leaving the cell holding only
+ * what remains: `5 x Hakka Noodles` → qty 5 + "Hakka Noodles", `1 @ 699/ea` → qty 1 + the rate
+ * "699/ea", `Paneer Wrap x1` → qty 1 + "Paneer Wrap".
+ *
+ * This is deliberately NOT a synthetic QTY cell placed somewhere plausible on the page. An inline
+ * quantity shares the item name's x-span by construction, so it can never be separated into its own
+ * column: on a bill whose names are printed full-width, every xCenter from the qty through the
+ * name to the rate falls inside one gap-clustered blob, and column detection finds no QTY at all.
+ * Reading it off the text and carrying it on the row sidesteps the geometry entirely — and it
+ * applies to EVERY bill family, not just the delivery apps the suffix form was first seen on.
+ *
+ * The prefix form is only read off the row's leftmost cell (a quantity prefix starts the line by
+ * definition); the suffix form off the first name-shaped cell, as before.
+ */
+private fun liftInlineQty(rows: List<Row>): List<Row> = rows.map { row ->
+    val leftmost = row.cells.minByOrNull { it.xLeft }
+    val prefix = leftmost?.let { QTY_PREFIX.find(it.text) }
+    if (prefix != null && leftmost != null) {
+        val qty = prefix.groupValues[1].toIntOrNull()
+        if (qty != null) {
+            val kept = leftmost.text.removeRange(prefix.range)
+            return@map row.copy(
+                cells = row.cells.map { if (it === leftmost) it.trimmedTo(kept) else it },
+                qty = qty,
+            )
+        }
+    }
+
     val idx = row.cells.indices.firstOrNull { i ->
         val t = row.cells[i].text
         looksLikeNameText(t) && QTY_SUFFIX.containsMatchIn(t)
     } ?: return@map row
-
     val cell = row.cells[idx]
     val match = QTY_SUFFIX.find(cell.text) ?: return@map row
     val qty = match.groupValues[1].toIntOrNull() ?: return@map row
-    val cleanedText = cell.text.removeRange(match.range).trim()
-
-    val newCells = row.cells.toMutableList()
-    newCells[idx] = cell.copy(text = cleanedText)
-
-    if (qty > 1) {
-        val moneyCell = row.cells.filter { isMoneyToken(it.text) }.maxByOrNull { it.xLeft }
-        if (moneyCell != null && moneyCell.xLeft - cell.xRight > 10) {
-            val qRight = moneyCell.xLeft - 2
-            val qLeft = qRight - 8
-            newCells.add(Cell(qty.toString(), qLeft, qRight, cell.yCenter))
-        }
-    }
-    row.copy(cells = newCells)
+    row.copy(
+        cells = row.cells.toMutableList().also { it[idx] = cell.copy(text = cell.text.removeRange(match.range).trim()) },
+        qty = qty,
+    )
 }
 
 /**
@@ -241,10 +266,11 @@ private fun renameItemTotalCollision(rows: List<Row>): List<Row> = rows.map { ro
  * to any bill of that shape; none branches on a specific merchant name, amount, or fixture string.
  */
 fun applyTemplate(source: Source, rows: List<Row>): List<Row> {
-    if (source != Source.SWIGGY && source != Source.ZOMATO && source != Source.BLINKIT) return rows
+    // An inline quantity ("5 x Item", "Item x2", "1 @ 699/ea") is a universal printing convention,
+    // not a delivery-app quirk, so this one runs for every bill family.
+    var out = liftInlineQty(rows)
+    if (source != Source.SWIGGY && source != Source.ZOMATO && source != Source.BLINKIT) return out
 
-    var out = rows
-    out = stripQtySuffix(out)
     out = foldOptionSublines(out)
     if (source == Source.BLINKIT) out = collapseStrikethroughPrice(out)
     out = synthesizeLeadingHeader(out)

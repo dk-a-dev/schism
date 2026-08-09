@@ -4,7 +4,14 @@ data class Cell(val text: String, val xLeft: Int, val xRight: Int, val yCenter: 
     val xCenter: Int get() = (xLeft + xRight) / 2
 }
 
-data class Row(val cells: List<Cell>) {
+/**
+ * A visual row of the bill. [qty] is the quantity a normalization read out of the row's own TEXT
+ * ("5 x Hakka Noodles", "1 @ 699/ea", "Paneer Wrap x1") rather than off a page column — the two
+ * live side by side because a quantity written inline shares the item name's x-span, so no amount of
+ * column detection can separate it, while a quantity printed in its own column has no text to read.
+ * [extractItems] prefers this when set.
+ */
+data class Row(val cells: List<Cell>, val qty: Int? = null) {
     /** Left-to-right joined text of this visual row. */
     val text: String get() = cells.sortedBy { it.xLeft }.joinToString(" ") { it.text.trim() }.trim()
 }

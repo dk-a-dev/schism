@@ -20,11 +20,35 @@ data class ReceiptDraft(
     val parsedByAi: Boolean = false,
     /** Packaging/platform/service/delivery charges (0 = none detected). */
     val feesMinor: Long = 0,
-    /** Discount/offer/savings applied to the bill (0 = none detected). */
+    /** Discount/offer/savings applied to the bill, as a POSITIVE magnitude that SUBTRACTS (0 = none detected). */
     val discountMinor: Long = 0,
     /** True when the engine's arithmetic constraint solver confirmed this draft's totals are internally consistent. */
     val verified: Boolean = false,
+    /**
+     * The bill's charge rows individually, as printed and in bill order — so a bill carrying CGST,
+     * SGST, VAT and a service charge can be reviewed and corrected line by line instead of as one
+     * opaque "Tax" pot. Empty when no charge row was found (or when the draft came from the LLM).
+     *
+     * These are the SAME money as [taxMinor]: `chargeLines.sumOf { it.amountMinor } == taxMinor`.
+     * The aggregate fields above stay exactly as they were, so this is purely additive.
+     */
+    val chargeLines: List<ChargeLine> = emptyList(),
 )
+
+/** Which side of the bill a [ChargeLine] came from. Presentation only — the sign already carries the arithmetic. */
+enum class ChargeKind { TAX, FEE, DISCOUNT, ROUNDOFF }
+
+/**
+ * One charge row exactly as the bill printed it: its [label] ("CGST 2.5%", "Service Charge 10%",
+ * "Round off(-)"), its [kind], and [amountMinor] in minor units.
+ *
+ * **[amountMinor] is SIGNED, always in the direction it moves the bill**: a tax or fee is positive,
+ * a discount is NEGATIVE, and a round-off is whatever it was printed as (either sign). So the total
+ * is always `subtotal + chargeLines.sumOf { it.amountMinor }` — no per-kind sign flipping. Note this
+ * differs from [ReceiptDraft.discountMinor], which is a positive magnitude that subtracts; the
+ * signed form here exists precisely so that trap isn't repeated per line.
+ */
+data class ChargeLine(val label: String, val amountMinor: Long, val kind: ChargeKind)
 
 /**
  * A single purchased line item on a receipt: name, quantity, its per-unit price, and its line

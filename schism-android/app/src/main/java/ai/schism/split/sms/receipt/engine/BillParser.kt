@@ -75,8 +75,13 @@ private fun invariantHolds(rateMinor: Long, qty: Int, amountMinor: Long): Boolea
  *
  * Returns null when no amount can be derived at all (no AMOUNT cell and no RATE to multiply).
  */
-private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: String?): Pair<Int, Long>? {
-    val qtyFromCell = qtyRaw?.let { parseQtyCell(it) }
+private fun resolveQtyAndAmount(
+    qtyRaw: String?,
+    rateRaw: String?,
+    amountRaw: String?,
+    inlineQty: Int? = null,
+): Pair<Int, Long>? {
+    val qtyFromCell = inlineQty ?: qtyRaw?.let { parseQtyCell(it) }
     val rateMinor = rateRaw?.let { parseMinor(it) }
     val amountMinor = amountRaw?.let { parseMinor(it) }
 
@@ -137,13 +142,18 @@ private fun resolveQtyAndAmount(qtyRaw: String?, rateRaw: String?, amountRaw: St
 private val PURE_SERIAL = Regex("""^\d{1,3}[.)]?$""")
 
 /**
- * The item name for a row is every cell EXCEPT the qty cell and the money cells sitting in the
- * rate/amount band — joined left-to-right — NOT a single cell picked from the ITEM column. Wide item
- * names don't share a center with the narrow "Item"/"Description" header, so x-center clustering can
- * split the name region into several columns; keeping "everything that isn't a qty/rate/amount cell"
- * is robust to that AND to a qty-first layout (`Qty | Item | Rate | Amount`), where a purely
- * positional "left of the numbers" rule would wrongly drop the whole name (it sits right of the
- * leftmost, qty, column).
+ * The item name for a row is every cell EXCEPT the qty cell, the money cells sitting in the
+ * rate/amount band, and any per-unit rate — joined left-to-right — NOT a single cell picked from
+ * the ITEM column. Wide item names don't share a
+ * center with the narrow "Item"/"Description" header, so x-center clustering can split the name
+ * region into several columns; keeping "everything that isn't a qty/rate/amount cell" is robust to
+ * that AND to a qty-first layout (`Qty | Item | Rate | Amount`), where a purely positional "left of
+ * the numbers" rule would wrongly drop the whole name (it sits right of the leftmost, qty, column).
+ *
+ * A per-unit rate ("699/ea") is dropped wherever it sits, even far left of the money band: the
+ * two-line thermal block prints its rate hard against the left margin, under the name, and the
+ * suffix says outright that the number is a price. Money cells OUTSIDE the band are otherwise kept,
+ * because a bare number can legitimately be all that OCR recovered of a name.
  *
  * A leading serial-number cell ("1", "12.") is dropped — but ONLY when it is its OWN standalone cell
  * with real name cells following it, never by regex-stripping a leading digit off a joined string
@@ -151,7 +161,10 @@ private val PURE_SERIAL = Regex("""^\d{1,3}[.)]?$""")
  */
 private fun nameOfRow(row: Row, qtyCell: Cell?, moneyLeftBound: Int): String {
     val kept = row.cells
-        .filter { cell -> cell !== qtyCell && !(cell.xCenter >= moneyLeftBound && isMoneyToken(cell.text)) }
+        .filter { cell ->
+            cell !== qtyCell && !isPerUnitRate(cell.text) &&
+                !(cell.xCenter >= moneyLeftBound && isMoneyToken(cell.text))
+        }
         .sortedBy { it.xLeft }
     val nameCells = if (kept.size > 1 && PURE_SERIAL.matches(kept.first().text.trim())) kept.drop(1) else kept
     return nameCells.joinToString(" ") { it.text.trim() }.trim()
@@ -174,7 +187,9 @@ private fun resolveRow(
     amountCell: Cell?,
     moneyLeftBound: Int,
 ): Triple<Int, Long, Long>? {
-    val qtyFromCell = qtyCell?.text?.let { parseQtyCell(it) }
+    // A quantity read off the row's own text ("5 x Hakka Noodles") outranks a column reading: it is
+    // printed against the item itself, whereas a column role is inferred from page-wide geometry.
+    val qtyFromCell = row.qty ?: qtyCell?.text?.let { parseQtyCell(it) }
     val moneyCells = row.cells
         .filter { it.xCenter >= moneyLeftBound && isMoneyToken(it.text) }
         .sortedBy { it.xCenter }
@@ -189,7 +204,8 @@ private fun resolveRow(
         }
     }
 
-    val (qty, amountMinor) = resolveQtyAndAmount(qtyCell?.text, rateCell?.text, amountCell?.text) ?: return null
+    val (qty, amountMinor) =
+        resolveQtyAndAmount(qtyCell?.text, rateCell?.text, amountCell?.text, row.qty) ?: return null
     val unit = if (qty > 0) amountMinor / qty else amountMinor
     return Triple(qty, amountMinor, unit)
 }
@@ -234,7 +250,10 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
         val hasNumericCell = qtyCell != null || rateCell != null || amountCell != null
 
         if (!hasNumericCell) {
-            if (looksLikeName(nameText)) fragments.add(row.yCenter() to nameText)
+            // A moneyless row between items is a wrapped item name — unless it reads as bill
+            // metadata, which is what a thermal bill's per-item tax annotation ("SAC 996 CGST@ 9.00
+            // SGST@ 9.00") is. Folding one of those into a dish name is worse than dropping it.
+            if (looksLikeName(nameText) && !isMetadataRow(nameText)) fragments.add(row.yCenter() to nameText)
             continue
         }
         val (qty, amountMinor, unitPriceMinor) = resolveRow(row, qtyCell, rateCell, amountCell, moneyLeftBound)
@@ -246,12 +265,21 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
 
     // Pass 2 (Fix #4): attach each wrapped-name fragment to its vertically NEAREST anchor — so a
     // name that wrapped ABOVE its price (prefix) and one that wrapped BELOW it (the thermal layout,
-    // suffix) are both grouped correctly. A tie (a fragment exactly between two anchors) resolves to
-    // the FOLLOWING anchor, treating the fragment as the lead-in of the next item's name. Fragments
-    // are visited top-to-bottom so multi-line names keep their reading order.
+    // suffix) are both grouped correctly. Fragments are visited top-to-bottom so multi-line names
+    // keep their reading order.
+    //
+    // On a uniform line pitch a fragment printed between two items is EXACTLY one pitch from each,
+    // so distance alone can't decide, and the tie is broken on which neighbour still needs a name:
+    // an anchor whose own row carried no name text (the two-line block format, where the name line
+    // is the fragment and the priced line is bare) wins over one that already has an inline name.
+    // With that settled, a fragment between two already-named anchors continues the item printed
+    // ABOVE it (the wrapped-name case), while a fragment between two nameless anchors leads in the
+    // item BELOW it (the name-then-price case) — the only two readings that are ever right.
     for ((fy, text) in fragments) {
         val anchor = anchors.minWithOrNull(
-            compareBy<Anchor> { abs(it.y - fy) }.thenByDescending { it.y },
+            compareBy<Anchor> { abs(it.y - fy) }
+                .thenBy { it.inlineName.isNotBlank() }
+                .thenByDescending { if (it.inlineName.isBlank()) it.y else -it.y },
         ) ?: continue
         if (fy <= anchor.y) anchor.prefix.add(text) else anchor.suffix.add(text)
     }
@@ -270,7 +298,7 @@ fun extractItems(regions: Regions, columns: List<Column>): List<ReceiptLineItem>
 private val METADATA_KEYWORDS = Regex(
     """(?i)\b(gstin|fssai|invoice|order\s*id|table|covers?|date|time|phone|mobile|tel|contact|""" +
         """bill\s*details|item\s*total|sub\s*total|grand\s*total|amount|paid|qty|thank|welcome|""" +
-        """address|www|http|token|kot)\b""",
+        """address|www|http|token|kot|sac|hsn|cgst|sgst|igst|vat|cess)\b""",
 )
 
 /** True when [text] is bill metadata (a date, or a generic metadata-keyword line) rather than a plausible merchant name. */
@@ -321,7 +349,10 @@ fun parseBill(rows: List<Row>): ReceiptDraft? {
     return ReceiptDraft(
         merchant = merchant,
         totalMinor = v.grandTotal,
-        currency = detectCurrency(norm.map { it.text }) ?: "₹",
+        // No symbol and no ISO code printed anywhere means the currency is UNKNOWN, and the honest
+        // report is nothing at all: defaulting to the rupee stamped ₹ on plainly-foreign receipts.
+        // Display formats a blank symbol as a bare amount.
+        currency = detectCurrency(norm.map { it.text }) ?: "",
         date = date,
         lineItems = v.items,
         taxMinor = v.tax + v.fees - v.discount + v.roundoff,
@@ -330,5 +361,6 @@ fun parseBill(rows: List<Row>): ReceiptDraft? {
         discountMinor = v.discount,
         verified = v.verified,
         parsedByAi = false,
+        chargeLines = totals.lines,
     )
 }

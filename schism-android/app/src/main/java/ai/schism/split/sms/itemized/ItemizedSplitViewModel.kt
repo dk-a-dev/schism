@@ -7,6 +7,7 @@ import ai.schism.split.core.billing.PlusRequiredException
 import ai.schism.split.core.billing.isPlus
 import ai.schism.split.core.net.ClaimItemDto
 import ai.schism.split.core.net.CreateClaimSessionRequest
+import ai.schism.split.core.net.TaxLineDto
 import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.expense.data.ExpenseRepository
 import ai.schism.split.groups.data.Group
@@ -14,10 +15,12 @@ import ai.schism.split.groups.data.GroupRepository
 import ai.schism.split.sms.itemized.claim.ClaimSessionRepository
 import ai.schism.split.sms.receipt.ReceiptDraft
 import ai.schism.split.sms.receipt.ReceiptLineItem
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +31,35 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
+/**
+ * One editable tax/charge line on the bill (GST/CGST/service charge/round-off/discount…): a label
+ * and a SIGNED amount in minor units — negative reduces the bill (a discount, a negative round-off).
+ * The engine only reports collapsed *aggregates* (see [seedCharges]), so these are seeded from those
+ * and are the user-facing source of truth from then on.
+ */
+data class ChargeLine(val label: String, val amountMinor: Long)
+
+/**
+ * Splits a scanned draft's collapsed charge aggregates back into editable lines. [ReceiptDraft.taxMinor]
+ * is the NET pot the engine computed (`tax + fees − discount + roundoff`) with fees/discount also
+ * reported on their own, so the tax line is what's left once those are peeled back off (it therefore
+ * also carries any round-off — the draft doesn't expose that separately). Zero lines are dropped.
+ */
+internal fun seedCharges(
+    draft: ReceiptDraft?,
+    taxLabel: String,
+    feesLabel: String,
+    discountLabel: String,
+): List<ChargeLine> {
+    draft ?: return emptyList()
+    val tax = draft.taxMinor - draft.feesMinor + draft.discountMinor
+    return listOfNotNull(
+        ChargeLine(taxLabel, tax).takeIf { tax != 0L },
+        ChargeLine(feesLabel, draft.feesMinor).takeIf { draft.feesMinor != 0L },
+        ChargeLine(discountLabel, -draft.discountMinor).takeIf { draft.discountMinor != 0L },
+    )
+}
+
 data class ItemizedSplitUiState(
     val loading: Boolean = true,
     /** True when the on-device AI model is downloaded + enabled. */
@@ -35,6 +67,8 @@ data class ItemizedSplitUiState(
     val draft: ReceiptDraft? = null,
     val title: String = "",
     val items: List<ReceiptLineItem> = emptyList(),
+    /** Editable tax/charge lines, seeded from the scan (see [seedCharges]); empty for a manual bill. */
+    val charges: List<ChargeLine> = emptyList(),
     val groups: List<Group> = emptyList(),
     val selectedGroupId: String? = null,
     val paidById: String = "",
@@ -54,7 +88,27 @@ data class ItemizedSplitUiState(
     val plusRequired: LiveSplitAllowance? = null,
 ) {
     val selectedGroup: Group? get() = groups.firstOrNull { it.id == selectedGroupId }
-    val taxMinor: Long get() = draft?.taxMinor ?: 0L
+
+    /** Net charge pot to distribute across diners: the sum of the (editable) charge lines. */
+    val taxMinor: Long get() = charges.sumOf { it.amountMinor }
+
+    /** The bill's items before any charge. */
+    val subtotalMinor: Long get() = items.sumOf { it.amountMinor }
+
+    /** What the bill now adds up to, live: items + every charge line. */
+    val totalMinor: Long get() = subtotalMinor + taxMinor
+
+    /** The grand total printed on the scanned bill, or 0 when there is none (manual/unreadable bill). */
+    val printedTotalMinor: Long get() = draft?.totalMinor ?: 0L
+
+    /**
+     * How far [totalMinor] has drifted from the printed total (positive = we're over), or null when
+     * they agree or the bill printed no total. Neither number is ever silently overridden — the
+     * screen states both.
+     */
+    val totalMismatchMinor: Long?
+        get() = (totalMinor - printedTotalMinor).takeIf { printedTotalMinor > 0L && it != 0L }
+
     /** True when this draft actually came from the on-device LLM (vs the heuristic fallback). */
     val parsedByAi: Boolean get() = draft?.parsedByAi == true
 
@@ -76,7 +130,8 @@ data class ItemizedSplitUiState(
                 }
             }
             val subtotal = owed.values.sum()
-            if (taxMinor > 0 && subtotal > 0) {
+            // != 0, not > 0: the charge pot goes negative once a discount line outweighs the taxes.
+            if (taxMinor != 0L && subtotal > 0) {
                 var remaining = taxMinor
                 val entries = owed.toMap().entries.toList()
                 entries.forEachIndexed { i, (pid, sub) ->
@@ -89,6 +144,28 @@ data class ItemizedSplitUiState(
         }
 }
 
+/** Add a charge line the scan missed. Blank labels are refused (an unlabelled money row is noise). */
+internal fun ItemizedSplitUiState.addCharge(label: String, amountMinor: Long): ItemizedSplitUiState =
+    if (label.isBlank()) this
+    else copy(charges = charges + ChargeLine(label.trim().take(40), amountMinor), error = null)
+
+/** Correct a misread charge line's label and/or amount. Out-of-range indices and blank labels no-op. */
+internal fun ItemizedSplitUiState.updateCharge(
+    index: Int,
+    label: String,
+    amountMinor: Long,
+): ItemizedSplitUiState {
+    if (index !in charges.indices || label.isBlank()) return this
+    val next = charges.toMutableList()
+    next[index] = ChargeLine(label.trim().take(40), amountMinor)
+    return copy(charges = next, error = null)
+}
+
+/** Drop a charge line the parser invented. Out-of-range indices no-op. */
+internal fun ItemizedSplitUiState.removeCharge(index: Int): ItemizedSplitUiState =
+    if (index !in charges.indices) this
+    else copy(charges = charges.filterIndexed { i, _ -> i != index }, error = null)
+
 @HiltViewModel
 class ItemizedSplitViewModel @Inject constructor(
     private val pending: PendingReceipt,
@@ -98,6 +175,7 @@ class ItemizedSplitViewModel @Inject constructor(
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     private val claimSessionRepo: ClaimSessionRepository,
     private val entitlements: EntitlementRepository,
+    @ApplicationContext appContext: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -109,8 +187,19 @@ class ItemizedSplitViewModel @Inject constructor(
 
     init {
         val draft = pending.draft
+        val charges = seedCharges(
+            draft = draft,
+            taxLabel = appContext.getString(ai.schism.split.R.string.itemized_charge_tax),
+            feesLabel = appContext.getString(ai.schism.split.R.string.itemized_charge_fees),
+            discountLabel = appContext.getString(ai.schism.split.R.string.itemized_charge_discount),
+        )
         _state.update {
-            it.copy(draft = draft, items = draft?.lineItems.orEmpty(), title = draft?.merchant ?: "Receipt")
+            it.copy(
+                draft = draft,
+                items = draft?.lineItems.orEmpty(),
+                charges = charges,
+                title = draft?.merchant ?: "Receipt",
+            )
         }
 
         viewModelScope.launch {
@@ -229,6 +318,16 @@ class ItemizedSplitViewModel @Inject constructor(
         }
     }
 
+    /** Add a tax/charge line the scan missed (amount signed: negative reduces the bill). */
+    fun addCharge(label: String, amountMinor: Long) = _state.update { it.addCharge(label, amountMinor) }
+
+    /** Correct a misread tax/charge line — both its label and its amount. */
+    fun updateCharge(index: Int, label: String, amountMinor: Long) =
+        _state.update { it.updateCharge(index, label, amountMinor) }
+
+    /** Drop a tax/charge line the parser invented. */
+    fun removeCharge(index: Int) = _state.update { it.removeCharge(index) }
+
     /** Remove a mis-parsed item; its assignments are dropped and later indices reshuffled. */
     fun removeItem(index: Int) {
         _state.update { s ->
@@ -283,7 +382,11 @@ class ItemizedSplitViewModel @Inject constructor(
                 title = s.title.trim().ifBlank { s.draft?.merchant ?: "Receipt" },
                 currency = s.draft?.currency ?: "₹",
                 items = items,
+                // taxMinor carries the WHOLE (edited) charge pot, so fees/discount/roundoff stay 0
+                // — the server's pot is tax + fees − discount + roundoff and must not double-count.
+                // `taxes` is the labelled breakdown claimants see on the claim screen.
                 taxMinor = s.taxMinor,
+                taxes = s.charges.map { TaxLineDto(it.label, it.amountMinor) },
             )
             claimSessionRepo.createSession(group.id, request).fold(
                 onSuccess = { session ->

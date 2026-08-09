@@ -89,7 +89,9 @@ fun buildItemizedExpenseRequest(
 
     // Distribute tax/charges in proportion to what each person ordered (last one gets the remainder).
     val assignedSubtotal = owed.values.sum()
-    if (taxMinor > 0 && assignedSubtotal > 0) {
+    // != 0, not > 0: with editable charge lines the net pot goes negative once a discount outweighs
+    // the taxes, and it still has to reach everyone (the expense amount below already subtracts it).
+    if (taxMinor != 0L && assignedSubtotal > 0) {
         val subtotalShares = owed.toMap()
         var remaining = taxMinor
         val entries = subtotalShares.entries.toList()

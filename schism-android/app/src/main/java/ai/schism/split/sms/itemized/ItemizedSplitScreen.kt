@@ -5,6 +5,7 @@
 
 package ai.schism.split.sms.itemized
 
+import ai.schism.split.R
 import ai.schism.split.core.money.formatMinor
 import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -68,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlin.math.abs
 
 @Composable
 fun ItemizedSplitScreen(
@@ -137,23 +140,37 @@ fun ItemizedSplitScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
 
-                            state.draft?.let { d ->
-                                val verified = d.verified
+                            // Live arithmetic, not the scan's one-off `verified` flag: it re-reads
+                            // after every item/charge edit, and never overrides either number.
+                            if (state.printedTotalMinor > 0L) {
+                                val currency = state.draft?.currency ?: "₹"
+                                val mismatch = state.totalMismatchMinor
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
                                     Icon(
-                                        if (verified) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+                                        if (mismatch == null) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
                                         contentDescription = null,
-                                        tint = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        tint = if (mismatch == null) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Text(
-                                        if (verified) "Totals verified — the items add up to the bill"
-                                        else "Double-check the items — the totals didn't add up",
+                                        if (mismatch == null) {
+                                            stringResource(R.string.itemized_totals_match)
+                                        } else {
+                                            stringResource(
+                                                if (mismatch > 0) R.string.itemized_totals_mismatch_more
+                                                else R.string.itemized_totals_mismatch_less,
+                                                formatMinor(state.totalMinor, currency),
+                                                formatMinor(state.printedTotalMinor, currency),
+                                                formatMinor(abs(mismatch), currency),
+                                            )
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (verified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        color = if (mismatch == null) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.error,
                                     )
                                 }
                             }
@@ -243,11 +260,17 @@ fun ItemizedSplitScreen(
                                     )
                                 }
                             }
-                            PerPersonTotals(
+                            BillSummaryCard(
                                 group = group,
                                 perPerson = state.perPersonMinor,
-                                taxMinor = state.taxMinor,
+                                charges = state.charges,
+                                subtotalMinor = state.subtotalMinor,
+                                totalMinor = state.totalMinor,
+                                printedTotalMinor = state.printedTotalMinor,
                                 currency = state.draft?.currency ?: "₹",
+                                onEditCharge = viewModel::updateCharge,
+                                onAddCharge = viewModel::addCharge,
+                                onRemoveCharge = viewModel::removeCharge,
                             )
                         }
                     }
@@ -575,10 +598,28 @@ private fun ItemDialog(
     )
 }
 
+/**
+ * Per-person shares plus the bill's own arithmetic, stated in full: items subtotal, every
+ * (editable) tax/charge line, the resulting total, and — when they disagree — the total printed on
+ * the bill alongside it. Editing a charge line flows straight back into [perPerson], since the same
+ * charge pot is what gets distributed.
+ */
 @Composable
-private fun PerPersonTotals(group: Group, perPerson: Map<String, Long>, taxMinor: Long, currency: String) {
-    val grand = perPerson.values.sum()
-    val subtotal = grand - taxMinor
+private fun BillSummaryCard(
+    group: Group,
+    perPerson: Map<String, Long>,
+    charges: List<ChargeLine>,
+    subtotalMinor: Long,
+    totalMinor: Long,
+    printedTotalMinor: Long,
+    currency: String,
+    onEditCharge: (Int, String, Long) -> Unit,
+    onAddCharge: (String, Long) -> Unit,
+    onRemoveCharge: (Int) -> Unit,
+) {
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+    var adding by remember { mutableStateOf(false) }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = MaterialTheme.shapes.large,
@@ -596,11 +637,176 @@ private fun PerPersonTotals(group: Group, perPerson: Map<String, Long>, taxMinor
                 }
             }
             HorizontalDivider()
-            SummaryRow("Items", formatMinor(subtotal, currency), false)
-            if (taxMinor > 0) SummaryRow("Tax & charges", formatMinor(taxMinor, currency), false)
-            SummaryRow("Total", formatMinor(grand, currency), true)
+            SummaryRow(stringResource(R.string.itemized_summary_items), formatMinor(subtotalMinor, currency), false)
+            charges.forEachIndexed { index, line ->
+                ChargeRow(
+                    line = line,
+                    currency = currency,
+                    onEdit = { editingIndex = index },
+                    onRemove = { onRemoveCharge(index) },
+                )
+            }
+            TextButton(
+                onClick = { adding = true },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  " + stringResource(R.string.itemized_add_charge))
+            }
+            HorizontalDivider()
+            SummaryRow(stringResource(R.string.itemized_summary_total), formatMinor(totalMinor, currency), true)
+            // Both numbers stay on screen when they disagree — neither is quietly overwritten.
+            if (printedTotalMinor > 0L && printedTotalMinor != totalMinor) {
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        stringResource(R.string.itemized_summary_printed_total),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        formatMinor(printedTotalMinor, currency),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
         }
     }
+
+    editingIndex?.let { index ->
+        charges.getOrNull(index)?.let { line ->
+            ChargeDialog(
+                title = stringResource(R.string.itemized_edit_charge_title),
+                initial = line,
+                currency = currency,
+                onDismiss = { editingIndex = null },
+                onSave = { label, amountMinor ->
+                    onEditCharge(index, label, amountMinor)
+                    editingIndex = null
+                },
+            )
+        }
+    }
+
+    if (adding) {
+        ChargeDialog(
+            title = stringResource(R.string.itemized_add_charge),
+            initial = ChargeLine("", 0L),
+            currency = currency,
+            onDismiss = { adding = false },
+            onSave = { label, amountMinor ->
+                onAddCharge(label, amountMinor)
+                adding = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ChargeRow(line: ChargeLine, currency: String, onEdit: () -> Unit, onRemove: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            line.label,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(formatMinor(line.amountMinor, currency), fontWeight = FontWeight.Medium)
+        IconButton(onClick = onEdit) {
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.itemized_edit_charge) + ": " + line.label,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onRemove) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = stringResource(R.string.itemized_remove_charge) + ": " + line.label,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Add/edit one tax or charge line: its label and its amount. The amount is typed as a positive
+ * magnitude and signed by the adds/reduces toggle — the numeric-decimal IME has no minus key, so a
+ * discount or a negative round-off would otherwise be untypeable. Money never leaves minor units:
+ * [parseMinor] is the same string→Long parser the item dialog uses, and invalid input simply
+ * disables Save.
+ */
+@Composable
+private fun ChargeDialog(
+    title: String,
+    initial: ChargeLine,
+    currency: String,
+    onDismiss: () -> Unit,
+    onSave: (String, Long) -> Unit,
+) {
+    var label by remember { mutableStateOf(initial.label) }
+    var negative by remember { mutableStateOf(initial.amountMinor < 0L) }
+    var amount by remember {
+        mutableStateOf(
+            if (initial.amountMinor != 0L) {
+                String.format(java.util.Locale.ROOT, "%.2f", abs(initial.amountMinor) / 100.0)
+            } else {
+                ""
+            },
+        )
+    }
+    val magnitude = parseMinor(amount)?.let { abs(it) }
+    val signed = magnitude?.let { if (negative) -it else it }
+    val valid = label.isNotBlank() && signed != null
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text(stringResource(R.string.itemized_charge_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text(stringResource(R.string.itemized_charge_amount)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(
+                    onClick = { negative = !negative },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(
+                        if (negative) stringResource(R.string.itemized_charge_reduces)
+                        else stringResource(R.string.itemized_charge_adds),
+                    )
+                }
+                if (signed != null) {
+                    Text(
+                        formatMinor(signed, currency),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (valid) onSave(label, signed!!) },
+                enabled = valid,
+            ) { Text(stringResource(R.string.itemized_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.itemized_cancel)) }
+        },
+    )
 }
 
 @Composable

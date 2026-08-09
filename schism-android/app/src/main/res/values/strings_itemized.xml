@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Default labels for the tax/charge lines seeded from a scanned bill. -->
+    <string name="itemized_charge_tax">Tax</string>
+    <string name="itemized_charge_fees">Service &amp; other charges</string>
+    <string name="itemized_charge_discount">Discount</string>
+
+    <!-- Bill summary card -->
+    <string name="itemized_summary_items">Items</string>
+    <string name="itemized_summary_total">Total</string>
+    <string name="itemized_summary_printed_total">Printed on the bill</string>
+    <string name="itemized_totals_match">Adds up to the printed total</string>
+    <string name="itemized_totals_mismatch_more">This adds up to %1$s — the bill prints %2$s (%3$s more)</string>
+    <string name="itemized_totals_mismatch_less">This adds up to %1$s — the bill prints %2$s (%3$s less)</string>
+
+    <!-- Editing a tax/charge line -->
+    <string name="itemized_add_charge">Add tax or charge</string>
+    <string name="itemized_edit_charge_title">Edit tax or charge</string>
+    <string name="itemized_edit_charge">Edit charge</string>
+    <string name="itemized_remove_charge">Remove charge</string>
+    <string name="itemized_charge_label">Label (e.g. CGST)</string>
+    <string name="itemized_charge_amount">Amount</string>
+    <string name="itemized_charge_adds">Adds to the bill</string>
+    <string name="itemized_charge_reduces">Reduces the bill</string>
+    <string name="itemized_save">Save</string>
+    <string name="itemized_cancel">Cancel</string>
+</resources>

@@ -31,6 +31,15 @@ private fun cleanNumeric(raw: String): String {
 private fun hasLetter(raw: String): Boolean = raw.any { it.isLetter() }
 
 /**
+ * A per-unit suffix on a printed rate: `699/ea`, `40/pc`, `55/kg` — the Indian POS spelling of "₹699
+ * each". Like the `149/-` notation [cleanNumeric] already understands, the letters are notation, not
+ * a label, so they're stripped before [hasLetter] rejects the token. The whole token must be
+ * `<number>/<short word>`, so a genuine label that merely contains a slash ("RED BULL/PERRIER") is
+ * still rejected by [hasLetter].
+ */
+private val PER_UNIT_SUFFIX = Regex("""\s*/\s*[A-Za-z]{1,4}\.?$""")
+
+/**
  * Parses a money-shaped token (grouped digits with an optional 2-decimal fraction, e.g. "2,532",
  * "1,299.00", "₹40.00") into minor units (paise/cents), or `null` when [raw] doesn't look like an
  * amount at all, or looks more like a non-money number than a bill amount.
@@ -44,10 +53,17 @@ private fun hasLetter(raw: String): Boolean = raw.any { it.isLetter() }
  * A token carrying a percent sign (e.g. "2.5%", "18%") is a tax/discount RATE, never a money
  * amount, so it's rejected outright — otherwise `isMoneyToken("2.5%")` would be true and a
  * percentage column could be misread as an amount when detecting money columns / regions.
+ *
+ * A token carrying a colon is likewise never money: it's a clock time ("20:44", "18:34") or a
+ * label/value pair. [cleanNumeric] deletes every character it doesn't recognise, so without this
+ * guard "20:44" silently became ₹20.44 — enough to make a bill's preamble time row look like the
+ * first priced item line and swallow the whole header into the item list.
  */
 fun parseMinor(raw: String): Long? {
-    if (raw.contains('%') || hasLetter(raw)) return null
-    val cleaned = cleanNumeric(raw)
+    if (raw.contains('%') || raw.contains(':')) return null
+    val stripped = PER_UNIT_SUFFIX.replace(raw.trim(), "")
+    if (hasLetter(stripped)) return null
+    val cleaned = cleanNumeric(stripped)
     if (cleaned.isEmpty() || !cleaned.matches(PLAIN_NUMBER)) return null
 
     val dotIndex = cleaned.indexOf('.')
@@ -61,6 +77,14 @@ fun parseMinor(raw: String): Long? {
 
 /** True when [raw] parses as a money amount (see [parseMinor]). */
 fun isMoneyToken(raw: String): Boolean = parseMinor(raw) != null
+
+/**
+ * True when [raw] is a rate written with its per-unit suffix — "699/ea", "40/pc", "55/kg". The
+ * suffix says outright that the number is a price PER unit, which is why such a token is never part
+ * of an item name however far left of the amount column it happens to be printed.
+ */
+fun isPerUnitRate(raw: String): Boolean =
+    PER_UNIT_SUFFIX.containsMatchIn(raw.trim()) && isMoneyToken(raw)
 
 /** True when [raw] is a bare 1–3 digit integer in 1..999 — a plausible quantity, not an amount. */
 fun isSmallInt(raw: String): Boolean {

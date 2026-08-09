@@ -1,7 +1,14 @@
 package ai.schism.split.sms.receipt.engine
 
-/** Generic keyword classes for a line-item table's column header (Item/Qty/Rate/Amount and synonyms). */
-private val HEADER_KEYWORDS = Regex("item|description|particular|qty|quantity|rate|price|mrp|amount|amt", RegexOption.IGNORE_CASE)
+/**
+ * Generic keyword classes for a line-item table's column header (Item/Qty/Rate/Amount and synonyms).
+ * Word-anchored: without the `\b`s an ordinary count line — "10 items (15 Qty)" — matched on "item"
+ * inside "items", and the whole preamble above it was then cut into the item list as the first
+ * item's wrapped name. Deliberately does NOT include "total" (which the column-ROLE keywords do), so
+ * that a "Total Qty: 13 | Sub Total | 1249.00" totals line can never read as a table header.
+ */
+private val HEADER_KEYWORDS =
+    Regex("""\b(item|description|particular|qty|quantity|rate|price|mrp|amount|amt)\b""", RegexOption.IGNORE_CASE)
 
 /** Generic keyword classes for a totals/fee label row (Sub Total, Grand Total, Amount, Paid, Qty: ...). */
 private val TOTALS_LABEL = Regex("sub ?total|total|grand total|amount|bill amount|paid|qty\\s*:", RegexOption.IGNORE_CASE)
@@ -12,14 +19,16 @@ private val DATE_LIKE = Regex("\\d{1,4}\\s*[/-]\\s*\\d{1,4}\\s*[/-]\\s*\\d{1,4}"
 data class Regions(val header: List<Row>, val items: List<Row>, val totals: List<Row>)
 
 /**
- * True when [row] looks like a line-item table's column header: it has more than one cell, and at
- * least half of its cells are header-keyword labels rather than data values. Requiring 2+ cells
- * keeps single-cell label rows (e.g. a totals row like "Qty: 5") from being mistaken for a header.
+ * True when [row] looks like a line-item table's column header: it has more than one cell, and a
+ * STRICT majority of its cells are header-keyword labels rather than data values. Requiring 2+ cells
+ * keeps single-cell label rows (e.g. a totals row like "Qty: 5") from being mistaken for a header;
+ * requiring more than half — not merely half — keeps a two-cell row with one keyword and one value
+ * ("10 items (15 Qty) | ...") out. A genuine header row is all labels, so the stricter bar costs it
+ * nothing even when OCR garbles one of them.
  */
 private fun isColumnHeaderRow(row: Row): Boolean {
     if (row.cells.size < 2) return false
-    val keywordCells = row.cells.count { HEADER_KEYWORDS.containsMatchIn(it.text) }
-    return keywordCells * 2 >= row.cells.size
+    return row.cells.count { HEADER_KEYWORDS.containsMatchIn(it.text) } * 2 > row.cells.size
 }
 
 /** True when [text] (trimmed) is numeric-shaped — a money amount or a plausible small quantity — rather than a name/label. */
@@ -72,13 +81,19 @@ private fun isPlausibleAmountCell(cell: Cell): Boolean {
 
 /**
  * True when [row] looks like a priced line-item row, for the headerless first-item fallback: it
- * has at least 2 cells, and either a decimal-bearing money token (the normal case) or a plausible
- * (non-date, non-small-int) amount alongside a name/label cell. This keeps a preamble date row
- * ("9/7/26" → cleaned "9726") or a table/covers number ("Table: 4") from being mistaken for the
- * first item row.
+ * has at least 2 cells, its RIGHTMOST cell is money-shaped, and it carries either a decimal-bearing
+ * money token (the normal case) or a plausible (non-date, non-small-int) amount alongside a
+ * name/label cell. This keeps a preamble date row ("9/7/26" → cleaned "9726") or a table/covers
+ * number ("Table: 4") from being mistaken for the first item row.
+ *
+ * The rightmost-cell requirement is what separates a priced row from a preamble row that merely
+ * contains a long number: a line amount is the last thing printed on an item line, always, whereas
+ * "Check #: | 622967 | Pax(s): 04" carries its reference number mid-row. Without it the items
+ * region opened several lines early and the whole preamble was folded into the first item's name.
  */
 private fun looksLikeItemRow(row: Row): Boolean {
     if (row.cells.size < 2) return false
+    if (row.cells.maxByOrNull { it.xLeft }?.let { isMoneyToken(it.text) } != true) return false
     if (row.cells.any { isDecimalMoneyCell(it) }) return true
     val hasAmount = row.cells.any { isPlausibleAmountCell(it) }
     val hasNameCell = row.cells.any { !isNumericCellText(it.text) }
