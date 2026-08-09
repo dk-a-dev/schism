@@ -1,5 +1,9 @@
-Your data on this phone is now encrypted. The local database holding your expenses and any imported bank transactions is protected with a key only this device holds. Existing data is converted automatically the first time you open this version.
+First release.
 
-Receipt reading still runs on your phone by default and uploads nothing. The optional cloud reader stays off until you switch it on.
+Schism splits shared expenses and keeps the detail that explains them.
 
-Also fixes a serious bug where editing a group's member list could delete expenses paid by that member.
+Scan a bill and check every item, tax and total before anything is saved. Split by item, equally, or by custom shares. Create groups, invite people with a link or QR code, and see who owes whom.
+
+Receipt reading runs on your phone. Bank message import is optional and stays off until you turn it on.
+
+Free, with no subscription.
