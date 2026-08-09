@@ -14,6 +14,7 @@ import (
 	"github.com/schism/schism-backend/internal/api"
 	"github.com/schism/schism-backend/internal/billing"
 	"github.com/schism/schism-backend/internal/config"
+	"github.com/schism/schism-backend/internal/receiptai"
 	"github.com/schism/schism-backend/internal/store"
 	webui "github.com/schism/schism-backend/internal/web"
 )
@@ -109,7 +110,12 @@ func main() {
 		}
 		monetization.Verifier = verifier
 	}
-	r.Mount("/", api.NewRouterWithMonetization(store.NewStore(pool), cfg.LogRequests, monetization, publicSite))
+	// Nil unless RECEIPT_AI_ENABLED is on with a key behind it, which leaves the route unregistered.
+	var extractor receiptai.Provider
+	if cfg.ReceiptAIEnabled {
+		extractor = receiptai.Select(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GroqAPIKey, cfg.GroqModel)
+	}
+	r.Mount("/", api.NewRouterWithFeatures(store.NewStore(pool), cfg.LogRequests, monetization, extractor, publicSite))
 
 	log.Printf("listening on %s", cfg.Addr)
 	if err := runHTTPServer(ctx, newHTTPServer(cfg.Addr, r)); err != nil {

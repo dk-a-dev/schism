@@ -2,6 +2,9 @@ package ai.schism.split.core.ai
 
 import ai.schism.split.expense.edit.voice.SpokenExpenseDraft
 import ai.schism.split.groups.data.Participant
+import ai.schism.split.sms.receipt.cloud.RECEIPT_JSON_SHAPE
+import ai.schism.split.sms.receipt.cloud.extractJsonObject
+import ai.schism.split.sms.receipt.cloud.receiptDraftFromJson
 import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -64,7 +67,7 @@ class LlmExpenseParser @Inject constructor(
         val llm = engine() ?: return@withContext null
         val prompt = buildPrompt(text, participants.map { it.name })
         val raw = runCatching { llm.generateResponse(prompt) }.getOrNull() ?: return@withContext null
-        val json = extractJson(raw) ?: return@withContext null
+        val json = extractJsonObject(raw) ?: return@withContext null
 
         val obj = runCatching { JSONObject(json) }.getOrNull() ?: return@withContext null
         val amountMinor = obj.optDouble("amount", Double.NaN)
@@ -156,41 +159,9 @@ class LlmExpenseParser @Inject constructor(
         val raw = withTimeoutOrNull(20_000) {
             runCatching { llm.generateResponse(prompt) }.getOrNull()
         } ?: return null
-        val json = extractJson(raw) ?: return null
-        val obj = runCatching { JSONObject(json) }.getOrNull() ?: return null
-
-        fun money(v: Double): Long = (v * 100).roundToLong()
-
-        val itemsArr = obj.optJSONArray("items") ?: return null
-        val items = (0 until itemsArr.length()).mapNotNull { i ->
-            val it = itemsArr.optJSONObject(i) ?: return@mapNotNull null
-            val name = it.optString("name").trim().ifBlank { return@mapNotNull null }
-            val amount = it.optDouble("amount", Double.NaN)
-            if (amount.isNaN() || amount <= 0) return@mapNotNull null
-            ai.schism.split.sms.receipt.ReceiptLineItem(
-                name = name.take(60),
-                amountMinor = money(amount),
-                qty = it.optInt("qty", 1).coerceAtLeast(1),
-            )
-        }
-        if (items.isEmpty()) return null
-
-        val subtotal = obj.optDouble("subtotal", Double.NaN).takeIf { !it.isNaN() }?.let(::money)
-            ?: items.sumOf { it.amountMinor }
-        val tax = obj.optDouble("tax", Double.NaN).takeIf { !it.isNaN() && it >= 0 }?.let(::money) ?: 0L
-        val total = obj.optDouble("total", Double.NaN).takeIf { !it.isNaN() }?.let(::money) ?: (subtotal + tax)
-        val date = obj.optString("date").trim().takeIf { it.length == 10 && it[4] == '-' }
-
-        return ai.schism.split.sms.receipt.ReceiptDraft(
-            merchant = obj.optString("merchant").trim().ifBlank { "Receipt" }.take(60),
-            totalMinor = total,
-            currency = "₹",
-            date = date,
-            lineItems = items,
-            taxMinor = tax,
-            subtotalMinor = subtotal,
-            parsedByAi = true,
-        )
+        // Same JSON shape and same mapping as the cloud engines use — one parser, one set of rules.
+        val json = extractJsonObject(raw) ?: return null
+        return receiptDraftFromJson(json)
     }
 
     // Names the model must never emit as dishes — mirror of the heuristic parser's blocklist.
@@ -246,7 +217,7 @@ class LlmExpenseParser @Inject constructor(
           of guessing from a run of numbers. A line before the OCR may already summarize items/totals
           this app previously extracted — treat that as a starting point to correct, not to discard.
         Reply with ONLY minified JSON, no prose, exactly:
-        {"merchant": string, "date": "YYYY-MM-DD" or null, "items": [{"name": string, "qty": number, "amount": number}], "subtotal": number, "tax": number, "total": number}
+        $RECEIPT_JSON_SHAPE
         OCR:
         ${ocr.replace("\"", "'")}
     """.trimIndent()
@@ -257,13 +228,6 @@ class LlmExpenseParser @Inject constructor(
         {"amount": <number in currency units or null>, "title": <short string or null>, "payer": <one participant name or "me" or null>, "sharedWith": [<participant names>], "personal": <true or false>}
         Sentence: "${text.replace("\"", "'")}"
     """.trimIndent()
-
-    /** Pull the first {...} block out of the model's response. */
-    private fun extractJson(raw: String): String? {
-        val start = raw.indexOf('{')
-        val end = raw.lastIndexOf('}')
-        return if (start in 0 until end) raw.substring(start, end + 1) else null
-    }
 
     fun close() {
         engine?.close()

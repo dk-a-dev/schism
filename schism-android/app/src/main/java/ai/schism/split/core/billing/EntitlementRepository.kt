@@ -69,7 +69,7 @@ class EntitlementRepository @Inject constructor(
     suspend fun refresh() {
         if (settings.authToken.first().isBlank()) return
         runCatching { api.monetizationConfig() }.onSuccess {
-            _config.value = MonetizationConfig(it.plusEnabled, it.adsEnabled, it.purchasesEnabled)
+            _config.value = MonetizationConfig(it.plusEnabled, it.adsEnabled, it.purchasesEnabled, it.receiptCloudEnabled)
         }
         runCatching { api.entitlement() }.onSuccess { apply(it) }
     }

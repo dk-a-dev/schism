@@ -8,6 +8,8 @@ data class MonetizationConfig(
     val plusEnabled: Boolean = false,
     val adsEnabled: Boolean = false,
     val purchasesEnabled: Boolean = false,
+    /** Backend switch for the Schism-cloud receipt engine (Settings › Receipt reading). */
+    val receiptCloudEnabled: Boolean = false,
 )
 
 /** Free hosted Live Splits used in the current UTC calendar month. Joining is always free. */

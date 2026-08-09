@@ -228,3 +228,53 @@ consumes nothing. Free accounts get three creates per UTC calendar month; the fo
 Plus accounts bypass the counter entirely. Joining a session and every other claim-session route
 (`GET`, `PUT /claims`, `PUT /ready`, `PATCH /items`, `POST /finalize`, `POST /cancel`) are never
 gated, and an expired subscription never invalidates existing sessions or hides existing data.
+
+## Cloud receipt extraction
+
+`POST /v1/receipts/extract` turns a photographed bill into a draft using a cloud vision model
+(Gemini or Groq, whichever the deployment configured). It is authenticated, and it is **off by
+default**: with `RECEIPT_AI_ENABLED` unset the route is not registered at all and the path answers
+`404`. The same extraction also exists as a bring-your-own-key path in the app, which calls the
+vendor directly and never touches this endpoint.
+
+**The image is never persisted.** Not to disk, not to Postgres, not to any log line. It exists only
+for the duration of the request, and only the timestamp of the call is stored (for the rate limit).
+
+Request — JSON, image base64-encoded, `mimeType` one of `image/jpeg`, `image/png`, `image/webp`:
+
+```json
+{"groupId":"grp_123","mimeType":"image/jpeg","imageBase64":"/9j/4AAQSkZJRgABA..."}
+```
+
+Response `200` is the draft. Every amount is an **integer in minor units**; `chargeLines[].amountMinor`
+is signed in the direction it moves the bill (taxes and fees positive, discounts negative, round-off
+either), `taxMinor` is their sum, and `subtotalMinor + taxMinor == totalMinor`:
+
+```json
+{
+  "merchant":"Gulab Dhaba","date":"2026-03-05","currency":"₹",
+  "items":[{"name":"Paneer Tikka","qty":2,"amountMinor":38000}],
+  "subtotalMinor":38000,"taxMinor":1900,"totalMinor":39900,
+  "chargeLines":[{"label":"GST 5%","amountMinor":1900,"kind":"TAX"}]
+}
+```
+
+`kind` is one of `TAX`, `FEE`, `DISCOUNT`, `ROUNDOFF`. `date` is `yyyy-MM-dd` or `""`.
+
+**Rate limit: one extraction per user per group per hour**, held in Postgres so it holds across
+replicas. The second call inside the window is
+
+```json
+429 {"error":"receipt_extract_rate_limited","retryAfterSeconds":3480,
+     "nextAllowedAt":"2026-03-05T13:00:00Z"}
+```
+
+with a matching `Retry-After` header.
+
+Other rejections: `404` (feature off, or unknown group), `403` (not a member of the group),
+`413 image_too_large` (decoded image over 8 MB, or the request body over its ceiling — checked
+before any provider call), `415 image_must_be_jpeg_png_or_webp`, `400 invalid_image` (not base64 or
+empty), `422 receipt_not_readable` (the model's answer was prose, carried non-integer money, or did
+not reconcile — retrying the same photo will not help), `502 receipt_extraction_unavailable`
+(provider down, rate-limited us, or misconfigured key). No provider message or API key is ever
+included in an error body or a log line.

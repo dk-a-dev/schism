@@ -13,13 +13,19 @@ import (
 const maxJSONBodyBytes int64 = 1 << 20
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONLimit(w, r, dst, maxJSONBodyBytes)
+}
+
+// decodeJSONLimit is decodeJSON with an explicit body ceiling, for the one endpoint (receipt
+// extraction) whose payload is legitimately larger than 1 MiB.
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
 		writeErr(w, http.StatusUnsupportedMediaType, "content_type_must_be_application_json")
 		return false
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {

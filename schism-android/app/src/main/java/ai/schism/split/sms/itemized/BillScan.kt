@@ -1,9 +1,15 @@
 package ai.schism.split.sms.itemized
 
+import ai.schism.split.R
 import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.ocr.OcrAvailability
 import ai.schism.split.ocr.OcrFailure
 import ai.schism.split.sms.receipt.ReceiptScanner
+import ai.schism.split.sms.receipt.cloud.CloudReceiptException
+import ai.schism.split.sms.receipt.cloud.CloudReceiptFailure
+import ai.schism.split.sms.receipt.cloud.CloudReceiptScanner
+import ai.schism.split.sms.receipt.cloud.ReceiptEngine
+import ai.schism.split.sms.receipt.cloud.formatRetryAfter
 import ai.schism.split.sms.receipt.engine.buildLlmHandoff
 import ai.schism.split.sms.receipt.engine.parseBill
 import android.app.Activity
@@ -45,6 +51,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -58,6 +65,8 @@ class BillScanViewModel @Inject constructor(
     private val receiptScanner: ReceiptScanner,
     private val pending: PendingReceipt,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
+    private val cloudScanner: CloudReceiptScanner,
+    private val settings: ai.schism.split.core.settings.SettingsRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -70,6 +79,9 @@ class BillScanViewModel @Inject constructor(
     val waitingForOcr: StateFlow<Boolean> = _waitingForOcr.asStateFlow()
     private var pendingScan: Pair<Uri, () -> Unit>? = null
 
+    /** Group the bill is being scanned for, when the caller knows it (drives the cloud rate limit). */
+    var groupId: String? = null
+
     init {
         viewModelScope.launch {
             receiptScanner.observeAvailability().collect { availability ->
@@ -78,7 +90,7 @@ class BillScanViewModel @Inject constructor(
                     pendingScan?.let { (uri, callback) ->
                         pendingScan = null
                         _waitingForOcr.value = false
-                        performScan(uri, callback)
+                        scan(uri, callback)
                     }
                 }
             }
@@ -91,12 +103,20 @@ class BillScanViewModel @Inject constructor(
     }
 
     fun scan(uri: Uri, onItemized: () -> Unit) {
-        if (_ocrAvailability.value != OcrAvailability.Ready) {
-            pendingScan = uri to onItemized
-            _waitingForOcr.value = true
-            return
+        viewModelScope.launch {
+            // An unconsented cloud engine is treated as on-device: consent is what makes the upload
+            // lawful, and only the sheet in Settings can grant it — never anything on this path.
+            val engine = settings.receiptEngine.first()
+            val viaCloud = engine.leavesDevice && settings.receiptCloudConsents.first().contains(engine.name)
+            // A cloud engine needs no on-device OCR model, so it must not wait behind that download.
+            // If it later fails, the fallback re-checks availability and opens this gate then.
+            if (!viaCloud && _ocrAvailability.value != OcrAvailability.Ready) {
+                pendingScan = uri to onItemized
+                _waitingForOcr.value = true
+                return@launch
+            }
+            performScan(uri, onItemized, if (viaCloud) engine else ReceiptEngine.ON_DEVICE)
         }
-        performScan(uri, onItemized)
     }
 
     fun prepareOcr(allowCellular: Boolean) {
@@ -109,9 +129,30 @@ class BillScanViewModel @Inject constructor(
         receiptScanner.cancelDownload()
     }
 
-    private fun performScan(uri: Uri, onItemized: () -> Unit) {
+    /** [engine] has already passed the consent check in [scan]; ON_DEVICE means "skip the cloud". */
+    private fun performScan(uri: Uri, onItemized: () -> Unit, engine: ReceiptEngine) {
         viewModelScope.launch {
             _scanning.value = true
+
+            if (engine.leavesDevice) {
+                val cloud = cloudScanner.scan(engine, uri, groupId)
+                cloud.getOrNull()?.let { draft ->
+                    _scanning.value = false
+                    pending.draft = draft
+                    onItemized()
+                    return@launch
+                }
+                Toast.makeText(appContext, fallbackMessage(cloud.exceptionOrNull()), Toast.LENGTH_LONG).show()
+                // Falling back needs the on-device models. If they aren't here yet, hold on to THIS
+                // photo and open the download gate rather than throwing the user's pick away.
+                if (_ocrAvailability.value != OcrAvailability.Ready) {
+                    _scanning.value = false
+                    pendingScan = uri to onItemized
+                    _waitingForOcr.value = true
+                    return@launch
+                }
+            }
+
             runCatching {
                 val rows = receiptScanner.recognizeCells(appContext, uri)
                 // Deterministic engine is primary (fast, no model). Only when it can't produce a
@@ -143,6 +184,20 @@ class BillScanViewModel @Inject constructor(
             }
         }
     }
+
+    /** Plain-language reason the cloud read didn't happen, plus the promise that scanning continues. */
+    private fun fallbackMessage(error: Throwable?): String {
+        val reason = when (val failure = (error as? CloudReceiptException)?.failure) {
+            CloudReceiptFailure.Offline -> appContext.getString(R.string.receiptai_fail_offline)
+            CloudReceiptFailure.NoKey -> appContext.getString(R.string.receiptai_fail_no_key)
+            CloudReceiptFailure.InvalidKey -> appContext.getString(R.string.receiptai_fail_invalid_key)
+            CloudReceiptFailure.Timeout -> appContext.getString(R.string.receiptai_fail_timeout)
+            is CloudReceiptFailure.RateLimited ->
+                appContext.getString(R.string.receiptai_fail_rate_limited, formatRetryAfter(failure.retryAfterSeconds))
+            else -> appContext.getString(R.string.receiptai_fail_generic)
+        }
+        return appContext.getString(R.string.receiptai_fallback, reason)
+    }
 }
 
 /** Walks up [ContextWrapper]s (as Compose's [LocalContext] is often one) to find the host Activity. */
@@ -164,8 +219,14 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  * plain picker instead of dead-ending.
  */
 @Composable
-fun rememberBillScan(onItemized: () -> Unit, onManualEntry: () -> Unit = onItemized): () -> Unit {
+fun rememberBillScan(
+    onItemized: () -> Unit,
+    onManualEntry: () -> Unit = onItemized,
+    groupId: String? = null,
+): () -> Unit {
     val viewModel: BillScanViewModel = hiltViewModel()
+    // The cloud engine's rate limit is per user per group; null just means "not in a group context".
+    viewModel.groupId = groupId
     val scanning by viewModel.scanning.collectAsState()
     val ocrAvailability by viewModel.ocrAvailability.collectAsState()
     val waitingForOcr by viewModel.waitingForOcr.collectAsState()

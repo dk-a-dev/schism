@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/schism/schism-backend/internal/receiptai"
 )
 
 type Config struct {
@@ -40,6 +42,15 @@ type Config struct {
 	// PlayServiceAccountJSON is the Google service-account key used to call the Play Developer API.
 	// Required only when purchases are on.
 	PlayServiceAccountJSON string
+	// Cloud receipt extraction, off by default like the monetization switches: a deployment that
+	// configures nothing exposes no cloud extraction at all and sends no image anywhere.
+	ReceiptAIEnabled bool
+	// GeminiAPIKey / GroqAPIKey select the provider — Gemini wins when both are present. The model
+	// ids are configuration, not constants, because vision line-ups rotate faster than releases.
+	GeminiAPIKey string
+	GeminiModel  string
+	GroqAPIKey   string
+	GroqModel    string
 }
 
 func Load() (Config, error) {
@@ -57,6 +68,12 @@ func Load() (Config, error) {
 		PlayPackageName:  strings.TrimSpace(os.Getenv("PLAY_PACKAGE_NAME")),
 
 		PlayServiceAccountJSON: os.Getenv("PLAY_SERVICE_ACCOUNT_JSON"),
+
+		ReceiptAIEnabled: isTruthy(os.Getenv("RECEIPT_AI_ENABLED")),
+		GeminiAPIKey:     strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiModel:      envOr("GEMINI_MODEL", receiptai.DefaultGeminiModel),
+		GroqAPIKey:       strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
+		GroqModel:        envOr("GROQ_MODEL", receiptai.DefaultGroqModel),
 
 		DBMaxConns:        20,
 		DBMinConns:        2,
@@ -112,7 +129,20 @@ func Load() (Config, error) {
 			return Config{}, errors.New("PLAY_SERVICE_ACCOUNT_JSON is required when PURCHASES_ENABLED is set")
 		}
 	}
+	// A flag switched on with no provider behind it is a misconfiguration, not a runtime surprise:
+	// fail here rather than 502 on the first user who photographs a bill.
+	if c.ReceiptAIEnabled && c.GeminiAPIKey == "" && c.GroqAPIKey == "" {
+		return Config{}, errors.New("GEMINI_API_KEY or GROQ_API_KEY is required when RECEIPT_AI_ENABLED is set")
+	}
 	return c, nil
+}
+
+// envOr returns the trimmed env var, or fallback when it is unset or blank.
+func envOr(name, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // billingTokenKey decodes BILLING_TOKEN_KEY, which must be standard base64 for exactly 32 bytes

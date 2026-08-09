@@ -2,6 +2,8 @@ package ai.schism.split.core.settings
 
 import android.content.Context
 import ai.schism.split.core.security.SecureTokenStore
+import ai.schism.split.sms.receipt.cloud.ReceiptEngine
+import ai.schism.split.sms.receipt.cloud.ReceiptProvider
 import ai.schism.split.sms.ingest.SmsIngestWorker
 import ai.schism.split.sms.settings.SmsImportPreference
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -37,6 +39,8 @@ class SettingsRepository @Inject constructor(
     private val appContext = context.applicationContext
     private val smsPreference = SmsImportPreference(appContext)
     private val secureTokenStore = SecureTokenStore(appContext)
+    private val receiptKeyStore = SecureTokenStore(appContext, fileName = "secure_receipt_ai", entryKey = "provider_key_v1")
+    private val receiptKeyVersion = MutableStateFlow(0L)
     private val tokenVersion = MutableStateFlow(0L)
     private val tokenMigrationMutex = Mutex()
 
@@ -89,6 +93,58 @@ class SettingsRepository @Inject constructor(
     suspend fun setAiEnabled(enabled: Boolean) {
         ds.edit { it[KEY_AI_ENABLED] = enabled }
     }
+
+    /**
+     * Which engine reads receipt photos. Defaults to [ReceiptEngine.ON_DEVICE] — nothing leaves the
+     * phone — and an unrecognised stored value falls back to it rather than to a cloud engine.
+     */
+    val receiptEngine: Flow<ReceiptEngine> = ds.data.map { prefs ->
+        ReceiptEngine.entries.firstOrNull { it.name == prefs[KEY_RECEIPT_ENGINE] } ?: ReceiptEngine.ON_DEVICE
+    }
+
+    /** Which third-party provider the [ReceiptEngine.OWN_KEY] engine calls. */
+    val receiptProvider: Flow<ReceiptProvider> = ds.data.map { prefs ->
+        ReceiptProvider.entries.firstOrNull { it.name == prefs[KEY_RECEIPT_PROVIDER] } ?: ReceiptProvider.GEMINI
+    }
+
+    /**
+     * The set of cloud engines the user has explicitly consented to send receipt photos to. Consent
+     * is per-engine because "Google gets my photo" and "Schism's server gets my photo" are different
+     * decisions, and it is stored as an allow-list so a new engine can never inherit an old consent.
+     */
+    val receiptCloudConsents: Flow<Set<String>> = ds.data.map { it[KEY_RECEIPT_CONSENTS] ?: emptySet() }
+
+    suspend fun setReceiptEngine(engine: ReceiptEngine) {
+        ds.edit { it[KEY_RECEIPT_ENGINE] = engine.name }
+    }
+
+    suspend fun setReceiptProvider(provider: ReceiptProvider) {
+        ds.edit { it[KEY_RECEIPT_PROVIDER] = provider.name }
+    }
+
+    /** Records that the user accepted the "this photo leaves your device" sheet for [engine]. */
+    suspend fun grantReceiptCloudConsent(engine: ReceiptEngine) {
+        ds.edit { it[KEY_RECEIPT_CONSENTS] = (it[KEY_RECEIPT_CONSENTS] ?: emptySet()) + engine.name }
+    }
+
+    /**
+     * The user's own provider API key. It is a credential, so it lives ONLY in the Keystore-encrypted
+     * store — never in this DataStore, never in a log line, and never in any exported/crash payload.
+     */
+    fun receiptApiKey(): String = receiptKeyStore.read()
+
+    fun setReceiptApiKey(key: String) {
+        receiptKeyStore.write(key.trim())
+        receiptKeyVersion.value += 1
+    }
+
+    fun clearReceiptApiKey() {
+        receiptKeyStore.clear()
+        receiptKeyVersion.value += 1
+    }
+
+    /** Whether a key is stored, for the UI — the key itself is never surfaced back to the screen. */
+    val receiptApiKeyPresent: Flow<Boolean> = receiptKeyVersion.map { receiptKeyStore.read().isNotBlank() }
 
     /**
      * Alpha "Let everyone claim" links (Settings › Labs). Off by default — gates the entry point on
@@ -190,6 +246,7 @@ class SettingsRepository @Inject constructor(
     /** Wipe all device-local settings (used by "reset" and to isolate tests). */
     suspend fun clear() {
         secureTokenStore.clear()
+        clearReceiptApiKey()
         ds.edit { it.clear() }
         smsPreference.setEnabled(false)
         tokenVersion.value++
@@ -220,5 +277,8 @@ class SettingsRepository @Inject constructor(
         private val KEY_AI_MODEL_TOKEN = stringPreferencesKey("ai_model_token")
         private val KEY_AI_ENABLED = booleanPreferencesKey("ai_enabled")
         private val KEY_CLAIM_LINKS_ALPHA = booleanPreferencesKey("claim_links_alpha")
+        private val KEY_RECEIPT_ENGINE = stringPreferencesKey("receipt_engine")
+        private val KEY_RECEIPT_PROVIDER = stringPreferencesKey("receipt_provider")
+        private val KEY_RECEIPT_CONSENTS = stringSetPreferencesKey("receipt_cloud_consents")
     }
 }

@@ -77,7 +77,23 @@ Unit tests (`internal/split`, `internal/analytics`, `internal/config`, `internal
 - `DB_MIN_CONNS` — warm connections (default `2`)
 - `DB_MAX_CONN_LIFETIME` — Go duration (default `30m`)
 
-Production ingress should enforce the same 1 MiB body limit and server-aligned timeouts. Recommended
+### Cloud receipt extraction (all optional, **off by default**)
+- `RECEIPT_AI_ENABLED` — `true/1/yes/on` registers `POST /v1/receipts/extract` (default **off**; with
+  it unset the route does not exist and no image is ever sent anywhere). Enabling it without a
+  provider key below **fails startup** — that is a misconfiguration, not a runtime surprise.
+- `GEMINI_API_KEY` — Google generativeLanguage key (default empty). Present ⇒ Gemini is the provider.
+- `GROQ_API_KEY` — Groq key (default empty). Used when `GEMINI_API_KEY` is empty.
+- `GEMINI_MODEL` — default `gemini-2.5-flash`
+- `GROQ_MODEL` — default `meta-llama/llama-4-scout-17b-16e-instruct`
+
+Model ids are configuration rather than constants because vision line-ups rotate often (Groq's
+current vision models are Llama 4 Scout/Maverick; Qwen 3.6 27B is preview-only) — swapping one needs
+no code change. The uploaded image is never written to disk, to Postgres, or to a log; the endpoint
+caps images at 8 MB and allows one extraction per user per group per hour, held in Postgres so the
+limit survives running more than one instance.
+
+Production ingress should enforce the same 1 MiB body limit and server-aligned timeouts (receipt
+extraction is the one exception: it allows ~10.7 MiB for the base64 envelope). Recommended
 per-key limits are auth `5/min`, invite redemption `10/min`, and OCR manifest `60/min`; the process
 also applies local register/login burst limits. `/health` is liveness and `/ready` verifies Postgres.
 

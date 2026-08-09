@@ -113,6 +113,7 @@ fun ExpenseEditScreen(
         },
         // No scanned draft to choose "total vs. split" from — go straight to the itemised screen.
         onManualEntry = onScanItemized,
+        groupId = viewModel.groupId,
     )
     scannedDraft?.let { draft ->
         AlertDialog(

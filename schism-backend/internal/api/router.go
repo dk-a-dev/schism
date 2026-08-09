@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/schism/schism-backend/internal/receiptai"
 	"github.com/schism/schism-backend/internal/store"
 	"golang.org/x/time/rate"
 )
@@ -15,6 +16,9 @@ type Handler struct {
 	registerLimiter *keyedLimiter
 	loginLimiter    *keyedLimiter
 	monetization    Monetization
+	// extractor is the cloud receipt-extraction provider, or nil when the feature is off. Nil means
+	// the route is never registered, so a deployment without it 404s instead of advertising it.
+	extractor receiptai.Provider
 }
 
 // NewRouter builds the API router with monetization off — no paywall, no purchase surface, no ads.
@@ -24,13 +28,21 @@ func NewRouter(s *store.Store, logRequests bool, publicHandlers ...http.Handler)
 	return NewRouterWithMonetization(s, logRequests, Monetization{}, publicHandlers...)
 }
 
-// NewRouterWithMonetization is NewRouter plus the deployment's billing/ads posture.
+// NewRouterWithMonetization is NewRouter plus the deployment's billing/ads posture, and no cloud
+// receipt extraction.
 func NewRouterWithMonetization(s *store.Store, logRequests bool, m Monetization, publicHandlers ...http.Handler) http.Handler {
+	return NewRouterWithFeatures(s, logRequests, m, nil, publicHandlers...)
+}
+
+// NewRouterWithFeatures is the full posture: billing/ads plus the cloud receipt extractor. A nil
+// extractor leaves /v1/receipts/extract unregistered entirely.
+func NewRouterWithFeatures(s *store.Store, logRequests bool, m Monetization, extractor receiptai.Provider, publicHandlers ...http.Handler) http.Handler {
 	h := &Handler{
 		store:           s,
 		registerLimiter: newKeyedLimiter(rate.Every(20*time.Second), 3, 15*time.Minute),
 		loginLimiter:    newKeyedLimiter(rate.Every(12*time.Second), 5, 15*time.Minute),
 		monetization:    m,
+		extractor:       extractor,
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -82,6 +94,9 @@ func NewRouterWithMonetization(s *store.Store, logRequests bool, m Monetization,
 			r.Get("/monetization/config", h.monetizationConfig)
 			r.Post("/billing/verify", h.verifyPurchase)
 			r.Post("/billing/restore", h.restorePurchases)
+			if h.extractor != nil {
+				r.Post("/receipts/extract", h.extractReceipt)
+			}
 			r.Route("/groups", func(r chi.Router) {
 				r.Post("/", h.createGroup)
 				r.Get("/", h.listGroups)

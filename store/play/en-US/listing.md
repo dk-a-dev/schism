@@ -31,7 +31,8 @@ GROUPS AND BALANCES
   the money itself.
 
 PRIVATE WHERE IT MATTERS
-• Receipt reading runs on your device. Photos and the text read from them are not uploaded.
+• Receipt reading runs on your device by default. Nothing is uploaded unless you switch on the
+  optional cloud reader, which tells you where your photo goes before the first scan.
 • Bank message import is optional and switched off on a fresh install. Schism explains the feature
   before asking for the Android SMS permission, looks only at supported transaction senders, and
   parses them on your device. Raw messages are not sent to Schism.

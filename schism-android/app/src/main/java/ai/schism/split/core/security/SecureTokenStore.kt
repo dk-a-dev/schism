@@ -11,16 +11,23 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Stores the backend bearer token encrypted by a non-exportable Android Keystore key. */
+/**
+ * Stores one secret encrypted by a non-exportable Android Keystore key. Defaults to the backend
+ * bearer token; [fileName]/[entryKey] let a second secret (the user's own receipt-AI API key) reuse
+ * the exact same AES-GCM format and Keystore key without sharing a prefs file with it.
+ */
 class SecureTokenStore(
     context: Context,
+    fileName: String = FILE_NAME,
+    private val entryKey: String = KEY_CIPHERTEXT,
+    // Last so it stays usable as a trailing lambda.
     private val keyProvider: () -> SecretKey = ::getOrCreateKey,
 ) {
-    private val preferences = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
+    private val preferences = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
     private val lock = Any()
 
     fun read(): String = synchronized(lock) {
-        val encoded = preferences.getString(KEY_CIPHERTEXT, null) ?: return@synchronized ""
+        val encoded = preferences.getString(entryKey, null) ?: return@synchronized ""
         runCatching {
             val packed = Base64.decode(encoded, Base64.NO_WRAP)
             require(packed.size > IV_BYTES)
@@ -31,7 +38,7 @@ class SecureTokenStore(
             }
             cipher.doFinal(encrypted).toString(Charsets.UTF_8)
         }.getOrElse {
-            preferences.edit().remove(KEY_CIPHERTEXT).commit()
+            preferences.edit().remove(entryKey).commit()
             ""
         }
     }
@@ -47,18 +54,18 @@ class SecureTokenStore(
         val packed = cipher.iv + cipher.doFinal(token.toByteArray(Charsets.UTF_8))
         check(
             preferences.edit()
-                .putString(KEY_CIPHERTEXT, Base64.encodeToString(packed, Base64.NO_WRAP))
+                .putString(entryKey, Base64.encodeToString(packed, Base64.NO_WRAP))
                 .commit(),
         ) { "Unable to persist encrypted auth token" }
     }
 
     fun clear() {
-        check(preferences.edit().remove(KEY_CIPHERTEXT).commit()) {
+        check(preferences.edit().remove(entryKey).commit()) {
             "Unable to clear encrypted auth token"
         }
     }
 
-    internal fun encryptedValueForTest(): String? = preferences.getString(KEY_CIPHERTEXT, null)
+    internal fun encryptedValueForTest(): String? = preferences.getString(entryKey, null)
 
     private companion object {
         const val FILE_NAME = "secure_auth"

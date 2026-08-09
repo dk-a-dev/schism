@@ -277,6 +277,8 @@ fun SettingsScreen(
             }
 
             // ── On-device AI ───────────────────────────────────────────────
+            SettingsSection(stringResource(R.string.receiptai_title)) { ReceiptEngineSettingsSection() }
+
             AiSection()
 
             SettingsSection("Bank message import") {

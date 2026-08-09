@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schism/schism-backend/internal/receiptai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -241,4 +242,81 @@ func TestLoadRejectsInvalidPlayURL(t *testing.T) {
 			require.ErrorContains(t, err, "SCHISM_PLAY_URL")
 		})
 	}
+}
+
+// receiptAIEnv gives a valid baseline with every cloud-extraction variable cleared.
+func receiptAIEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
+	for _, name := range []string{
+		"RECEIPT_AI_ENABLED", "GEMINI_API_KEY", "GEMINI_MODEL", "GROQ_API_KEY", "GROQ_MODEL",
+	} {
+		t.Setenv(name, "")
+	}
+}
+
+// Nothing configured must mean no cloud extraction at all, exactly like the monetization switches.
+func TestLoadReceiptAIDefaultsOff(t *testing.T) {
+	receiptAIEnv(t)
+	c, err := Load()
+	require.NoError(t, err)
+	require.False(t, c.ReceiptAIEnabled)
+	require.Empty(t, c.GeminiAPIKey)
+	require.Empty(t, c.GroqAPIKey)
+	require.Equal(t, receiptai.DefaultGeminiModel, c.GeminiModel)
+	require.Equal(t, receiptai.DefaultGroqModel, c.GroqModel)
+	require.Nil(t, receiptai.Select(c.GeminiAPIKey, c.GeminiModel, c.GroqAPIKey, c.GroqModel))
+}
+
+func TestLoadReceiptAIModelsAreConfigurable(t *testing.T) {
+	receiptAIEnv(t)
+	t.Setenv("GEMINI_MODEL", "gemini-3-flash")
+	t.Setenv("GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
+	c, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "gemini-3-flash", c.GeminiModel)
+	require.Equal(t, "meta-llama/llama-4-maverick-17b-128e-instruct", c.GroqModel)
+}
+
+// The flag on with no key behind it is a misconfiguration: it must fail startup, not at runtime.
+func TestLoadReceiptAIRequiresAProviderKeyWhenEnabled(t *testing.T) {
+	cases := []struct {
+		name      string
+		geminiKey string
+		groqKey   string
+		wantErr   bool
+	}{
+		{name: "no key at all", wantErr: true},
+		{name: "blank key", geminiKey: "   ", wantErr: true},
+		{name: "gemini key", geminiKey: "g"},
+		{name: "groq key", groqKey: "q"},
+		{name: "both keys", geminiKey: "g", groqKey: "q"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			receiptAIEnv(t)
+			t.Setenv("RECEIPT_AI_ENABLED", "true")
+			t.Setenv("GEMINI_API_KEY", tc.geminiKey)
+			t.Setenv("GROQ_API_KEY", tc.groqKey)
+			c, err := Load()
+			if tc.wantErr {
+				require.ErrorContains(t, err, "RECEIPT_AI_ENABLED")
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, c.ReceiptAIEnabled)
+			require.NotNil(t, receiptai.Select(c.GeminiAPIKey, c.GeminiModel, c.GroqAPIKey, c.GroqModel))
+		})
+	}
+}
+
+// A key present while the flag is off stays off: the flag is the switch, not the key.
+func TestLoadReceiptAIKeyWithoutFlagStaysOff(t *testing.T) {
+	receiptAIEnv(t)
+	t.Setenv("GEMINI_API_KEY", "g")
+	c, err := Load()
+	require.NoError(t, err)
+	require.False(t, c.ReceiptAIEnabled)
 }

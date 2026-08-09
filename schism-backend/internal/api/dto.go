@@ -145,6 +145,11 @@ type monetizationConfigDTO struct {
 	AdsEnabled       bool `json:"adsEnabled"`
 	PurchasesEnabled bool `json:"purchasesEnabled"`
 	FreeLiveSplits   int  `json:"freeLiveSplits"`
+	// ReceiptCloudEnabled tells the app whether to offer the Schism-hosted cloud reader at all.
+	// The route itself is simply not registered when no provider is configured, so without this
+	// the app could only discover the feature by getting a 404 from a scan the user already
+	// started.
+	ReceiptCloudEnabled bool `json:"receiptCloudEnabled"`
 }
 
 type verifyPurchaseDTO struct {

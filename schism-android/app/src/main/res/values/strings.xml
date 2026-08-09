@@ -18,7 +18,7 @@
     <string name="onboarding_live_split_illustration_description">A shared bill divided among a group</string>
 
     <string name="onboarding_privacy_title">Private where it matters</string>
-    <string name="onboarding_privacy_body">Receipt and opted-in SMS understanding happens on-device. Only group expenses you choose to share are synced.</string>
+    <string name="onboarding_privacy_body">Receipt and opted-in SMS understanding happens on-device by default. Cloud reading is optional and asks first. Only group expenses you choose to share are synced.</string>
     <string name="onboarding_privacy_illustration_description">Private processing represented on a phone</string>
 
     <string name="onboarding_phone_label">Phone (optional)</string>

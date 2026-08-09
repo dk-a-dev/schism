@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Receipt-reading engine copy. Its own file so it never collides with strings.xml. -->
+<resources>
+    <!-- Settings section -->
+    <string name="receiptai_title">Receipt reading</string>
+    <string name="receiptai_body">Choose what reads your bill photos. On-device keeps every photo on this phone.</string>
+    <string name="receiptai_engine_on_device">On this device</string>
+    <string name="receiptai_engine_schism">Schism cloud</string>
+    <string name="receiptai_engine_own_key">My own API key</string>
+    <string name="receiptai_engine_on_device_body">The default. The photo and the text read from it never leave your phone. Works offline.</string>
+    <string name="receiptai_engine_schism_body">The photo is uploaded to Schism\'s server, read there, and the draft is sent back. One scan per group per hour.</string>
+    <string name="receiptai_engine_own_key_body">The photo is sent from this phone straight to your own Google Gemini or Groq account, billed to you.</string>
+
+    <!-- Own-key provider + credential -->
+    <string name="receiptai_provider">Provider</string>
+    <string name="receiptai_provider_gemini">Google Gemini</string>
+    <string name="receiptai_provider_groq">Groq</string>
+    <string name="receiptai_key_label">API key</string>
+    <string name="receiptai_key_hint">Stored encrypted on this device only. It is never sent to Schism and never appears in logs.</string>
+    <string name="receiptai_key_save">Save key</string>
+    <string name="receiptai_key_clear">Clear key</string>
+    <string name="receiptai_key_saved">A key is saved on this device.</string>
+    <string name="receiptai_key_missing">No key saved yet — scanning stays on-device until you add one.</string>
+
+    <!-- Consent sheet: shown once per cloud engine, before it can be selected -->
+    <string name="receiptai_consent_title">This sends your receipt photo off your phone</string>
+    <string name="receiptai_consent_recipient_schism">The photo is uploaded to Schism\'s own server (operated by Schism) and read there.</string>
+    <string name="receiptai_consent_recipient_gemini">The photo is sent from this phone to Google LLC, to be read by Google\'s Gemini API using your key.</string>
+    <string name="receiptai_consent_recipient_groq">The photo is sent from this phone to Groq, Inc., to be read by Groq\'s API using your key.</string>
+    <string name="receiptai_consent_body">Schism normally reads bills entirely on your phone — no photo of a receipt ever leaves it. Turning this on changes that for every bill you scan from now on.</string>
+    <string name="receiptai_consent_reversible">On-device reading stays available. You can switch back at any time in this screen, and switching back stops any further uploads.</string>
+    <string name="receiptai_consent_accept">Send my receipts to this service</string>
+    <string name="receiptai_consent_decline">Keep everything on my phone</string>
+
+    <!-- Failures — every one of these falls back to the on-device engine -->
+    <string name="receiptai_fallback">%1$s Reading this bill on your phone instead.</string>
+    <string name="receiptai_fail_offline">No connection.</string>
+    <string name="receiptai_fail_no_key">No API key saved.</string>
+    <string name="receiptai_fail_invalid_key">That API key was rejected.</string>
+    <string name="receiptai_fail_timeout">The service took too long to answer.</string>
+    <string name="receiptai_fail_rate_limited">Cloud scan limit reached — next one available %1$s.</string>
+    <string name="receiptai_fail_generic">The cloud reader couldn\'t read that bill.</string>
+</resources>

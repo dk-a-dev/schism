@@ -9,7 +9,16 @@
   <p class="legal-lede">This notice explains what Schism handles, why it is used, and the controls available to you.</p>
 
   <h2>What stays on your device</h2>
-  <p>Receipt images, receipt OCR text, voice audio and supported transaction SMS are processed on your device. SMS understanding is disabled unless you explicitly opt in and grant Android permission. Raw SMS, receipt images, OCR text, and voice audio are not sent to the Schism service. You review parsed details before choosing whether to create or share an expense.</p>
+  <p>By default, receipt images, receipt OCR text, voice audio and supported transaction SMS are processed on your device and are not sent anywhere. SMS understanding is disabled unless you explicitly opt in and grant Android permission. Raw SMS, OCR text and voice audio are never sent to the Schism service under any setting. You review parsed details before choosing whether to create or share an expense.</p>
+
+  <h2>Cloud receipt reading, if you turn it on</h2>
+  <p>Settings offers an optional cloud reader that is <strong>off unless you choose it</strong>. It exists because a large vision model reads a crumpled or dimly lit bill more accurately than a model small enough to run on a phone. Turning it on means the receipt photo leaves your device. You are told this and must accept it before the first cloud scan, and you can switch back to on-device reading at any time.</p>
+  <p>There are two ways to use it, and they send your photo to different places:</p>
+  <ul>
+    <li><strong>Your own API key.</strong> You paste a Google (Gemini) or Groq key into Settings, and the photo goes from your phone straight to that company under your own account. It does not pass through Schism, and we never see it or your key. Their terms and privacy policy govern what they do with it.</li>
+    <li><strong>Schism's cloud reader.</strong> The photo is sent to the Schism service, which forwards it to Google or Groq for reading and returns the result. Schism does not store the image: it is held in memory for the length of the request and discarded. It is not written to disk, not written to the database, and not recorded in logs. The provider still receives the image, under their terms.</li>
+  </ul>
+  <p>Either way, only the parsed result — merchant, items, amounts — becomes an expense, and only if you choose to save it. Choosing on-device reading, the default, means no receipt image ever leaves your phone.</p>
 
   <h2>What uses the Schism service</h2>
   <p>To provide accounts and shared groups, Schism processes your account name, email address, optional phone number, authentication and session data, group membership, expenses, splits, balances, invitations, item claims, and related activity. Other members of a shared group can see the group information needed to collaborate.</p>

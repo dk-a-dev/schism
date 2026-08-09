@@ -47,12 +47,33 @@ them true without an app update — update the form in the same change.
 Passwords are transmitted for register/login and stored only as a hash — declare as "collected", type
 "User IDs"/account credentials per Play's account-management guidance; never shared.
 
+### Photos — optional cloud receipt reading
+
+| Data type | Collected | Shared | Optional | Purpose |
+| --- | --- | --- | --- | --- |
+| Photos (the single receipt image the user picks) | Yes, only when cloud reading is enabled | Yes, with Google (Gemini) or Groq | **Optional** — off by default | App functionality (reading the bill) |
+
+Declare Photos as **collected and shared, optional**. Two things make this row unavoidable even
+though the default setting uploads nothing:
+
+- **Own-key mode** sends the photo from the device straight to Google or Groq. Play counts an app
+  transmitting user data off the device as collection *and* sharing, regardless of whose credential
+  authorised it.
+- **Schism's cloud reader** sends the photo to our backend, which forwards it to the provider. The
+  image is held only for the length of the request — never written to disk, the database, or logs
+  (`internal/receiptai`, asserted by test) — but it is still transmitted, so it is still declared.
+
+Answer "Is this data processed ephemerally?" **yes** for the Schism path and **no** for own-key,
+which Play cannot express separately; declare the stricter of the two (not ephemeral).
+
 ## NOT collected — stays on device
 
 - SMS message contents and sender IDs. Parsed by `SmsScanWorker`/`SmsReceiver` into a local Room
   database. No API endpoint accepts message text.
-- Receipt photos and the OCR text extracted from them. `ReceiptScanner` runs the PP-OCRv6 ONNX model
-  locally; no upload endpoint exists.
+- Receipt OCR text produced on-device. `ReceiptScanner` runs the PP-OCRv6 ONNX model locally and no
+  endpoint accepts OCR text.
+- Receipt photos, **on the default setting only** — see the Photos row below. On-device reading is
+  the default and uploads nothing; the optional cloud reader changes this and must be declared.
 - Voice audio. `SpeechRecognizer` with `EXTRA_PREFER_OFFLINE`, on-device recognizer when available.
 - Contacts. The app has no contacts permission.
 - Precise location, photos library beyond the single image the user picks with the Android photo

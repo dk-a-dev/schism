@@ -32,6 +32,8 @@ func (h *Handler) monetizationConfig(w http.ResponseWriter, r *http.Request) {
 		AdsEnabled:       h.monetization.AdsEnabled,
 		PurchasesEnabled: h.monetization.PurchasesEnabled,
 		FreeLiveSplits:   store.FreeLiveSplitsPerMonth,
+		// Mirrors exactly the condition the router uses to register /v1/receipts/extract.
+		ReceiptCloudEnabled: h.extractor != nil,
 	})
 }
 
