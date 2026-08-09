@@ -227,6 +227,11 @@ func (s *Store) AuthorizedGroupIDs(ctx context.Context, userID string, requested
 
 // UpdateGroup updates group fields and reconciles participants: those with an ID are updated,
 // those without are inserted, and existing participants absent from the input are deleted.
+// ErrParticipantHasHistory is returned when a group update would remove a participant who appears
+// on an expense. Callers surface it as 409: the request is well-formed, but honouring it would
+// cascade-delete financial records rather than just edit the member list.
+var ErrParticipantHasHistory = errors.New("participant has expense history")
+
 func (s *Store) UpdateGroup(ctx context.Context, gid string, in GroupInput) (*Group, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -283,11 +288,39 @@ func (s *Store) UpdateGroup(ctx context.Context, gid string, in GroupInput) (*Gr
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	// A participant with any financial history is never deleted here.
+	//
+	// expenses.paid_by_id and expense_paid_for.participant_id are both ON DELETE CASCADE, so
+	// removing such a participant does not just drop them from the member list — it deletes every
+	// expense they paid for outright, and silently rewrites the split (and therefore everyone
+	// else's balance) on the expenses that survive.
+	//
+	// Two ways that fires, and the second is the more likely one:
+	//   - any group member could aim it at any other member; the only previous guard was "you
+	//     cannot remove yourself", so this was one PUT away from destroying someone else's ledger.
+	//   - a client that fetched the group before a new member joined and then PUT its stale
+	//     snapshot would remove that member by simple absence — no attacker required.
+	//
+	// Deleting a participant who has never appeared on an expense is still allowed: that is the
+	// "added them by mistake" case, and it destroys nothing.
 	for _, pid := range existing {
-		if !keep[pid] {
-			if _, err := tx.Exec(ctx, `DELETE FROM participants WHERE id=$1`, pid); err != nil {
-				return nil, err
-			}
+		if keep[pid] {
+			continue
+		}
+		var referenced bool
+		if err := tx.QueryRow(ctx, `
+            SELECT EXISTS (
+                SELECT 1 FROM expenses WHERE paid_by_id = $1
+                UNION ALL
+                SELECT 1 FROM expense_paid_for WHERE participant_id = $1
+            )`, pid).Scan(&referenced); err != nil {
+			return nil, err
+		}
+		if referenced {
+			return nil, ErrParticipantHasHistory
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM participants WHERE id=$1`, pid); err != nil {
+			return nil, err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

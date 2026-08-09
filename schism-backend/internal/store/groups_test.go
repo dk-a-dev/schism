@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/schism/schism-backend/internal/id"
 	"github.com/stretchr/testify/require"
@@ -157,4 +158,56 @@ func TestUpdateGroupPreservesExistingParticipantUserLinks(t *testing.T) {
 	}
 	require.Equal(t, creatorID, links[creatorParticipant.ID])
 	require.Equal(t, otherUserID, links[otherParticipant.ID])
+}
+
+// Removing a participant used to cascade-delete every expense they paid for, because
+// expenses.paid_by_id is ON DELETE CASCADE. Any group member could aim that at any other member —
+// the only guard was "you cannot remove yourself" — and a client PUTting a stale snapshot could
+// trigger it with no attacker at all. The ledger is the entire product; it must not be destroyable
+// by a member-list edit.
+func TestUpdateGroupRefusesToRemoveAParticipantWithExpenseHistory(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	g, err := s.CreateGroup(ctx, GroupInput{Name: "Flat", Currency: "$",
+		Participants: []ParticipantInput{{Name: "Alice"}, {Name: "Bob"}}})
+	require.NoError(t, err)
+	alice, bob := g.Participants[0].ID, g.Participants[1].ID
+
+	_, err = s.CreateExpense(ctx, g.ID, ExpenseInput{
+		Title: "Rent", Amount: 40000, ExpenseDate: time.Now(), PaidByID: bob,
+		SplitMode: "EVENLY", AddedBy: alice,
+		PaidFor: []PaidForInput{{ParticipantID: alice, Shares: 1}, {ParticipantID: bob, Shares: 1}},
+	}, id.New())
+	require.NoError(t, err)
+
+	// Alice tries to drop Bob by simply omitting him.
+	_, err = s.UpdateGroup(ctx, g.ID, GroupInput{Name: "Flat", Currency: "$",
+		Participants: []ParticipantInput{{ID: &alice, Name: "Alice"}}})
+	require.ErrorIs(t, err, ErrParticipantHasHistory)
+
+	// Nothing was destroyed and nothing was half-applied: Bob is still a member, and the
+	// expense he paid for still exists with its original amount.
+	after, err := s.GetGroup(ctx, g.ID)
+	require.NoError(t, err)
+	require.Len(t, after.Participants, 2, "Bob must still be a member")
+	expenses, err := s.ListExpenses(ctx, g.ID)
+	require.NoError(t, err)
+	require.Len(t, expenses, 1, "the expense must survive")
+	require.EqualValues(t, 40000, expenses[0].Amount)
+}
+
+// A participant who never appeared on an expense is still removable — that is the "added them by
+// mistake" case, and it destroys nothing.
+func TestUpdateGroupStillRemovesParticipantWithoutHistory(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	g, err := s.CreateGroup(ctx, GroupInput{Name: "Trip", Currency: "$",
+		Participants: []ParticipantInput{{Name: "Alice"}, {Name: "Typo"}}})
+	require.NoError(t, err)
+	alice := g.Participants[0].ID
+
+	updated, err := s.UpdateGroup(ctx, g.ID, GroupInput{Name: "Trip", Currency: "$",
+		Participants: []ParticipantInput{{ID: &alice, Name: "Alice"}}})
+	require.NoError(t, err)
+	require.Len(t, updated.Participants, 1)
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -76,6 +77,11 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := h.store.UpdateGroup(r.Context(), groupID, in)
+	if errors.Is(err, store.ErrParticipantHasHistory) {
+		writeErr(w, http.StatusConflict,
+			"that person is on existing expenses and cannot be removed; settle up and delete their expenses first")
+		return
+	}
 	if err != nil {
 		writeInternalError(w, r, err)
 		return
