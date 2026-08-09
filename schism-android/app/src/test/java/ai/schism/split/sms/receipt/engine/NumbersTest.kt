@@ -9,9 +9,22 @@ class NumbersTest {
         assertNull(parseMinor("9555713188"))
     }
 
-    @Test fun plainNumberRejectsMoreThanTwoDecimalDigits() {
-        assertNull(parseMinor("12.345"))
+    /**
+     * A dot followed by EXACTLY 3 digits (repeated) is thousands grouping, not a fraction — that is
+     * how Indonesia, Germany, Brazil, Spain, Italy and Turkey print an amount, and commas are
+     * already stripped as grouping unconditionally. This token previously parsed as nothing at all,
+     * which made every amount on such a bill invisible to the engine.
+     *
+     * Any other over-long fraction is still rejected: it is neither a money fraction nor a grouping.
+     */
+    @Test fun dotGroupedThousandsParseAndOtherLongFractionsReject() {
+        assertEquals(1234500L, parseMinor("12.345"))
+        assertEquals(159160000L, parseMinor("1.591.600"))
+        assertNull(parseMinor("12.3456"))
+        assertNull(parseMinor("12.34567"))
+        // A genuine 1-2 digit fraction is untouched.
         assertEquals(1234L, parseMinor("12.34"))
+        assertEquals(1200L, parseMinor("12.0"))
     }
 
     @Test fun percentTokenIsNotMoney() {

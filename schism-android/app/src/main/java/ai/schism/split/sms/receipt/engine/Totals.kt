@@ -13,6 +13,24 @@ private val GRAND_TOTAL_RE = Regex(
 // A bare "total" is the most common grand-total label; it's only treated as the grand total AFTER
 // SUBTOTAL_RE has had first refusal in the `when` below, so "Sub Total" never lands here.
 private val BARE_TOTAL_RE = Regex("""\btotal\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * An "inclusive of" qualifier on a total's label: "Total (Incl. GST)", "Total Sales (Inclusive
+ * GST)", "Total Includes GST 6%", "Total Incl. of all taxes". Here the tax word QUALIFIES the
+ * total — it says what the total already contains — rather than naming the row's own kind, so such
+ * a row is the grand total and must be classified before the tax buckets would swallow it. Without
+ * this, every "Total incl. GST" bill reported its payable amount as a tax and produced no total at
+ * all. "Total GST" (no qualifier) is untouched and still reads as a tax row.
+ */
+private val INCLUSIVE_RE = Regex("""\binc(l\w*)?\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * A "Total Item(s): N" line — a COUNT of items, never money. Word order carries the meaning:
+ * "Total Items" counts the items, whereas "Item Total" (the delivery-app subtotal label) is money,
+ * so only the count-first spelling matches here. Consumed and ignored, exactly like "Total Qty",
+ * so a bare "total" keyword in a count line can never be read as the bill's grand total.
+ */
+private val ITEM_COUNT_RE = Regex("""\btotal\s+item\(?s?\)?(?![a-z])""", RegexOption.IGNORE_CASE)
 // Round-off/rounding-adjustment rows ("Round Off -0.40", "Round Amount", "Rounding") are a distinct
 // class from a "Rounded Total" (which is a grand-total variant, matched by GRAND_TOTAL_RE above) —
 // this is the small delta applied to reach that rounded figure, not the figure itself.
@@ -25,6 +43,15 @@ private val DISCOUNT_RE = Regex("""discount|\boff\b|saved""", RegexOption.IGNORE
 // and the bill then failed to reconcile by exactly the service charge.
 private val FEES_RE = Regex("""packaging|platform|\bserv|delivery|charge|\bchg\b|\bfees?\b|\btip\b|gratuity""", RegexOption.IGNORE_CASE)
 private val FREE_RE = Regex("""\bfree\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * Cash-handling rows: the note handed over and the change given back. These are payment mechanics,
+ * not the amount billed — `tendered − change = total` — so on a bill that prints a CHANGE row the
+ * "Paid Amount" is larger than the total and must never restate it. (Without a change row, "Amount
+ * Paid" on a digital bill IS the total, which is why [GRAND_TOTAL_RE] still claims it.)
+ */
+private val TENDERED_RE = Regex("""\bpaid\b|\btender(ed)?\b""", RegexOption.IGNORE_CASE)
+private val CHANGE_RE = Regex("""\bchange\b""", RegexOption.IGNORE_CASE)
 
 // Tax codes are delimited by LETTERS, not by word boundaries: a POS routinely fuses the rate onto
 // the code ("CGST2.5 2.5%", "CGST@ 9.00"), where `\bcgst\b` finds no boundary between "CGST" and
@@ -47,8 +74,13 @@ private val TAX_RE = Regex("""\btax\b""", RegexOption.IGNORE_CASE)
  */
 private val LABEL_NEGATIVE = Regex("""\(\s*-\s*\)|-\s*$""")
 
-/** A bare money-shaped token, used to pull an amount out of a row's joined text as a fallback. */
-private val MONEY_TOKEN = Regex("""[₹$€£]?\s*-?\d[\d,]*(?:\.\d{1,2})?""")
+/**
+ * A bare money-shaped token, used to pull an amount out of a row's joined text as a fallback. The
+ * `(?:\.\d{3})*` run matches dot-grouped thousands ("48.000", "1.591.600" — see [parseMinor]); it
+ * is greedy and tried before the 1-2 digit fraction, so "48.000" yields the whole token instead of
+ * truncating to "48.00" and reporting forty-eight rupiah for forty-eight thousand.
+ */
+private val MONEY_TOKEN = Regex("""[₹$€£]?\s*-?\d[\d,]*(?:\.\d{3})*(?:\.\d{1,2})?""")
 
 /**
  * A generic-keyword breakdown of a bill's totals region, all amounts in Long minor units
@@ -80,27 +112,50 @@ private val INT_TOKEN = Regex("""\d+""")
 /** Which GST family a tax-labelled row belongs to — used to sum CGST+SGST unless a combined GST row wins. */
 private enum class TaxBucket { CGST, SGST, IGST, GST, VAT, GENERIC }
 
-/** True when [text], once currency symbols/commas/whitespace are stripped, is left with only a plain signed decimal — an amount, not a label (so "9%" and "CGST 9%" are rejected, "108.00" is accepted). */
-private fun isPlainAmountText(text: String): Boolean {
-    val stripped = text.trim().replace(Regex("""[₹$€£,\s]"""), "")
-    return stripped.isNotEmpty() && stripped.matches(Regex("""-?\d+(\.\d{1,2})?"""))
-}
+/**
+ * True when [text] is nothing but an amount — never a label that merely contains digits (so "9%",
+ * "CGST 9%", "20:44" and "Bill No 3241" are all rejected, "108.00" and "1.591.600" accepted).
+ *
+ * This is exactly [isMoneyToken]: it had grown a second, weaker copy of the same rules that knew
+ * nothing about dot-grouped thousands or the phone-number guard, so a whole locale's amounts were
+ * not recognised as amounts here. One definition, one behaviour.
+ */
+private fun isPlainAmountText(text: String): Boolean = isMoneyToken(text)
 
 /**
  * The row's amount: the rightmost of its cells that is itself plainly amount-shaped (never a label
  * cell that merely contains digits, e.g. "CGST 9%"), falling back to the last money-shaped token
  * found in the row's joined text when cells aren't cleanly split. A "FREE"/struck-through row (its
  * text contains the word "free") is always 0, regardless of any OCR'd amount.
+ *
+ * `null` means the row states NO amount at all — a bare label or a footnote ("*GST @ 6% included in
+ * total"). That is different from an amount of zero, and the caller must not read such a row as a
+ * restatement of the bill's total.
+ *
+ * A number immediately followed by `%` is a RATE, never an amount — the same rule [parseMinor]
+ * already applies to a whole token, enforced here too because the fallback splits tokens out of the
+ * joined text and would otherwise pull the "6" out of "6%" and call it six rupees.
  */
-private fun rowAmount(row: Row): Long {
+private fun rowAmount(row: Row): Long? {
     if (FREE_RE.containsMatchIn(row.text)) return 0L
     val sorted = row.cells.sortedBy { it.xLeft }
     sorted.filter { isPlainAmountText(it.text) }.lastOrNull()?.let { cell ->
         parseMinor(cell.text)?.let { return it }
     }
-    val fallback = MONEY_TOKEN.findAll(row.text).map { it.value }.lastOrNull()
-    return fallback?.let { parseMinor(it) } ?: 0L
+    val fallback = MONEY_TOKEN.findAll(row.text)
+        .filterNot { m -> row.text.drop(m.range.last + 1).firstOrNull { !it.isWhitespace() } == '%' }
+        .lastOrNull()?.value
+    return fallback?.let { parseMinor(it) }
 }
+
+/**
+ * True when [row] states ONE unambiguous amount — required before a row may establish the bill's
+ * grand total. A tax/GST summary table prints its own footer ("TOTAL:  26.00  1.56": net column,
+ * tax column), and reading the rightmost cell of that row reported the TAX as the amount payable on
+ * every receipt carrying such a summary. A genuine grand-total line prints exactly one figure, so
+ * this bar costs it nothing while rejecting a multi-column table footer.
+ */
+private fun statesOneAmount(row: Row): Boolean = row.cells.count { isPlainAmountText(it.text) } <= 1
 
 /** The row's label — its non-amount cells joined — used for keyword classification; falls back to the full row text if every cell looked like an amount. */
 private fun rowLabel(row: Row): String {
@@ -154,24 +209,57 @@ fun readTotals(regions: Regions): Totals {
     // Charge rows in printed order, each tagged with its tax bucket (null for fee/discount/round-off)
     // so the CGST/SGST rows a combined "GST" row supersedes can be dropped from both at once.
     val charges = mutableListOf<Pair<TaxBucket?, ChargeLine>>()
+    // A change row proves the bill was settled in cash, which makes every "paid"/"tendered" row on
+    // it the note handed over rather than the amount billed. See [TENDERED_RE].
+    val settledInCash = regions.totals.any { CHANGE_RE.containsMatchIn(rowLabel(it)) }
+
+    /**
+     * True when [candidate] may replace an already-established grand total. A bill legitimately
+     * restates its total — upward as charges accumulate, or by a rounding-scale nudge ("Bill Total
+     * 9473.90" then "Bill Total (rounded) 9474.00"), or downward by as much as the discounts and
+     * round-offs printed in between. What it never does is restate it as a much SMALLER figure:
+     * a row further down that carries a total keyword and a small amount is stating a COMPONENT of
+     * the total — a footnote ("Total includes 6% GST  1.44"), a savings summary — not the amount
+     * payable. Tolerance is the codebase's usual 1% floored at 2 major units.
+     */
+    fun restatesTotal(candidate: Long): Boolean {
+        val current = grandTotal ?: return true
+        val reductions = charges.sumOf { minOf(it.second.amountMinor, 0L) } // <= 0
+        return candidate >= current + reductions - maxOf(current / 100, 200L)
+    }
 
     for (row in regions.totals) {
         val label = rowLabel(row).trim()
-        val amount = rowAmount(row)
+        val stated = rowAmount(row)
+        val amount = stated ?: 0L
         val bucket = taxBucketOf(label)
+        // Only a row that actually states one unambiguous POSITIVE figure may (re)state the grand
+        // total — a negative row ("Total Savings -2.98", a card refund) is never the amount payable.
+        val canSetTotal = stated != null && stated > 0 && statesOneAmount(row) && restatesTotal(stated)
 
         when {
             // A "Total Qty: N" line is a units count, not money — captured first so its "Total"
             // keyword never leaks into the grand-total classification below.
             TOTAL_QTY_RE.containsMatchIn(label) ->
                 totalQty = INT_TOKEN.find(row.text)?.value?.toIntOrNull() ?: totalQty
+            // "Total Item(s): 3" is a count of items, not money — consumed so its "Total" keyword
+            // can't be read as the grand total. Not fed to totalQty: it counts item ROWS, while
+            // totalQty cross-checks the sum of item QUANTITIES, which are different numbers.
+            ITEM_COUNT_RE.containsMatchIn(label) -> Unit
             // Sub-total gets first refusal so a bare "Total" (below) never captures "Sub Total".
             SUBTOTAL_RE.containsMatchIn(label) -> if (subtotal == null) subtotal = amount
             ROUND_RE.containsMatchIn(label) -> {
                 val signed = if (LABEL_NEGATIVE.containsMatchIn(label)) -abs(amount) else amount
                 charges += null to ChargeLine(label, signed, ChargeKind.ROUNDOFF)
             }
-            GRAND_TOTAL_RE.containsMatchIn(label) -> grandTotal = amount
+            // Cash tendered — consumed so it can't restate the bill's total. See [TENDERED_RE].
+            settledInCash && TENDERED_RE.containsMatchIn(label) -> Unit
+            GRAND_TOTAL_RE.containsMatchIn(label) && canSetTotal -> grandTotal = amount
+            // A total whose label only says it is INCLUSIVE of a tax is still the grand total —
+            // read before the tax buckets, which would otherwise classify the payable amount as a
+            // tax and leave the bill with no total. See [INCLUSIVE_RE].
+            BARE_TOTAL_RE.containsMatchIn(label) && INCLUSIVE_RE.containsMatchIn(label) && canSetTotal ->
+                grandTotal = amount
             DISCOUNT_RE.containsMatchIn(label) -> charges += null to ChargeLine(label, -abs(amount), ChargeKind.DISCOUNT)
             bucket != null -> {
                 taxByBucket[bucket] = (taxByBucket[bucket] ?: 0L) + amount
@@ -179,7 +267,7 @@ fun readTotals(regions: Regions): Totals {
             }
             FEES_RE.containsMatchIn(label) -> charges += null to ChargeLine(label, amount, ChargeKind.FEE)
             // A plain "Total" line (not sub-total, not a tax/fee/discount) is the grand total.
-            BARE_TOTAL_RE.containsMatchIn(label) -> grandTotal = amount
+            BARE_TOTAL_RE.containsMatchIn(label) && canSetTotal -> grandTotal = amount
         }
     }
 

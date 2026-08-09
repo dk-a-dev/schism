@@ -69,6 +69,10 @@ private val CURRENCY_HINTS = mapOf(
     "$" to "$", "usd" to "$",
     "€" to "€", "eur" to "€",
     "£" to "£", "gbp" to "£",
+    // Listed last so a receipt that also prints a symbol keeps the symbol. "RM" is the ringgit's
+    // ordinary printed form on every Malaysian receipt; without it those bills reported no currency
+    // at all and rendered as bare numbers.
+    "rm" to "RM", "myr" to "RM",
 )
 
 // The grouped alternative REQUIRES a separator (+ not *): with *, a plain "2532" matched only "253"
@@ -98,6 +102,24 @@ private val NON_ITEM = Regex(
 
 // dd/mm/yyyy, dd-mm-yy, yyyy-mm-dd, etc.
 private val DATE_REGEX = Regex("""\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b|\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})\b""")
+
+// Month-name dates: "05 MAR 2018", "5-Mar-18", "1 January 2018" and the month-first spelling
+// "MAR 05, 2018". A great many POS printers date a receipt this way instead of with digit groups,
+// and such a bill previously reported no date at all.
+private val DATE_DAY_MONTH = Regex("""\b(\d{1,2})[-. ]\s*([A-Za-z]{3,9})\.?[-. ,]+(\d{2,4})\b""")
+private val DATE_MONTH_DAY = Regex("""\b([A-Za-z]{3,9})\.?[-. ]+(\d{1,2})(?:st|nd|rd|th)?[-. ,]+(\d{2,4})\b""")
+
+/** Month name (full, 3-letter, or "sept") → 1-12. The whole word must be a month, so an ordinary word that merely starts with "jan"/"mar" is never read as one. */
+private val MONTH_INDEX: Map<String, Int> = buildMap {
+    listOf(
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+    ).forEachIndexed { i, name ->
+        put(name, i + 1)
+        put(name.take(3), i + 1)
+    }
+    put("sept", 9)
+}
 
 /**
  * Parse OCR text lines from a receipt into a [ReceiptDraft]:
@@ -246,17 +268,45 @@ private fun toMinor(raw: String): Long? {
     return Math.round(value * 100)
 }
 
-/** Visible across the module (not just this file) so the geometry-based engine's `parseBill` can reuse the same date detection. */
-internal fun isoDate(line: String): String? {
-    val m = DATE_REGEX.find(line) ?: return null
-    return if (m.groupValues[1].isNotEmpty()) {
-        // yyyy-mm-dd
-        val y = m.groupValues[1]; val mo = m.groupValues[2].padStart(2, '0'); val d = m.groupValues[3].padStart(2, '0')
-        if (mo.toInt() in 1..12 && d.toInt() in 1..31) "$y-$mo-$d" else null
-    } else {
-        // dd-mm-yy(yy)
-        val d = m.groupValues[4].padStart(2, '0'); val mo = m.groupValues[5].padStart(2, '0'); var y = m.groupValues[6]
-        if (y.length == 2) y = "20$y"
-        if (mo.toInt() in 1..12 && d.toInt() in 1..31) "$y-$mo-$d" else null
+/** A valid ISO date, or null when the (year, month, day) triple isn't a real calendar date. A 2-digit year is this century. */
+private fun iso(year: Int, month: Int, day: Int): String? {
+    if (month !in 1..12 || day !in 1..31) return null
+    return "%04d-%02d-%02d".format(if (year < 100) year + 2000 else year, month, day)
+}
+
+/** "05 MAR 2018" / "5-Mar-18" / "MAR 05, 2018", or null when no month NAME is spelled out. */
+private fun monthNameDate(line: String): String? {
+    DATE_DAY_MONTH.find(line)?.let { m ->
+        val month = MONTH_INDEX[m.groupValues[2].lowercase()]
+        if (month != null) return iso(m.groupValues[3].toInt(), month, m.groupValues[1].toInt())
     }
+    DATE_MONTH_DAY.find(line)?.let { m ->
+        val month = MONTH_INDEX[m.groupValues[1].lowercase()]
+        if (month != null) return iso(m.groupValues[3].toInt(), month, m.groupValues[2].toInt())
+    }
+    return null
+}
+
+/**
+ * Visible across the module (not just this file) so the geometry-based engine's `parseBill` can
+ * reuse the same date detection.
+ *
+ * Digit-group dates are read DAY-first (`dd/mm/yyyy`), the spelling most of the world prints. When
+ * that reading is impossible — the middle group is >12, so it cannot be a month — the receipt was
+ * printed MONTH-first (`mm/dd/yyyy`) and is read that way instead of reporting no date at all. A
+ * date where both groups are ≤12 stays day-first: nothing on the line can resolve it, and guessing
+ * the other way round would be no better founded.
+ */
+internal fun isoDate(line: String): String? {
+    DATE_REGEX.find(line)?.let { m ->
+        val g = m.groupValues
+        val parsed = if (g[1].isNotEmpty()) {
+            iso(g[1].toInt(), g[2].toInt(), g[3].toInt()) // yyyy-mm-dd
+        } else {
+            iso(g[6].toInt(), g[5].toInt(), g[4].toInt()) // dd-mm-yy(yy)
+                ?: iso(g[6].toInt(), g[4].toInt(), g[5].toInt()) // …else mm-dd-yy(yy)
+        }
+        if (parsed != null) return parsed
+    }
+    return monthNameDate(line)
 }

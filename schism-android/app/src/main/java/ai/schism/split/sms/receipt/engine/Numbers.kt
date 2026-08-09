@@ -14,9 +14,22 @@ private val PLAIN_NUMBER = Regex("-?\\d+(\\.\\d{1,2})?")
  * trailing dash — as in the Indian rupee notation `149/-` ("₹149 flat") — is dropped, along with the
  * slash, so the token parses as the whole amount it denotes rather than failing to parse at all.
  */
+/**
+ * A number whose EVERY dot-separated group after the first is exactly 3 digits — "48.000",
+ * "1.591.600". A money fraction is 1-2 digits, so this shape can only be thousands grouping, which
+ * is how Indonesia, Germany, Spain, Brazil, Turkey and much of Europe print an amount. Commas are
+ * already stripped as grouping unconditionally; this is the symmetric rule for the dot.
+ *
+ * ponytail: a genuine 3-decimal token (a fuel price like "3.499"/litre) reads as 3499 here. It read
+ * as *nothing at all* before — the whole token was rejected — so a whole locale going from
+ * unparseable to parseable is worth that edge. Tighten with a per-bill separator vote if it bites.
+ */
+private val DOT_GROUPED = Regex("""\d{1,3}(?:\.\d{3})+""")
+
 private fun cleanNumeric(raw: String): String {
     val t = raw.trim().replace('·', '.')
-    val digits = t.filter { it.isDigit() || it == '.' }
+    var digits = t.filter { it.isDigit() || it == '.' }
+    if (DOT_GROUPED.matches(digits)) digits = digits.replace(".", "")
     return if (t.startsWith('-')) "-$digits" else digits
 }
 
