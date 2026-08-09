@@ -31,7 +31,7 @@ func (h *Handler) getGroupDashboard(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, r, err)
 		return
 	}
-	dash := analytics.BuildGroupDashboard(*g, expenses, cats, r.URL.Query().Get("participant"))
+	dash := analytics.BuildGroupDashboard(*g, expenses, cats, participantFromContext(r.Context()))
 	writeJSON(w, http.StatusOK, dash)
 }
 
@@ -43,17 +43,26 @@ func (h *Handler) getPersonalDashboard(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "participant query param is required")
 		return
 	}
-	idsParam := strings.TrimSpace(r.URL.Query().Get("groupIds"))
-	if idsParam == "" {
-		writeJSON(w, http.StatusOK, analytics.BuildPersonalDashboard(identity, nil))
+	var requested []string
+	if idsParam := strings.TrimSpace(r.URL.Query().Get("groupIds")); idsParam != "" {
+		for _, groupID := range strings.Split(idsParam, ",") {
+			groupID = strings.TrimSpace(groupID)
+			if groupID != "" {
+				requested = append(requested, groupID)
+			}
+			if len(requested) == 100 {
+				break
+			}
+		}
+	}
+	user := userFromContext(r.Context())
+	groupIDs, err := h.store.AuthorizedGroupIDs(r.Context(), user.ID, requested)
+	if err != nil {
+		writeInternalError(w, r, err)
 		return
 	}
 	var ges []analytics.GroupExpenses
-	for _, gid := range strings.Split(idsParam, ",") {
-		gid = strings.TrimSpace(gid)
-		if gid == "" {
-			continue
-		}
+	for _, gid := range groupIDs {
 		g, err := h.store.GetGroup(r.Context(), gid)
 		if err != nil {
 			writeInternalError(w, r, err)

@@ -10,7 +10,10 @@ import (
 
 type ctxKey int
 
-const userKey ctxKey = iota
+const (
+	userKey ctxKey = iota
+	participantKey
+)
 
 // userFromContext returns the authenticated caller, or nil when the request carried no valid token.
 func userFromContext(ctx context.Context) *store.User {
@@ -30,8 +33,7 @@ func rawTokenFromRequest(r *http.Request) string {
 }
 
 // withUser resolves an optional `Authorization: Bearer <token>` to a user and stashes it in the
-// request context. It never rejects: groups/expenses stay reachable by id (the invite model), so an
-// absent or invalid token simply leaves no user in context. Endpoints that need identity check for it.
+// request context. It leaves rejection to requireUser so public auth routes can use separate scopes.
 func (h *Handler) withUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token := rawTokenFromRequest(r); token != "" {

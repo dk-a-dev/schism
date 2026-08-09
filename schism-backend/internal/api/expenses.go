@@ -25,6 +25,33 @@ func toSplitExpense(in store.ExpenseInput) split.Expense {
 	return split.Expense{Amount: in.Amount, PaidByID: in.PaidByID, PaidFor: pf, SplitMode: split.SplitMode(in.SplitMode)}
 }
 
+func (h *Handler) validateExpenseParticipants(w http.ResponseWriter, r *http.Request, groupID string, in store.ExpenseInput) bool {
+	group, err := h.store.GetGroup(r.Context(), groupID)
+	if err != nil {
+		writeInternalError(w, r, err)
+		return false
+	}
+	if group == nil {
+		writeErr(w, http.StatusNotFound, "group not found")
+		return false
+	}
+	allowed := make(map[string]struct{}, len(group.Participants))
+	for _, participant := range group.Participants {
+		allowed[participant.ID] = struct{}{}
+	}
+	if _, ok := allowed[in.PaidByID]; !ok {
+		writeErr(w, http.StatusBadRequest, "paidById must belong to this group")
+		return false
+	}
+	for _, share := range in.PaidFor {
+		if _, ok := allowed[share.ParticipantID]; !ok {
+			writeErr(w, http.StatusBadRequest, "all paidFor participants must belong to this group")
+			return false
+		}
+	}
+	return true
+}
+
 func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	var d expenseFormDTO
@@ -32,17 +59,12 @@ func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := d.toInput()
+	in.AddedBy = participantFromContext(r.Context())
 	if err := split.ValidateExpense(toSplitExpense(in)); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	g, err := h.store.GetGroup(r.Context(), groupID)
-	if err != nil {
-		writeInternalError(w, r, err)
-		return
-	}
-	if g == nil {
-		writeErr(w, http.StatusNotFound, "group not found")
+	if !h.validateExpenseParticipants(w, r, groupID, in) {
 		return
 	}
 	e, err := h.store.CreateExpense(r.Context(), groupID, in, r.Header.Get("Idempotency-Key"))
@@ -85,8 +107,12 @@ func (h *Handler) updateExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := d.toInput()
+	in.AddedBy = participantFromContext(r.Context())
 	if err := split.ValidateExpense(toSplitExpense(in)); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !h.validateExpenseParticipants(w, r, groupID, in) {
 		return
 	}
 	e, err := h.store.UpdateExpense(r.Context(), groupID, expenseID, in)
@@ -125,6 +151,6 @@ func (h *Handler) deleteExpense(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "expense not found")
 		return
 	}
-	_ = h.store.LogActivity(r.Context(), groupID, "DELETE_EXPENSE", actor(e.AddedBy), &expenseID, e.Title)
+	_ = h.store.LogActivity(r.Context(), groupID, "DELETE_EXPENSE", actor(participantFromContext(r.Context())), &expenseID, e.Title)
 	w.WriteHeader(http.StatusNoContent)
 }

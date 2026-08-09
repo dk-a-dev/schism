@@ -1,27 +1,34 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
 
+	"github.com/schism/schism-backend/internal/id"
 	"github.com/schism/schism-backend/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
-func createGroupFixture(t *testing.T, srvURL string) store.Group {
-	body := `{"name":"Trip","currency":"$","participants":[{"name":"A"},{"name":"B"}]}`
-	resp, _ := http.Post(srvURL+"/v1/groups", "application/json", bytes.NewBufferString(body))
+type groupFixture struct {
+	store.Group
+	Token string
+}
+
+func createGroupFixture(t *testing.T, srvURL string) groupFixture {
+	user, token := registerUserToken(t, srvURL, "A", "fixture-"+id.New()+"@example.com", "")
+	body := fmt.Sprintf(`{"name":"Trip","currency":"$","participants":[{"name":"A","userId":%q},{"name":"B"}]}`, user.ID)
+	resp := authRequest(t, http.MethodPost, srvURL+"/v1/groups", token, body)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var created struct {
 		GroupID string `json:"groupId"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&created)
-	resp2, _ := http.Get(srvURL + "/v1/groups/" + created.GroupID)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	resp2 := authRequest(t, http.MethodGet, srvURL+"/v1/groups/"+created.GroupID, token, "")
 	var g store.Group
-	_ = json.NewDecoder(resp2.Body).Decode(&g)
-	return g
+	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&g))
+	return groupFixture{Group: g, Token: token}
 }
 
 func TestExpenseAndBalancesHTTP(t *testing.T) {
@@ -31,11 +38,10 @@ func TestExpenseAndBalancesHTTP(t *testing.T) {
 
 	body := fmt.Sprintf(`{"title":"Dinner","amount":1000,"paidById":%q,"splitMode":"EVENLY",
 	  "paidFor":[{"participantId":%q,"shares":100},{"participantId":%q,"shares":100}]}`, a, a, b)
-	resp, err := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
-	require.NoError(t, err)
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/expenses", g.Token, body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	resp2, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/balances")
+	resp2 := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/balances", g.Token, "")
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	var out struct {
 		Balances map[string]struct {
@@ -62,18 +68,15 @@ func TestExpenseActivityData(t *testing.T) {
 
 	body := fmt.Sprintf(`{"title":"Museum tickets","amount":1000,"paidById":%q,"splitMode":"EVENLY",
 	  "paidFor":[{"participantId":%q,"shares":100},{"participantId":%q,"shares":100}]}`, a, a, b)
-	resp, err := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
-	require.NoError(t, err)
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/expenses", g.Token, body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var created store.Expense
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1/groups/"+g.ID+"/expenses/"+created.ID, nil)
-	delResp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
+	delResp := authRequest(t, http.MethodDelete, srv.URL+"/v1/groups/"+g.ID+"/expenses/"+created.ID, g.Token, "")
 	require.Equal(t, http.StatusNoContent, delResp.StatusCode)
 
-	actResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	actResp := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/activities", g.Token, "")
 	require.Equal(t, http.StatusOK, actResp.StatusCode)
 	var acts []store.Activity
 	require.NoError(t, json.NewDecoder(actResp.Body).Decode(&acts))
@@ -93,21 +96,20 @@ func TestCreateExpenseAddedBy(t *testing.T) {
 
 	body := fmt.Sprintf(`{"title":"Dinner","amount":1000,"paidById":%q,"splitMode":"EVENLY","addedBy":%q,
 	  "paidFor":[{"participantId":%q,"shares":100},{"participantId":%q,"shares":100}]}`, a, a, a, b)
-	resp, err := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
-	require.NoError(t, err)
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/expenses", g.Token, body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var created store.Expense
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 	require.Equal(t, a, created.AddedBy)
 
-	getResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/expenses/" + created.ID)
+	getResp := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/expenses/"+created.ID, g.Token, "")
 	require.Equal(t, http.StatusOK, getResp.StatusCode)
 	var fetched store.Expense
 	require.NoError(t, json.NewDecoder(getResp.Body).Decode(&fetched))
 	require.Equal(t, a, fetched.AddedBy)
 
 	// The CREATE_EXPENSE activity's actor is the addedBy participant.
-	actResp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	actResp := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/activities", g.Token, "")
 	require.Equal(t, http.StatusOK, actResp.StatusCode)
 	var activities []store.Activity
 	require.NoError(t, json.NewDecoder(actResp.Body).Decode(&activities))
@@ -129,6 +131,6 @@ func TestCreateExpenseValidation(t *testing.T) {
 	a := g.Participants[0].ID
 	body := fmt.Sprintf(`{"title":"Bad","amount":0,"paidById":%q,"splitMode":"EVENLY",
 	  "paidFor":[{"participantId":%q,"shares":100}]}`, a, a)
-	resp, _ := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/expenses", g.Token, body)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

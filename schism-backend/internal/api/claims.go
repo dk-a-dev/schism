@@ -30,21 +30,10 @@ type claimSessionResponse struct {
 // It writes the response and returns ("", false) when the caller is unauthenticated (401) or not a
 // member of the group (403). A caller may act only as their own participant.
 func (h *Handler) callerParticipant(w http.ResponseWriter, r *http.Request, groupID string) (string, bool) {
-	u := userFromContext(r.Context())
-	if u == nil {
-		writeErr(w, http.StatusUnauthorized, "unauthorized")
-		return "", false
+	if participantID := participantFromContext(r.Context()); participantID != "" {
+		return participantID, true
 	}
-	pid, err := h.store.ParticipantForUserInGroup(r.Context(), u.ID, groupID)
-	if err != nil {
-		writeInternalError(w, r, err)
-		return "", false
-	}
-	if pid == "" {
-		writeErr(w, http.StatusForbidden, "not a member of this group")
-		return "", false
-	}
-	return pid, true
+	return h.memberParticipant(w, r, groupID)
 }
 
 func allParticipantIDs(g *store.Group) []string {

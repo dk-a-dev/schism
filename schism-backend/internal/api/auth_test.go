@@ -56,25 +56,28 @@ func TestUsersMe(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, bad.StatusCode)
 }
 
-// TestParticipantUserIDSanitized proves identity is enforced server-side: a participant userId is
-// kept only when it matches the authenticated caller; any other id (or no auth) comes back null.
-func TestParticipantUserIDSanitized(t *testing.T) {
+// TestGroupCreatorIdentityIsServerOwned proves a client cannot link another user and that
+// group creation always links exactly one participant to the authenticated creator.
+func TestGroupCreatorIdentityIsServerOwned(t *testing.T) {
 	srv := newTestServer(t)
 	u, token := registerUserToken(t, srv.URL, "Grace", "grace-"+id.New()+"@example.com", "777")
 	other := registerUser(t, srv.URL, "Heidi", "heidi-"+id.New()+"@example.com", "888")
 
-	// Case 1: linking to SOMEONE ELSE's id while authenticated → sanitized to null.
+	// Linking to SOMEONE ELSE's id is ignored; the authenticated caller owns the first participant.
 	body1 := fmt.Sprintf(`{"name":"Trip","currency":"$","currencyCode":"USD",
 	          "participants":[{"name":"Grace","userId":%q}]}`, other.ID)
-	require.Nil(t, createAndFetchUserID(t, srv.URL, token, body1, "Grace"))
+	got := createAndFetchUserID(t, srv.URL, token, body1, "Grace")
+	require.NotNil(t, got)
+	require.Equal(t, u.ID, *got)
 
-	// Case 2: linking to the caller's OWN id with no auth → sanitized to null.
+	// Group creation without a valid session is rejected.
 	body2 := fmt.Sprintf(`{"name":"Trip","currency":"$","currencyCode":"USD",
 	          "participants":[{"name":"Grace","userId":%q}]}`, u.ID)
-	require.Nil(t, createAndFetchUserID(t, srv.URL, "", body2, "Grace"))
+	unauthenticated := authRequest(t, http.MethodPost, srv.URL+"/v1/groups", "", body2)
+	require.Equal(t, http.StatusUnauthorized, unauthenticated.StatusCode)
 
-	// Case 3: linking to the caller's OWN id WHILE authenticated → preserved.
-	got := createAndFetchUserID(t, srv.URL, token, body2, "Grace")
+	// Linking the caller's own id is preserved.
+	got = createAndFetchUserID(t, srv.URL, token, body2, "Grace")
 	require.NotNil(t, got)
 	require.Equal(t, u.ID, *got)
 }
@@ -253,8 +256,7 @@ func createAndFetchUserID(t *testing.T, srv, token, body, name string) *string {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 
-	resp2, err := http.Get(srv + "/v1/groups/" + created.GroupID)
-	require.NoError(t, err)
+	resp2 := authRequest(t, http.MethodGet, srv+"/v1/groups/"+created.GroupID, token, "")
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	var g store.Group
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&g))

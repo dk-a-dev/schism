@@ -9,21 +9,6 @@ import (
 	"github.com/schism/schism-backend/internal/store"
 )
 
-// sanitizeParticipantUserIDs enforces identity: a participant may be linked to a user_id only by that
-// user themselves. Any UserID that doesn't match the authenticated caller is dropped (set to nil),
-// and when the caller is unauthenticated (self == nil) ALL links are dropped. This is the point of
-// the token — groups stay reachable by id, but you can't spoof "this participant is you".
-func sanitizeParticipantUserIDs(parts []store.ParticipantInput, self *store.User) {
-	for i := range parts {
-		if parts[i].UserID == nil {
-			continue
-		}
-		if self == nil || *parts[i].UserID != self.ID {
-			parts[i].UserID = nil
-		}
-	}
-}
-
 func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	var d groupFormDTO
 	if !decodeJSON(w, r, &d) {
@@ -34,13 +19,14 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := d.toInput()
-	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
-	g, err := h.store.CreateGroup(r.Context(), in)
+	user := userFromContext(r.Context())
+	g, err := h.store.CreateGroupForUser(r.Context(), in, user.ID)
 	if err != nil {
 		writeInternalError(w, r, err)
 		return
 	}
-	_ = h.store.LogActivity(r.Context(), g.ID, "GROUP_CREATED", nil, nil, g.Name)
+	creator, _ := h.store.ParticipantForUserInGroup(r.Context(), user.ID, g.ID)
+	_ = h.store.LogActivity(r.Context(), g.ID, "GROUP_CREATED", actor(creator), nil, g.Name)
 	writeJSON(w, http.StatusCreated, map[string]string{"groupId": g.ID})
 }
 
@@ -68,7 +54,22 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := d.toInput()
-	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
+	if len(strings.TrimSpace(d.Name)) < 2 || len(d.Participants) < 1 {
+		writeErr(w, http.StatusBadRequest, "name>=2 chars and >=1 participant required")
+		return
+	}
+	actorID := participantFromContext(r.Context())
+	callerPresent := false
+	for _, participant := range in.Participants {
+		if participant.ID != nil && *participant.ID == actorID {
+			callerPresent = true
+			break
+		}
+	}
+	if !callerPresent {
+		writeErr(w, http.StatusBadRequest, "cannot remove your own participant")
+		return
+	}
 	before, err := h.store.GetGroup(r.Context(), groupID)
 	if err != nil {
 		writeInternalError(w, r, err)
@@ -83,19 +84,19 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "group not found")
 		return
 	}
-	h.logGroupUpdateActivity(r.Context(), before, g)
+	h.logGroupUpdateActivity(r.Context(), before, g, actorID)
 	writeJSON(w, http.StatusOK, g)
 }
 
 // logGroupUpdateActivity diffs the participant set (before -> after) and logs one MEMBER_ADDED or
 // MEMBER_REMOVED activity per participant that appeared or disappeared, plus a GROUP_RENAMED activity
 // when the group's name changed. Best-effort: never fails the request.
-func (h *Handler) logGroupUpdateActivity(ctx context.Context, before, after *store.Group) {
+func (h *Handler) logGroupUpdateActivity(ctx context.Context, before, after *store.Group, actorID string) {
 	if before == nil || after == nil {
 		return
 	}
 	if before.Name != after.Name {
-		_ = h.store.LogActivity(ctx, after.ID, "GROUP_RENAMED", nil, nil, after.Name)
+		_ = h.store.LogActivity(ctx, after.ID, "GROUP_RENAMED", actor(actorID), nil, after.Name)
 	}
 	oldByID := make(map[string]string, len(before.Participants))
 	for _, p := range before.Participants {
@@ -107,23 +108,35 @@ func (h *Handler) logGroupUpdateActivity(ctx context.Context, before, after *sto
 	}
 	for id, name := range newByID {
 		if _, ok := oldByID[id]; !ok {
-			_ = h.store.LogActivity(ctx, after.ID, "MEMBER_ADDED", nil, nil, name)
+			_ = h.store.LogActivity(ctx, after.ID, "MEMBER_ADDED", actor(actorID), nil, name)
 		}
 	}
 	for id, name := range oldByID {
 		if _, ok := newByID[id]; !ok {
-			_ = h.store.LogActivity(ctx, after.ID, "MEMBER_REMOVED", nil, nil, name)
+			_ = h.store.LogActivity(ctx, after.ID, "MEMBER_REMOVED", actor(actorID), nil, name)
 		}
 	}
 }
 
 func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request) {
-	idsParam := r.URL.Query().Get("ids")
-	if idsParam == "" {
-		writeJSON(w, http.StatusOK, []any{})
+	var requested []string
+	if idsParam := strings.TrimSpace(r.URL.Query().Get("ids")); idsParam != "" {
+		for _, groupID := range strings.Split(idsParam, ",") {
+			groupID = strings.TrimSpace(groupID)
+			if groupID != "" {
+				requested = append(requested, groupID)
+			}
+			if len(requested) == 100 {
+				break
+			}
+		}
+	}
+	user := userFromContext(r.Context())
+	ids, err := h.store.AuthorizedGroupIDs(r.Context(), user.ID, requested)
+	if err != nil {
+		writeInternalError(w, r, err)
 		return
 	}
-	ids := strings.Split(idsParam, ",")
 	groups, err := h.store.ListGroups(r.Context(), ids)
 	if err != nil {
 		writeInternalError(w, r, err)

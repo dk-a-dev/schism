@@ -26,7 +26,7 @@ func claimFixture(t *testing.T, srvURL string) (store.Group, string, string) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 
-	resp2, _ := http.Get(srvURL + "/v1/groups/" + created.GroupID)
+	resp2 := authRequest(t, http.MethodGet, srvURL+"/v1/groups/"+created.GroupID, token, "")
 	var g store.Group
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&g))
 
@@ -116,10 +116,9 @@ func TestClaimSessionAPIFlow(t *testing.T) {
 
 // activitiesFor fetches a group's activity feed keyed by activity type (last one wins for repeated
 // types, which is fine for these tests since they assert on a single occurrence per type).
-func activitiesFor(t *testing.T, srvURL, groupID string) map[string]store.Activity {
+func activitiesFor(t *testing.T, srvURL, groupID, token string) map[string]store.Activity {
 	t.Helper()
-	resp, err := http.Get(srvURL + "/v1/groups/" + groupID + "/activities")
-	require.NoError(t, err)
+	resp := authRequest(t, http.MethodGet, srvURL+"/v1/groups/"+groupID+"/activities", token, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var acts []store.Activity
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&acts))
@@ -142,7 +141,7 @@ func TestClaimSessionActivityFullFlow(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
 
-	byType := activitiesFor(t, srv.URL, g.ID)
+	byType := activitiesFor(t, srv.URL, g.ID, token)
 	require.Contains(t, byType, "CLAIM_SESSION_CREATED")
 	require.Equal(t, "Dinner", byType["CLAIM_SESSION_CREATED"].Data)
 	require.NotNil(t, byType["CLAIM_SESSION_CREATED"].ParticipantID)
@@ -152,7 +151,7 @@ func TestClaimSessionActivityFullFlow(t *testing.T) {
 	putResp := authRequest(t, http.MethodPut, srv.URL+"/v1/claim-sessions/"+session.ID+"/claims", token, putBody)
 	require.Equal(t, http.StatusOK, putResp.StatusCode)
 
-	byType = activitiesFor(t, srv.URL, g.ID)
+	byType = activitiesFor(t, srv.URL, g.ID, token)
 	require.Contains(t, byType, "CLAIM_SUBMITTED")
 	require.Contains(t, byType["CLAIM_SUBMITTED"].Data, "1 item")
 
@@ -165,7 +164,7 @@ func TestClaimSessionActivityFullFlow(t *testing.T) {
 	require.NoError(t, json.NewDecoder(finResp.Body).Decode(&fin))
 	require.NotEmpty(t, fin.ExpenseID)
 
-	byType = activitiesFor(t, srv.URL, g.ID)
+	byType = activitiesFor(t, srv.URL, g.ID, token)
 	require.Contains(t, byType, "CLAIM_SESSION_FINALIZED")
 	require.Equal(t, "Dinner", byType["CLAIM_SESSION_FINALIZED"].Data)
 	require.Contains(t, byType, "CREATE_EXPENSE")
@@ -175,7 +174,7 @@ func TestClaimSessionActivityFullFlow(t *testing.T) {
 	// Re-finalizing (idempotent replay) must not log a second FINALIZED/CREATE_EXPENSE pair.
 	finResp2 := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/finalize", token, finBody)
 	require.Equal(t, http.StatusOK, finResp2.StatusCode)
-	resp2, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	resp2 := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/activities", token, "")
 	var acts2 []store.Activity
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&acts2))
 	count := 0
@@ -203,7 +202,7 @@ func TestEditClaimItemsLogsActivity(t *testing.T) {
 	editResp := authRequest(t, http.MethodPatch, srv.URL+"/v1/claim-sessions/"+session.ID+"/items", token, editBody)
 	require.Equal(t, http.StatusOK, editResp.StatusCode)
 
-	byType := activitiesFor(t, srv.URL, g.ID)
+	byType := activitiesFor(t, srv.URL, g.ID, token)
 	require.Contains(t, byType, "CLAIM_ITEMS_EDITED")
 	require.Contains(t, byType["CLAIM_ITEMS_EDITED"].Data, "2 items")
 }
@@ -223,14 +222,14 @@ func TestCancelClaimSessionLogsActivityOnce(t *testing.T) {
 	cancelResp := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/cancel", token, "")
 	require.Equal(t, http.StatusNoContent, cancelResp.StatusCode)
 
-	byType := activitiesFor(t, srv.URL, g.ID)
+	byType := activitiesFor(t, srv.URL, g.ID, token)
 	require.Contains(t, byType, "CLAIM_SESSION_CANCELLED")
 	require.Equal(t, "Dinner", byType["CLAIM_SESSION_CANCELLED"].Data)
 
 	// Cancelling again is a store-level no-op; it must not log a second activity.
 	cancelResp2 := authRequest(t, http.MethodPost, srv.URL+"/v1/claim-sessions/"+session.ID+"/cancel", token, "")
 	require.Equal(t, http.StatusNoContent, cancelResp2.StatusCode)
-	resp2, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/activities")
+	resp2 := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/activities", token, "")
 	var acts2 []store.Activity
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&acts2))
 	count := 0

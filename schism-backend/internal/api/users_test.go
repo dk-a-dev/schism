@@ -35,8 +35,7 @@ func TestGroupParticipantUserID(t *testing.T) {
 	srv := newTestServer(t)
 	u, token := registerUserToken(t, srv.URL, "Carol", "carol-"+id.New()+"@example.com", "444")
 
-	// The caller must authenticate to link a participant to their own user id; without the token the
-	// server sanitizes it away (see TestParticipantUserIDSanitized).
+	// The caller must authenticate; the backend links exactly their own participant.
 	body := fmt.Sprintf(`{"name":"Trip","currency":"$","currencyCode":"USD",
 	          "participants":[{"name":"Carol","userId":%q},{"name":"Dave"}]}`, u.ID)
 	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups", token, body)
@@ -46,8 +45,7 @@ func TestGroupParticipantUserID(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 
-	resp2, err := http.Get(srv.URL + "/v1/groups/" + created.GroupID)
-	require.NoError(t, err)
+	resp2 := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+created.GroupID, token, "")
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	var g store.Group
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&g))

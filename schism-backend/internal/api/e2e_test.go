@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,8 +16,7 @@ func TestEndToEndFlow(t *testing.T) {
 	a, b := g.Participants[0].ID, g.Participants[1].ID
 
 	mk := func(body string) {
-		resp, err := http.Post(srv.URL+"/v1/groups/"+g.ID+"/expenses", "application/json", bytes.NewBufferString(body))
-		require.NoError(t, err)
+		resp := authRequest(t, http.MethodPost, srv.URL+"/v1/groups/"+g.ID+"/expenses", g.Token, body)
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
 	}
 	mk(fmt.Sprintf(`{"title":"A pays","amount":3000,"paidById":%q,"splitMode":"BY_PERCENTAGE",
@@ -26,7 +24,7 @@ func TestEndToEndFlow(t *testing.T) {
 	mk(fmt.Sprintf(`{"title":"B pays","amount":1000,"paidById":%q,"splitMode":"EVENLY",
 	  "paidFor":[{"participantId":%q,"shares":100},{"participantId":%q,"shares":100}]}`, b, a, b))
 
-	resp, _ := http.Get(srv.URL + "/v1/groups/" + g.ID + "/balances")
+	resp := authRequest(t, http.MethodGet, srv.URL+"/v1/groups/"+g.ID+"/balances", g.Token, "")
 	var out struct {
 		Balances map[string]struct{ Total int64 } `json:"balances"`
 	}

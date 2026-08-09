@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -47,6 +48,7 @@ func normalizePhonePtr(p *string) any {
 	}
 	return n
 }
+
 type GroupInput struct {
 	Name         string
 	Information  string
@@ -71,6 +73,32 @@ type Group struct {
 }
 
 func (s *Store) CreateGroup(ctx context.Context, in GroupInput) (Group, error) {
+	return s.createGroup(ctx, in)
+}
+
+// CreateGroupForUser creates a group with exactly one participant linked to the
+// authenticated creator. A matching participant supplied by the client is preferred;
+// otherwise the first participant becomes the creator. All other user links are ignored.
+func (s *Store) CreateGroupForUser(ctx context.Context, in GroupInput, userID string) (Group, error) {
+	parts := append([]ParticipantInput(nil), in.Participants...)
+	creator := 0
+	for i, p := range parts {
+		if p.UserID != nil && *p.UserID == userID {
+			creator = i
+			break
+		}
+	}
+	for i := range parts {
+		parts[i].UserID = nil
+	}
+	if len(parts) > 0 {
+		parts[creator].UserID = &userID
+	}
+	in.Participants = parts
+	return s.createGroup(ctx, in)
+}
+
+func (s *Store) createGroup(ctx context.Context, in GroupInput) (Group, error) {
 	gid := id.New()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -153,6 +181,50 @@ func (s *Store) ListGroups(ctx context.Context, ids []string) ([]Group, error) {
 	return out, nil
 }
 
+// AuthorizedGroupIDs returns only groups in which userID has a linked participant.
+// When requested is non-empty its order is preserved and duplicates are removed.
+func (s *Store) AuthorizedGroupIDs(ctx context.Context, userID string, requested []string) ([]string, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT group_id FROM participants WHERE user_id=$1 ORDER BY group_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	membership := make(map[string]struct{})
+	for rows.Next() {
+		var groupID string
+		if err := rows.Scan(&groupID); err != nil {
+			return nil, err
+		}
+		membership[groupID] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(requested) == 0 {
+		out := make([]string, 0, len(membership))
+		for groupID := range membership {
+			out = append(out, groupID)
+		}
+		// The query is ordered, but maps are not. Re-querying is unnecessary; the
+		// public API only needs stable output, so sort the small membership list.
+		slices.Sort(out)
+		return out, nil
+	}
+	out := make([]string, 0, len(requested))
+	seen := make(map[string]struct{}, len(requested))
+	for _, groupID := range requested {
+		if _, duplicate := seen[groupID]; duplicate {
+			continue
+		}
+		seen[groupID] = struct{}{}
+		if _, ok := membership[groupID]; ok {
+			out = append(out, groupID)
+		}
+	}
+	return out, nil
+}
+
 // UpdateGroup updates group fields and reconciles participants: those with an ID are updated,
 // those without are inserted, and existing participants absent from the input are deleted.
 func (s *Store) UpdateGroup(ctx context.Context, gid string, in GroupInput) (*Group, error) {
@@ -178,17 +250,17 @@ func (s *Store) UpdateGroup(ctx context.Context, gid string, in GroupInput) (*Gr
 			keep[*p.ID] = true
 			if _, err := tx.Exec(ctx,
 				// COALESCE keeps an existing phone when an edit doesn't resend it.
-				`UPDATE participants SET name=$2, user_id=$4, phone=COALESCE($5, phone)
+				`UPDATE participants SET name=$2, phone=COALESCE($4, phone)
 				 WHERE id=$1 AND group_id=$3`,
-				*p.ID, p.Name, gid, nullifyPtr(p.UserID), normalizePhonePtr(p.Phone)); err != nil {
+				*p.ID, p.Name, gid, normalizePhonePtr(p.Phone)); err != nil {
 				return nil, err
 			}
 		} else {
 			newID := id.New()
 			keep[newID] = true
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO participants (id, group_id, name, user_id, phone) VALUES ($1,$2,$3,$4,$5)`,
-				newID, gid, p.Name, nullifyPtr(p.UserID), normalizePhonePtr(p.Phone)); err != nil {
+				`INSERT INTO participants (id, group_id, name, user_id, phone) VALUES ($1,$2,$3,NULL,$4)`,
+				newID, gid, p.Name, normalizePhonePtr(p.Phone)); err != nil {
 				return nil, err
 			}
 		}
