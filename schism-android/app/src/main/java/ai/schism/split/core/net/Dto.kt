@@ -5,6 +5,22 @@ import kotlinx.serialization.Serializable
 // DTOs mirror schism-backend/docs/api-contract.md (camelCase JSON, money as Long minor units).
 
 @Serializable
+data class OcrArtifactDto(
+    val name: String,
+    val bytes: Long,
+    val sha256: String,
+    val downloadPath: String,
+)
+
+@Serializable
+data class OcrManifestDto(
+    val version: String,
+    val minimumAppVersionCode: Int,
+    val totalBytes: Long,
+    val artifacts: List<OcrArtifactDto>,
+)
+
+@Serializable
 data class ParticipantDto(
     val id: String = "",
     val groupId: String = "",

@@ -13,6 +13,9 @@ import retrofit2.http.Query
 
 interface ApiService {
 
+    @GET("v1/models/ocr/manifest")
+    suspend fun ocrModelManifest(): OcrManifestDto
+
     @POST("v1/users")
     suspend fun registerUser(@Body body: UserRequest): UserDto
 
