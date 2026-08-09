@@ -29,12 +29,12 @@ val hasReleaseSigning = keystoreProps.getProperty("storeFile") != null
 
 android {
     namespace = "ai.schism.split"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ai.schism.split"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 10300
         versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

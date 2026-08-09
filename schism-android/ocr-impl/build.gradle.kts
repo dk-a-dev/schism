@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "ai.schism.split.ocr.impl"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
