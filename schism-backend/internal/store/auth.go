@@ -31,9 +31,7 @@ func newToken() (raw, hash string, err error) {
 
 // RegisterUser creates a password account and mints a bearer token. Email must be unique among
 // password accounts. The raw token is returned once; only its hash is stored (both on the legacy
-// users.token_hash column and as this session's row in tokens). When a phone is provided,
-// participants added earlier by friends under that number are claimed for this account, so their
-// groups show up the moment the user joins the platform.
+// users.token_hash column and as this session's row in tokens).
 func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone string) (User, string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	name = strings.TrimSpace(name)
@@ -73,18 +71,7 @@ func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone s
 	if err := tx.Commit(ctx); err != nil {
 		return User{}, "", err
 	}
-	_ = s.ClaimParticipantsByPhone(ctx, u.ID, normPhone)
 	return u, raw, nil
-}
-
-// ClaimParticipantsByPhone links unclaimed participants carrying [phone] to [userID].
-func (s *Store) ClaimParticipantsByPhone(ctx context.Context, userID, phone string) error {
-	if phone == "" {
-		return nil
-	}
-	_, err := s.pool.Exec(ctx,
-		`UPDATE participants SET user_id = $1 WHERE phone = $2 AND user_id IS NULL`, userID, phone)
-	return err
 }
 
 // GroupIDsForUser lists the ids of every group where a participant is linked to [userID].
@@ -133,7 +120,5 @@ func (s *Store) LoginUser(ctx context.Context, email, password string) (User, st
 	if err := s.insertToken(ctx, s.pool, u.ID, tokenHash); err != nil {
 		return User{}, "", err
 	}
-	// Claim any participants friends added under this phone since the last session.
-	_ = s.ClaimParticipantsByPhone(ctx, u.ID, NormalizePhone(u.Phone))
 	return u, raw, nil
 }

@@ -39,6 +39,7 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 
 	// Public invite landing (https so messengers linkify it) → bounces into the app.
 	r.Get("/g/{groupID}", h.inviteLanding)
+	r.Get("/i/{token}", h.participantInviteLanding)
 
 	// Public claim-session landing → bounces into the app's claim screen.
 	r.Get("/c/{sid}", h.claimLanding)
@@ -78,8 +79,11 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 						r.Delete("/{expenseID}", h.deleteExpense)
 					})
 					r.Post("/claim-sessions", h.createClaimSession)
+					r.Post("/participants/{participantID}/invite", h.createParticipantInvite)
 				})
 			})
+			r.Get("/invites/{token}", h.previewParticipantInvite)
+			r.Post("/invites/{token}/redeem", h.redeemParticipantInvite)
 			r.Route("/claim-sessions/{sid}", func(r chi.Router) {
 				r.Get("/", h.getClaimSession)
 				r.Put("/claims", h.putClaims)
