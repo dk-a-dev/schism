@@ -1,11 +1,14 @@
 package ai.schism.split.core.settings
 
 import android.content.Context
+import ai.schism.split.sms.ingest.SmsIngestWorker
+import ai.schism.split.sms.settings.SmsImportPreference
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -25,6 +28,16 @@ class SettingsRepository @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val ds = context.dataStore
+    private val appContext = context.applicationContext
+    private val smsPreference = SmsImportPreference(appContext)
+
+    /** Optional automatic bank-message import. Disabled on every fresh install. */
+    val smsImportEnabled: Flow<Boolean> = smsPreference.enabled
+
+    fun setSmsImportEnabled(enabled: Boolean) {
+        smsPreference.setEnabled(enabled)
+        if (!enabled) WorkManager.getInstance(appContext).cancelAllWorkByTag(SmsIngestWorker.WORK_TAG)
+    }
 
     val profileName: Flow<String> = ds.data.map { it[KEY_NAME] ?: "" }
     /** The backend user id for this device's identity (empty until registered). */
@@ -161,6 +174,7 @@ class SettingsRepository @Inject constructor(
     /** Wipe all device-local settings (used by "reset" and to isolate tests). */
     suspend fun clear() {
         ds.edit { it.clear() }
+        smsPreference.setEnabled(false)
     }
 
     companion object {

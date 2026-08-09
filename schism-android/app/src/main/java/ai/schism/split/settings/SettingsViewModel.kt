@@ -37,12 +37,19 @@ data class SettingsUi(
     val themeMode: String,
     val groupCount: Int,
     val claimLinksAlpha: Boolean,
+    val smsImportEnabled: Boolean,
 ) {
     /** True once this device has a backend identity (registered during onboarding). */
     val registered: Boolean get() = userId.isNotBlank()
 }
 
-private data class Profile(val name: String, val email: String, val phone: String, val userId: String)
+private data class Profile(
+    val name: String,
+    val email: String,
+    val phone: String,
+    val userId: String,
+    val smsImportEnabled: Boolean,
+)
 private data class Prefs(
     val symbol: String,
     val code: String,
@@ -59,8 +66,8 @@ class SettingsViewModel @Inject constructor(
 
     // combine() tops out at 5 typed flows, so fold the eight sources into two groups first.
     private val profile = combine(
-        settings.profileName, settings.email, settings.phone, settings.userId,
-    ) { name, email, phone, userId -> Profile(name, email, phone, userId) }
+        settings.profileName, settings.email, settings.phone, settings.userId, settings.smsImportEnabled,
+    ) { name, email, phone, userId, smsImportEnabled -> Profile(name, email, phone, userId, smsImportEnabled) }
 
     private val prefs = combine(
         settings.currencySymbol, settings.currencyCode, settings.themeMode, settings.knownGroupIds,
@@ -78,6 +85,7 @@ class SettingsViewModel @Inject constructor(
             themeMode = pf.theme,
             groupCount = pf.groups,
             claimLinksAlpha = pf.claimLinksAlpha,
+            smsImportEnabled = p.smsImportEnabled,
         )
     }.stateIn(
         viewModelScope,
@@ -92,6 +100,7 @@ class SettingsViewModel @Inject constructor(
             themeMode = SettingsRepository.DEFAULT_THEME_MODE,
             groupCount = 0,
             claimLinksAlpha = false,
+            smsImportEnabled = false,
         ),
     )
 
@@ -114,6 +123,10 @@ class SettingsViewModel @Inject constructor(
     /** Toggle the alpha "Let everyone claim" links entry point (Settings › Labs). */
     fun setClaimLinksAlpha(enabled: Boolean) {
         viewModelScope.launch { settings.setClaimLinksAlpha(enabled) }
+    }
+
+    fun setSmsImportEnabled(enabled: Boolean) {
+        settings.setSmsImportEnabled(enabled)
     }
 
     /** Wipe all device-local settings (profile, currency, theme, joined groups). */

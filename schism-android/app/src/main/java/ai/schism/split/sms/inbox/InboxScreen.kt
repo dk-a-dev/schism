@@ -79,6 +79,7 @@ fun InboxScreen(
     val state by viewModel.state.collectAsState()
     val filter by viewModel.filter.collectAsState()
     val permissionNeeded by viewModel.permissionNeeded.collectAsState()
+    val smsImportEnabled by viewModel.smsImportEnabled.collectAsState()
     val scanningReceipt by viewModel.scanningReceipt.collectAsState()
     if (scanningReceipt) {
         ai.schism.split.sms.itemized.BillScanProgressDialog()
@@ -110,7 +111,7 @@ fun InboxScreen(
     LaunchedEffect(Unit) {
         val granted = hasSmsPermission()
         viewModel.setPermissionGranted(granted)
-        if (granted) viewModel.scan()
+        if (granted && smsImportEnabled) viewModel.scan()
     }
 
     Scaffold(
@@ -134,7 +135,7 @@ fun InboxScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (!permissionNeeded) {
+            if (smsImportEnabled && !permissionNeeded) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -150,6 +151,10 @@ fun InboxScreen(
             }
             Box(Modifier.fillMaxSize()) {
                 when {
+                    !smsImportEnabled -> PermissionRequest(onAllow = {
+                        viewModel.setSmsImportEnabled(true)
+                        launcher.launch(SMS_PERMISSIONS)
+                    })
                     permissionNeeded -> PermissionRequest(onAllow = { launcher.launch(SMS_PERMISSIONS) })
                     else -> when (val s = state) {
                         is UiState.Loading -> ListSkeleton()
@@ -325,7 +330,7 @@ private fun PermissionRequest(onAllow: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            SchismPrimaryButton(onClick = onAllow) { Text("Allow SMS access") }
+            SchismPrimaryButton(onClick = onAllow) { Text("Enable automatic import") }
             Text(
                 "If the prompt doesn't appear, open Settings → Permissions → SMS and turn it on.",
                 style = MaterialTheme.typography.bodySmall,

@@ -10,7 +10,11 @@ import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.update.GITHUB_REPO_URL
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +78,11 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsState()
     val currentNotes by viewModel.currentNotes.collectAsState()
     val context = LocalContext.current
+    val smsPermissionLauncher = rememberLauncherForActivityResult(RequestMultiplePermissions()) { grants ->
+        val granted = grants[Manifest.permission.READ_SMS] == true &&
+            grants[Manifest.permission.RECEIVE_SMS] == true
+        viewModel.setSmsImportEnabled(granted)
+    }
 
     // Local edit buffers seeded from the persisted state; re-seed when the source changes.
     var name by remember { mutableStateOf(state.profileName) }
@@ -81,6 +91,7 @@ fun SettingsScreen(
     var symbol by remember { mutableStateOf(state.currencySymbol) }
     var code by remember { mutableStateOf(state.currencyCode) }
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmSmsEnable by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.profileName) { name = state.profileName }
     LaunchedEffect(state.email) { email = state.email }
@@ -258,6 +269,39 @@ fun SettingsScreen(
             // ── On-device AI ───────────────────────────────────────────────
             AiSection()
 
+            SettingsSection("Bank message import") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Automatic transaction import", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Optional. Supported transaction messages are read and parsed only on this device. " +
+                                "Only expenses you choose to share are sent to a group.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = state.smsImportEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) confirmSmsEnable = true else viewModel.setSmsImportEnabled(false)
+                        },
+                    )
+                }
+                Text(
+                    if (state.smsImportEnabled) {
+                        "Enabled. Android SMS permission is requested separately in Inbox and can be revoked in system settings."
+                    } else {
+                        "Disabled. Schism will not read or scan bank messages. Existing imported transactions are kept."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             // ── Labs ───────────────────────────────────────────────────────
             SettingsSection("Labs") {
                 Row(
@@ -313,6 +357,35 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { confirmReset = false }) { Text("Cancel") }
             },
+        )
+    }
+    if (confirmSmsEnable) {
+        AlertDialog(
+            onDismissRequest = { confirmSmsEnable = false },
+            title = { Text("Enable bank message import?") },
+            text = {
+                Text(
+                    "Schism will read transaction SMS after you separately grant Android permission. " +
+                        "Parsing stays on this phone; raw messages are never uploaded. Manual and receipt entry work without it.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSmsEnable = false
+                    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
+                        PackageManager.PERMISSION_GRANTED &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
+                        PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        viewModel.setSmsImportEnabled(true)
+                    } else {
+                        smsPermissionLauncher.launch(
+                            arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS),
+                        )
+                    }
+                }) { Text("Enable") }
+            },
+            dismissButton = { TextButton(onClick = { confirmSmsEnable = false }) { Text("Not now") } },
         )
     }
 }

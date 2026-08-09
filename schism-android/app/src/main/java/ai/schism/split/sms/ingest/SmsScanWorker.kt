@@ -1,14 +1,15 @@
 package ai.schism.split.sms.ingest
 
 import ai.schism.split.sms.data.SmsRepository
+import ai.schism.split.sms.settings.SmsImportPreference
 import android.content.Context
 import android.net.Uri
 import android.provider.Telephony
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
 import com.pennywiseai.parser.core.bank.BankParserFactory
 import dagger.assisted.Assisted
@@ -24,9 +25,12 @@ class SmsScanWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val smsRepository: SmsRepository,
+    private val smsImportPreference: SmsImportPreference,
 ) : CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result = runCatching {
+    override suspend fun doWork(): Result {
+        if (!smsImportPreference.isEnabled) return Result.success()
+        return runCatching {
         val resolver = applicationContext.contentResolver
         val projection = arrayOf(
             Telephony.Sms.ADDRESS,
@@ -44,6 +48,7 @@ class SmsScanWorker @AssistedInject constructor(
             val bodyIdx = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val dateIdx = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
             while (cursor.moveToNext()) {
+                if (!smsImportPreference.isEnabled) break
                 val sender = cursor.getString(addressIdx) ?: continue
                 if (!BankParserFactory.isKnownBankSender(sender)) continue
                 val body = cursor.getString(bodyIdx) ?: continue
@@ -52,15 +57,23 @@ class SmsScanWorker @AssistedInject constructor(
             }
         }
         Result.success()
-    }.getOrElse { Result.retry() }
+        }.getOrElse { Result.retry() }
+    }
 
     companion object {
         const val WORK_NAME = "sms_scan"
 
         /** Kicks off a single inbox backfill; replaces any in-flight scan. */
         fun enqueue(context: Context) {
-            val request: WorkRequest = OneTimeWorkRequestBuilder<SmsScanWorker>().build()
-            WorkManager.getInstance(context).enqueue(request)
+            if (!SmsImportPreference(context.applicationContext).isEnabled) return
+            val request = OneTimeWorkRequestBuilder<SmsScanWorker>()
+                .addTag(SmsIngestWorker.WORK_TAG)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                request,
+            )
         }
     }
 }

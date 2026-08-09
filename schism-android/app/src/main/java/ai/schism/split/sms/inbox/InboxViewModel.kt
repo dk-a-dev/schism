@@ -5,6 +5,7 @@ import ai.schism.split.sms.data.SmsRepository
 import ai.schism.split.sms.data.Transaction
 import ai.schism.split.sms.data.TransactionStatus
 import ai.schism.split.sms.ingest.SmsScanWorker
+import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.sms.itemized.PendingReceipt
 import ai.schism.split.sms.receipt.ReceiptScanner
 import ai.schism.split.sms.receipt.engine.buildLlmHandoff
@@ -44,7 +45,14 @@ class InboxViewModel @Inject constructor(
     private val pendingReceipt: PendingReceipt,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     @ApplicationContext private val appContext: Context,
+    private val settings: SettingsRepository = SettingsRepository(appContext),
 ) : ViewModel() {
+
+    val smsImportEnabled: StateFlow<Boolean> = settings.smsImportEnabled.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        false,
+    )
 
     /** One-shot messages for a snackbar (receipt scan result / error). */
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -88,6 +96,11 @@ class InboxViewModel @Inject constructor(
     /** Called by the screen once it knows whether SMS permission is held. */
     fun setPermissionGranted(granted: Boolean) {
         _permissionNeeded.value = !granted
+        if (!granted) settings.setSmsImportEnabled(false)
+    }
+
+    fun setSmsImportEnabled(enabled: Boolean) {
+        settings.setSmsImportEnabled(enabled)
     }
 
     /** Backfill the inbox from the device SMS store (requires READ_SMS already granted). */

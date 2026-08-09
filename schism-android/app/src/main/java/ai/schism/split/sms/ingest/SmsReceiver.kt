@@ -1,10 +1,12 @@
 package ai.schism.split.sms.ingest
 
+import ai.schism.split.sms.settings.SmsImportPreference
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 
 /**
@@ -15,24 +17,33 @@ import androidx.work.WorkManager
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        if (!SmsImportPreference(context.applicationContext).isEnabled) return
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
         if (messages.isEmpty()) return
 
         // Concatenate multi-part bodies keyed by originating address, preserving arrival order.
-        val bySender = LinkedHashMap<String, StringBuilder>()
-        var timestamp = System.currentTimeMillis()
+        val bySender = LinkedHashMap<String, Pair<StringBuilder, Long>>()
         for (msg in messages) {
             val sender = msg.originatingAddress ?: continue
-            bySender.getOrPut(sender) { StringBuilder() }.append(msg.messageBody ?: "")
-            timestamp = msg.timestampMillis
+            val current = bySender[sender]
+            val body = current?.first ?: StringBuilder()
+            body.append(msg.messageBody ?: "")
+            bySender[sender] = body to (current?.second ?: msg.timestampMillis)
         }
 
         val workManager = WorkManager.getInstance(context)
-        for ((sender, body) in bySender) {
+        for ((sender, value) in bySender) {
+            val envelope = SmsEnvelope.create(sender, value.first.toString(), value.second)
+            if (envelope.body.toByteArray().size > SmsIngestWorker.MAX_BODY_BYTES) continue
             val request = OneTimeWorkRequestBuilder<SmsIngestWorker>()
-                .setInputData(SmsIngestWorker.inputData(body.toString(), sender, timestamp))
+                .setInputData(SmsIngestWorker.inputData(envelope.body, envelope.sender, envelope.timestamp))
+                .addTag(SmsIngestWorker.WORK_TAG)
                 .build()
-            workManager.enqueue(request)
+            workManager.enqueueUniqueWork(
+                "sms_ingest_${envelope.fingerprint}",
+                ExistingWorkPolicy.KEEP,
+                request,
+            )
         }
     }
 }
