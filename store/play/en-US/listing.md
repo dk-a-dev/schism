@@ -1,6 +1,6 @@
 # Play Store listing — en-US
 
-App: Schism (`ai.schism.split`) · versionName 1.3.0 · versionCode 10300
+App: Schism (`ai.schism.split`) · versionName 1.3.1 · versionCode 10301
 
 Every line below is checked against shipped code. `tools/store/validate_copy.py` enforces the
 Play character limits and the prohibited-claim list.
@@ -54,6 +54,15 @@ WHAT SCHISM IS NOT
 • Receipt reading and message parsing can be wrong, and only some senders and layouts are
   understood. You review and edit everything before it becomes an expense.
 
+Schism is free to use. There is no subscription and nothing is locked behind a purchase.
+
+Support, privacy, terms and account deletion pages are linked below and from Settings.
+
+<!--
+LAUNCH IS FREE. The paragraph below replaces the line above the moment PLUS_ENABLED and
+PURCHASES_ENABLED are switched on server-side, and not before: describing a subscription a user
+cannot buy is a listing/behaviour mismatch reviewers do check for.
+
 SCHISM PLUS
 Schism Plus is an optional subscription. Free accounts can host three Live Splits per calendar
 month (UTC); joining a Live Split someone else hosts is always free, and receipt scanning, message
@@ -61,8 +70,7 @@ import, manual entry, invitations, balances and settle-up are never part of the 
 adds unlimited hosting, removes the banner ad, and adds Plus Insights plus CSV and PDF export.
 Without Plus the app shows one banner after the spending insights, and asks for advertising consent
 where that is required.
-
-Support, privacy, terms and account deletion pages are linked below and from Settings.
+-->
 
 ## Contact and policy URLs
 
@@ -75,9 +83,9 @@ Support, privacy, terms and account deletion pages are linked below and from Set
 ## Store settings
 
 - Category: Finance
-- Tags: expense manager, bill splitting, budgeting
-- Contains ads: yes (one banner after spending insights, removed by Schism Plus)
-- In-app purchases: yes (Schism Plus subscription)
+- Tags: Personal finance, Finance, Productivity (chosen from Play's fixed tag list)
+- Contains ads: no at launch (the Mobile Ads SDK ships but is switched off server-side; revisit when ADS_ENABLED is turned on)
+- In-app purchases: no at launch (Play Billing ships but PURCHASES_ENABLED is off; revisit when Plus goes live)
 - Default language: en-US
 - Countries: owner decision at submission time
 
@@ -85,4 +93,4 @@ Support, privacy, terms and account deletion pages are linked below and from Set
 
 - App icon: `store/play/assets/icon-512.png`
 - Feature graphic: `store/play/assets/feature-1024x500.png`
-- Phone screenshots: `store/play/assets/phone/` — NOT captured yet, owner runs Task 4.
+- Phone screenshots: `store/play/assets/phone/` — 1080x1920 (9:16), captured from the seeded demo account.
