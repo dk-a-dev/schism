@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gate for the Schism v1.3.0 Android release artifacts.
+# Gate for the Schism Android release artifacts.
 #
 #   verify_android_artifacts.sh [--structure-only] <artifact.aab|artifact.apk> ...
 #
@@ -20,12 +20,19 @@ set -euo pipefail
 : "${EXPECTED_SIGNER_SHA256:=666bdaa2a45dfbb29f861fa262ce7c34673705b9ee76e079fcd160308f81ad0a}"
 
 APPLICATION_ID=ai.schism.split
-VERSION_NAME=1.3.1
-VERSION_CODE=10301
 TARGET_SDK=36
 MIN_SDK=26
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+
+# The expected version is read from the build file rather than pinned here. A hardcoded copy only
+# ever agrees with the build until the next version bump, and a release gate that has to be edited
+# to keep passing is a gate that gets edited without being read.
+gradle_file=$repo_root/schism-android/app/build.gradle.kts
+VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$gradle_file")
+VERSION_CODE=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$gradle_file")
+[[ -n $VERSION_NAME && -n $VERSION_CODE ]] ||
+    { echo "verify: cannot read versionName/versionCode from $gradle_file" >&2; exit 1; }
 structure_only=0
 if [[ ${1:-} == --structure-only ]]; then
     # ponytail: exists so test_release_tools.sh can exercise the structural rules on synthetic
@@ -98,8 +105,12 @@ check_apk() {
 }
 
 check_aab() {
-    local aab=$1
-    unzip -Z1 "$aab" | grep -Fxq 'base/manifest/AndroidManifest.xml' ||
+    local aab=$1 entries
+    # Read the listing into a variable first. `unzip -Z1 | grep -Fxq` under `set -o pipefail` lets
+    # grep close the pipe on its first match, killing unzip with SIGPIPE — so this check failed or
+    # passed depending on whether unzip happened to finish writing first.
+    entries=$(unzip -Z1 "$aab") || fail "cannot read zip entries from $aab"
+    grep -Fxq 'base/manifest/AndroidManifest.xml' <<<"$entries" ||
         fail "$aab has no base module manifest"
     unzip -qq -o "$aab" 'base/manifest/AndroidManifest.xml' -d "$work"
     # ponytail: the AAB manifest is protobuf and bundletool is not on the runner; grepping the

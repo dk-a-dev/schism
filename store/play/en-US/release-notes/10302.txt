@@ -1,0 +1,9 @@
+Invite people to a group with a shareable link or a QR code instead of adding them one at a time.
+
+Groups you create now appear on every device you sign in on.
+
+Receipt scanning reads tilted, thermal-printed and delivery-app bills far more reliably, and every tax, fee and round-off line can be corrected before the bill is split.
+
+Live Split is available to everyone.
+
+Also: the guided tour opens again, the status bar stays readable in light mode, and you can show your password while typing it.

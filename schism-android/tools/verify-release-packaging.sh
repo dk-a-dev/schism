@@ -10,15 +10,30 @@ apksigner="$build_tools/apksigner"
 zipalign="$build_tools/zipalign"
 apkanalyzer=$(find "$sdk_root/cmdline-tools" -type f -name apkanalyzer | head -1)
 
+# The expected version code comes from the build file. Pinning it here only agrees with the build
+# until the next bump, and a bare `[[ a == b ]]` under `set -e` fails with no output at all — this
+# script exited 1 silently for exactly that reason after 10301 became 10302.
+gradle_file=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/app/build.gradle.kts
+expected_version_code=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$gradle_file")
+[[ -n $expected_version_code ]] ||
+    { echo "cannot read versionCode from $gradle_file" >&2; exit 1; }
+
+# Every check below reports what it saw. A gate that fails without saying why costs more time than
+# it saves.
+expect() {
+    local what=$1 actual=$2 want=$3
+    [[ $actual == "$want" ]] || { echo "$apk: $what is '$actual', expected '$want'" >&2; exit 1; }
+}
+
 # Read each tool's output into a variable before matching. Piping into `grep -q` under
 # `set -o pipefail` makes grep close the pipe on its first match, killing the producer with
 # SIGPIPE and failing the script with 141 on a perfectly good APK.
 signer_output=$("$apksigner" verify --verbose "$apk")
-grep -q '^Verifies$' <<<"$signer_output"
-[[ $("$apkanalyzer" manifest application-id "$apk") == "ai.schism.split" ]]
-[[ $("$apkanalyzer" manifest version-code "$apk") == "10301" ]]
-[[ $("$apkanalyzer" manifest target-sdk "$apk") == "36" ]]
-[[ $("$apkanalyzer" manifest debuggable "$apk") == "false" ]]
+grep -q '^Verifies$' <<<"$signer_output" || { echo "$apk: signature does not verify" >&2; exit 1; }
+expect "application id" "$("$apkanalyzer" manifest application-id "$apk")" "ai.schism.split"
+expect "versionCode" "$("$apkanalyzer" manifest version-code "$apk")" "$expected_version_code"
+expect "targetSdk" "$("$apkanalyzer" manifest target-sdk "$apk")" "36"
+expect "debuggable" "$("$apkanalyzer" manifest debuggable "$apk")" "false"
 "$zipalign" -c -P 16 4 "$apk" >/dev/null
 
 listing=$(unzip -l "$apk")
