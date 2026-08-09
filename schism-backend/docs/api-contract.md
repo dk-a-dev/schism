@@ -188,3 +188,43 @@ participant returns `409`. Share the HTTPS landing `/i/{token}`, which opens `sc
 total bytes, per-file SHA-256 values, and relative download paths. `GET|HEAD
 /v1/models/ocr/2026.06/{det.onnx|rec.onnx|rec.yml}` redirects only to revision-pinned official
 PaddlePaddle Hugging Face files. Versioned redirects are immutable and do not accept upstream URLs.
+
+## Monetization: entitlement, Plus, and the free Live Split allowance
+
+All four routes below are authenticated. Every switch defaults **off**, so a deployment that
+configured nothing gates nothing and sells nothing.
+
+`GET /v1/monetization/config` →
+`200 {"plusEnabled":false,"adsEnabled":false,"purchasesEnabled":false,"freeLiveSplits":3}`.
+
+`GET /v1/entitlement` →
+`200 {"active":false,"productId":"","expiresAt":"0001-01-01T00:00:00Z","autoRenewing":false,
+"freeLiveSplits":{"used":0,"limit":3,"resetsAt":"..."}}`. `active` is server-owned: it is derived
+only from purchases the backend itself verified with Google, never from a client claim. The call
+also refreshes purchase records older than six hours or past their expiry.
+
+`POST /v1/billing/verify` with `{"productId":"schism_plus","purchaseToken":"..."}` verifies the token
+with Google, records it (AES-256-GCM encrypted; the token is never logged or echoed) and returns the
+same body as `GET /v1/entitlement`. Only package `ai.schism.split`, product `schism_plus`, and a
+`PURCHASED` state grant Plus. Rejections: `400 purchase_not_verified` (wrong package/product or
+unknown token), `409 purchase_already_linked` (token belongs to another Schism account),
+`502 purchase_verification_unavailable` (transient Google failure — the caller should retry, and any
+existing entitlement is left intact), `503 purchases_disabled`.
+
+`POST /v1/billing/restore` (empty body) re-verifies every purchase already on file for the caller —
+this is the reinstall / Play-account-switch path — and returns the entitlement body.
+
+### The only gated action: hosting a Live Split
+
+`POST /v1/groups/{groupId}/claim-sessions` is the **single** route that consumes allowance. When
+`PLUS_ENABLED` is on it requires an `Idempotency-Key` header (1–200 chars); a missing or oversized
+key is `400 idempotency_key_required`. Retrying with the same key returns the original session and
+consumes nothing. Free accounts get three creates per UTC calendar month; the fourth is
+
+```json
+402 {"error":"PLUS_REQUIRED","used":3,"limit":3,"resetsAt":"2026-09-01T00:00:00Z"}
+```
+
+Plus accounts bypass the counter entirely. Joining a session and every other claim-session route
+(`GET`, `PUT /claims`, `PUT /ready`, `PATCH /items`, `POST /finalize`, `POST /cancel`) are never
+gated, and an expired subscription never invalidates existing sessions or hides existing data.

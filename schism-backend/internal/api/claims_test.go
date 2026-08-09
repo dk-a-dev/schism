@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/schism/schism-backend/internal/id"
 	"github.com/schism/schism-backend/internal/store"
@@ -327,4 +329,184 @@ func TestClaimDeepLinkLanding(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	require.True(t, strings.Contains(string(body), "schism://claim/test-sid"),
 		"landing must contain the claim deep link")
+}
+
+// idempotentRequest is authRequest plus the Idempotency-Key header the gated create-session route
+// requires.
+func idempotentRequest(t *testing.T, method, url, token, key, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Idempotency-Key", key)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	return resp
+}
+
+const gatedSessionBody = `{"title":"Dinner","currency":"₹","items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}]}`
+
+// TestLiveSplitAllowanceGatesOnlyCreateSession is the whole gate contract in one place: the first
+// three hosted Live Splits succeed, the fourth is refused with the exact documented 402 body, and
+// every other claim-session route keeps working after the allowance is gone.
+func TestLiveSplitAllowanceGatesOnlyCreateSession(t *testing.T) {
+	srv, _ := newMonetizedServer(t, Monetization{PlusEnabled: true})
+	g, token, _ := claimFixture(t, srv.URL)
+	create := srv.URL + "/v1/groups/" + g.ID + "/claim-sessions"
+
+	var sessions []string
+	for i := 0; i < store.FreeLiveSplitsPerMonth; i++ {
+		resp := idempotentRequest(t, http.MethodPost, create, token, id.New(), gatedSessionBody)
+		require.Equal(t, http.StatusCreated, resp.StatusCode, "free split %d", i+1)
+		var session struct {
+			ID string `json:"id"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+		sessions = append(sessions, session.ID)
+	}
+
+	fourth := idempotentRequest(t, http.MethodPost, create, token, id.New(), gatedSessionBody)
+	require.Equal(t, http.StatusPaymentRequired, fourth.StatusCode)
+	var refusal struct {
+		Error    string    `json:"error"`
+		Used     int       `json:"used"`
+		Limit    int       `json:"limit"`
+		ResetsAt time.Time `json:"resetsAt"`
+	}
+	require.NoError(t, json.NewDecoder(fourth.Body).Decode(&refusal))
+	require.Equal(t, "PLUS_REQUIRED", refusal.Error)
+	require.Equal(t, 3, refusal.Used)
+	require.Equal(t, 3, refusal.Limit)
+	require.True(t, refusal.ResetsAt.After(time.Now().UTC()))
+
+	// Every non-create route still works with the allowance exhausted: reading, claiming, readying,
+	// editing, and finishing an existing session are never gated.
+	require.Equal(t, http.StatusOK,
+		authRequest(t, http.MethodGet, srv.URL+"/v1/claim-sessions/"+sessions[0], token, "").StatusCode)
+	require.Equal(t, http.StatusOK, authRequest(t, http.MethodPut,
+		srv.URL+"/v1/claim-sessions/"+sessions[0]+"/claims", token,
+		`{"expectedVersion":1,"weights":[{"itemIdx":0,"weight":1}]}`).StatusCode)
+	require.Equal(t, http.StatusOK, authRequest(t, http.MethodPut,
+		srv.URL+"/v1/claim-sessions/"+sessions[0]+"/ready", token, `{"ready":true}`).StatusCode)
+	require.Equal(t, http.StatusOK, authRequest(t, http.MethodPatch,
+		srv.URL+"/v1/claim-sessions/"+sessions[0]+"/items", token,
+		`{"items":[{"idx":0,"name":"Dish","qty":1,"amountMinor":10000}]}`).StatusCode)
+	// Finalize and cancel run on their own sessions so neither depends on the other's version bumps.
+	require.Equal(t, http.StatusOK, authRequest(t, http.MethodPut,
+		srv.URL+"/v1/claim-sessions/"+sessions[1]+"/claims", token,
+		`{"expectedVersion":1,"weights":[{"itemIdx":0,"weight":1}]}`).StatusCode)
+	require.Equal(t, http.StatusOK, authRequest(t, http.MethodPost,
+		srv.URL+"/v1/claim-sessions/"+sessions[1]+"/finalize", token, `{"expectedVersion":1}`).StatusCode)
+	require.Equal(t, http.StatusNoContent, authRequest(t, http.MethodPost,
+		srv.URL+"/v1/claim-sessions/"+sessions[2]+"/cancel", token, "").StatusCode)
+}
+
+// TestLiveSplitAllowanceReplayDoesNotConsume: a retried create (same Idempotency-Key) returns the
+// original session and leaves the allowance untouched.
+func TestLiveSplitAllowanceReplayDoesNotConsume(t *testing.T) {
+	srv, _ := newMonetizedServer(t, Monetization{PlusEnabled: true})
+	g, token, _ := claimFixture(t, srv.URL)
+	create := srv.URL + "/v1/groups/" + g.ID + "/claim-sessions"
+	key := "retry-" + id.New()
+
+	var ids []string
+	for i := 0; i < 4; i++ {
+		resp := idempotentRequest(t, http.MethodPost, create, token, key, gatedSessionBody)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		var session struct {
+			ID string `json:"id"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&session))
+		ids = append(ids, session.ID)
+	}
+	require.Equal(t, []string{ids[0], ids[0], ids[0], ids[0]}, ids)
+
+	// Only one allowance was spent, so two remain.
+	ent := authRequest(t, http.MethodGet, srv.URL+"/v1/entitlement", token, "")
+	require.Equal(t, 1, decodeEntitlement(t, ent).FreeLiveSplits.Used)
+}
+
+func TestLiveSplitAllowanceRequiresBoundedIdempotencyKey(t *testing.T) {
+	srv, _ := newMonetizedServer(t, Monetization{PlusEnabled: true})
+	g, token, _ := claimFixture(t, srv.URL)
+	create := srv.URL + "/v1/groups/" + g.ID + "/claim-sessions"
+
+	missing := authRequest(t, http.MethodPost, create, token, gatedSessionBody)
+	require.Equal(t, http.StatusBadRequest, missing.StatusCode)
+
+	oversized := idempotentRequest(t, http.MethodPost, create, token, strings.Repeat("k", 201), gatedSessionBody)
+	require.Equal(t, http.StatusBadRequest, oversized.StatusCode)
+
+	// A refused request must not have burned any allowance.
+	ent := authRequest(t, http.MethodGet, srv.URL+"/v1/entitlement", token, "")
+	require.Equal(t, 0, decodeEntitlement(t, ent).FreeLiveSplits.Used)
+}
+
+// TestLiveSplitAllowancePlusBypassesGate: a verified Plus account hosts without limit and never
+// touches the free counter.
+func TestLiveSplitAllowancePlusBypassesGate(t *testing.T) {
+	verifier := newFakeVerifier()
+	srv, _ := newMonetizedServer(t, purchasesOn(verifier))
+	g, token, _ := claimFixture(t, srv.URL)
+	create := srv.URL + "/v1/groups/" + g.ID + "/claim-sessions"
+
+	playToken := "play-plus-" + id.New()
+	verifier.set(playToken, activePurchase(30*24*time.Hour))
+	require.Equal(t, http.StatusOK, authRequest(t, http.MethodPost, srv.URL+"/v1/billing/verify", token,
+		`{"productId":"schism_plus","purchaseToken":"`+playToken+`"}`).StatusCode)
+
+	for i := 0; i < 6; i++ {
+		resp := idempotentRequest(t, http.MethodPost, create, token, id.New(), gatedSessionBody)
+		require.Equal(t, http.StatusCreated, resp.StatusCode, "Plus create %d", i+1)
+	}
+	ent := authRequest(t, http.MethodGet, srv.URL+"/v1/entitlement", token, "")
+	require.Equal(t, 0, decodeEntitlement(t, ent).FreeLiveSplits.Used)
+}
+
+// TestLiveSplitAllowanceDisabledGateBypasses: with PLUS_ENABLED off the route behaves exactly as it
+// did before monetization — no Idempotency-Key required, no limit.
+func TestLiveSplitAllowanceDisabledGateBypasses(t *testing.T) {
+	srv := newTestServer(t)
+	g, token, _ := claimFixture(t, srv.URL)
+	create := srv.URL + "/v1/groups/" + g.ID + "/claim-sessions"
+
+	for i := 0; i < store.FreeLiveSplitsPerMonth+2; i++ {
+		resp := authRequest(t, http.MethodPost, create, token, gatedSessionBody)
+		require.Equal(t, http.StatusCreated, resp.StatusCode, "ungated create %d", i+1)
+	}
+}
+
+// TestLiveSplitAllowanceConcurrentFourthHasOneOutcome: six simultaneous creates on a fresh account
+// yield exactly three sessions and three refusals.
+func TestLiveSplitAllowanceConcurrentFourthHasOneOutcome(t *testing.T) {
+	srv, _ := newMonetizedServer(t, Monetization{PlusEnabled: true})
+	g, token, _ := claimFixture(t, srv.URL)
+	create := srv.URL + "/v1/groups/" + g.ID + "/claim-sessions"
+
+	const callers = 6
+	codes := make([]int, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = idempotentRequest(t, http.MethodPost, create, token, id.New(), gatedSessionBody).StatusCode
+		}(i)
+	}
+	wg.Wait()
+
+	created, refused := 0, 0
+	for _, code := range codes {
+		switch code {
+		case http.StatusCreated:
+			created++
+		case http.StatusPaymentRequired:
+			refused++
+		default:
+			t.Fatalf("unexpected status %d", code)
+		}
+	}
+	require.Equal(t, store.FreeLiveSplitsPerMonth, created)
+	require.Equal(t, callers-store.FreeLiveSplitsPerMonth, refused)
 }

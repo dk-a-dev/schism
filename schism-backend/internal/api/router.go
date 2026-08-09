@@ -14,15 +14,23 @@ type Handler struct {
 	store           *store.Store
 	registerLimiter *keyedLimiter
 	loginLimiter    *keyedLimiter
+	monetization    Monetization
 }
 
-// NewRouter builds the API router. When logRequests is true, per-request access logging is
-// enabled (intended for dev; keep it off in production).
-func NewRouter(s *store.Store, logRequests bool) http.Handler {
+// NewRouter builds the API router with monetization off — no paywall, no purchase surface, no ads.
+// When logRequests is true, per-request access logging is enabled (intended for dev; keep it off in
+// production).
+func NewRouter(s *store.Store, logRequests bool, publicHandlers ...http.Handler) http.Handler {
+	return NewRouterWithMonetization(s, logRequests, Monetization{}, publicHandlers...)
+}
+
+// NewRouterWithMonetization is NewRouter plus the deployment's billing/ads posture.
+func NewRouterWithMonetization(s *store.Store, logRequests bool, m Monetization, publicHandlers ...http.Handler) http.Handler {
 	h := &Handler{
 		store:           s,
 		registerLimiter: newKeyedLimiter(rate.Every(20*time.Second), 3, 15*time.Minute),
 		loginLimiter:    newKeyedLimiter(rate.Every(12*time.Second), 5, 15*time.Minute),
+		monetization:    m,
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -30,6 +38,13 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 	r.Use(recoverPanics)
 	if logRequests {
 		r.Use(middleware.Logger)
+	}
+	if len(publicHandlers) > 0 && publicHandlers[0] != nil {
+		public := publicHandlers[0]
+		for _, path := range []string{"/", "/privacy", "/terms", "/support", "/account-deletion"} {
+			r.Handle(path, public)
+		}
+		r.Handle("/assets/site/*", public)
 	}
 
 	r.Get("/health", h.health)
@@ -62,6 +77,10 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 			r.Get("/users/me/groups", h.myGroups)
 			r.Delete("/users/me", h.deleteMe)
 			r.Post("/auth/logout", h.authLogout)
+			r.Get("/entitlement", h.getEntitlement)
+			r.Get("/monetization/config", h.monetizationConfig)
+			r.Post("/billing/verify", h.verifyPurchase)
+			r.Post("/billing/restore", h.restorePurchases)
 			r.Route("/groups", func(r chi.Router) {
 				r.Post("/", h.createGroup)
 				r.Get("/", h.listGroups)

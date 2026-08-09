@@ -127,7 +127,7 @@ func TestPersonalDashboardCrossGroupCurrencyBucketing(t *testing.T) {
 
 	require.Equal(t, 2, d.GroupCount) // g3 skipped
 	require.Len(t, d.Groups, 2)
-	require.Len(t, d.Totals, 2)      // INR + USD buckets, never summed together
+	require.Len(t, d.Totals, 2) // INR + USD buckets, never summed together
 
 	byCode := map[string]CurrencyTotal{}
 	for _, t := range d.Totals {

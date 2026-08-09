@@ -12,8 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/schism/schism-backend/internal/api"
+	"github.com/schism/schism-backend/internal/billing"
 	"github.com/schism/schism-backend/internal/config"
 	"github.com/schism/schism-backend/internal/store"
+	webui "github.com/schism/schism-backend/internal/web"
 )
 
 func newHTTPServer(addr string, handler http.Handler) *http.Server {
@@ -58,6 +60,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	publicSite, err := webui.New(webui.Config{
+		SupportEmail: cfg.SupportEmail,
+		PublicURL:    cfg.PublicURL,
+		PlayURL:      cfg.PlayURL,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := store.RunMigrations(cfg.DatabaseURL); err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +95,20 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-	r.Mount("/", api.NewRouter(store.NewStore(pool), cfg.LogRequests))
+	monetization := api.Monetization{
+		PlusEnabled:      cfg.PlusEnabled,
+		AdsEnabled:       cfg.AdsEnabled,
+		PurchasesEnabled: cfg.PurchasesEnabled,
+		BillingTokenKey:  cfg.BillingTokenKey,
+	}
+	if cfg.PurchasesEnabled {
+		verifier, err := billing.NewGoogle(cfg.PlayPackageName, cfg.PlayServiceAccountJSON)
+		if err != nil {
+			log.Fatal(err)
+		}
+		monetization.Verifier = verifier
+	}
+	r.Mount("/", api.NewRouterWithMonetization(store.NewStore(pool), cfg.LogRequests, monetization, publicSite))
 
 	log.Printf("listening on %s", cfg.Addr)
 	if err := runHTTPServer(ctx, newHTTPServer(cfg.Addr, r)); err != nil {

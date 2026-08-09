@@ -48,8 +48,8 @@ func main() {
 
 	now := time.Now()
 	seeds := []struct {
-		name    string
-		people  []string
+		name     string
+		people   []string
 		expenses []struct {
 			title  string
 			amount int64

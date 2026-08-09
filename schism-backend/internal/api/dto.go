@@ -123,6 +123,35 @@ type setReadyDTO struct {
 	Ready bool `json:"ready"`
 }
 
+// plusRequiredDTO is the 402 body for an exhausted free Live Split allowance, and doubles as the
+// allowance block on the entitlement response.
+type plusRequiredDTO struct {
+	Error    string    `json:"error,omitempty"`
+	Used     int       `json:"used"`
+	Limit    int       `json:"limit"`
+	ResetsAt time.Time `json:"resetsAt"`
+}
+
+type entitlementDTO struct {
+	Active         bool            `json:"active"`
+	ProductID      string          `json:"productId"`
+	ExpiresAt      time.Time       `json:"expiresAt"`
+	AutoRenewing   bool            `json:"autoRenewing"`
+	FreeLiveSplits plusRequiredDTO `json:"freeLiveSplits"`
+}
+
+type monetizationConfigDTO struct {
+	PlusEnabled      bool `json:"plusEnabled"`
+	AdsEnabled       bool `json:"adsEnabled"`
+	PurchasesEnabled bool `json:"purchasesEnabled"`
+	FreeLiveSplits   int  `json:"freeLiveSplits"`
+}
+
+type verifyPurchaseDTO struct {
+	ProductID     string `json:"productId"`
+	PurchaseToken string `json:"purchaseToken"`
+}
+
 type editItemsDTO struct {
 	Items []claimItemDTO `json:"items"`
 }

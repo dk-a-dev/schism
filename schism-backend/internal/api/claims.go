@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/schism/schism-backend/internal/store"
@@ -64,7 +65,7 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &d) {
 		return
 	}
-	cs, err := h.store.CreateClaimSession(r.Context(), store.ClaimSessionInput{
+	in := store.ClaimSessionInput{
 		GroupID: groupID, CreatorParticipantID: creator, Title: d.Title, Currency: d.Currency,
 		Items:         d.toStoreItems(),
 		TaxMinor:      d.TaxMinor,
@@ -72,13 +73,45 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 		DiscountMinor: d.DiscountMinor,
 		RoundoffMinor: d.RoundoffMinor,
 		Taxes:         d.toStoreTaxes(),
-	})
+	}
+
+	// Hosting a Live Split is the ONLY gated action. Joining one, and every operation on an existing
+	// session, stay free — so no other handler consults the allowance.
+	if !h.monetization.PlusEnabled {
+		cs, err := h.store.CreateClaimSession(r.Context(), in)
+		if err != nil {
+			writeInternalError(w, r, err)
+			return
+		}
+		_ = h.store.LogActivity(r.Context(), groupID, "CLAIM_SESSION_CREATED", actor(creator), nil, cs.Title)
+		h.writeSession(w, r, http.StatusCreated, &cs)
+		return
+	}
+
+	key := r.Header.Get("Idempotency-Key")
+	if key == "" || len(key) > 200 {
+		writeErr(w, http.StatusBadRequest, "idempotency_key_required")
+		return
+	}
+	user := userFromContext(r.Context())
+	cs, plusRequired, err := h.store.CreateClaimSessionGated(r.Context(), in, user.ID, key, time.Now().UTC())
 	if err != nil {
 		writeInternalError(w, r, err)
 		return
 	}
+	if plusRequired != nil {
+		writeJSON(w, http.StatusPaymentRequired, plusRequiredDTO{
+			Error: "PLUS_REQUIRED", Used: plusRequired.Used,
+			Limit: plusRequired.Limit, ResetsAt: plusRequired.ResetsAt,
+		})
+		return
+	}
+	if cs == nil {
+		writeInternalError(w, r, errors.New("claim session missing after create"))
+		return
+	}
 	_ = h.store.LogActivity(r.Context(), groupID, "CLAIM_SESSION_CREATED", actor(creator), nil, cs.Title)
-	h.writeSession(w, r, http.StatusCreated, &cs)
+	h.writeSession(w, r, http.StatusCreated, cs)
 }
 
 func (h *Handler) getClaimSession(w http.ResponseWriter, r *http.Request) {

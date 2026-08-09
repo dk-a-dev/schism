@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/schism/schism-backend/internal/id"
 )
 
 // ErrClaimLocked is returned when an operation targets a claim session that is no longer "open"
@@ -351,46 +350,10 @@ func unresolvedItemIdx(items []ClaimItem, claims []Claim, resolutions []Unclaime
 // CreateClaimSession inserts a new open claim session (version 1) with the given items and charge
 // pot components.
 func (s *Store) CreateClaimSession(ctx context.Context, in ClaimSessionInput) (ClaimSession, error) {
-	items := in.Items
-	if items == nil {
-		items = []ClaimItem{}
-	}
-	itemsJSON, err := json.Marshal(items)
+	sid, err := insertClaimSession(ctx, s.pool, in)
 	if err != nil {
 		return ClaimSession{}, err
 	}
-
-	taxes := in.Taxes
-	if taxes == nil {
-		taxes = []TaxLine{}
-	}
-	// The labelled breakdown, when given, is the source of truth for the scalar tax_minor: this keeps
-	// ComputeClaimSplit's math (which only ever reads the scalar) unchanged whether or not the caller
-	// sent a breakdown. Behaves exactly as today when taxes is empty.
-	taxMinor := in.TaxMinor
-	if len(taxes) > 0 {
-		var sum int64
-		for _, t := range taxes {
-			sum += t.AmountMinor
-		}
-		taxMinor = sum
-	}
-	taxesJSON, err := json.Marshal(taxes)
-	if err != nil {
-		return ClaimSession{}, err
-	}
-
-	sid := id.New()
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO claim_sessions (id, group_id, creator_participant_id, title, currency, items,
-		                              tax_minor, fees_minor, discount_minor, roundoff_minor, taxes)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		sid, in.GroupID, in.CreatorParticipantID, in.Title, in.Currency, itemsJSON,
-		taxMinor, in.FeesMinor, in.DiscountMinor, in.RoundoffMinor, taxesJSON)
-	if err != nil {
-		return ClaimSession{}, err
-	}
-
 	cs, err := s.GetClaimSession(ctx, sid)
 	if err != nil {
 		return ClaimSession{}, err
