@@ -12,6 +12,7 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	t.Setenv("ADDR", "")
 	c, err := Load()
 	require.NoError(t, err)
@@ -25,6 +26,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadPoolOverridesAndRejectsInvalidValues(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	t.Setenv("DB_MAX_CONNS", "12")
 	t.Setenv("DB_MIN_CONNS", "3")
 	t.Setenv("DB_MAX_CONN_LIFETIME", "45m")
@@ -42,6 +44,7 @@ func TestLoadPoolOverridesAndRejectsInvalidValues(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("DATABASE_URL", "postgres://x")
 			t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+			t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 			t.Setenv("DB_MAX_CONNS", "")
 			t.Setenv("DB_MIN_CONNS", "")
 			t.Setenv("DB_MAX_CONN_LIFETIME", "")
@@ -55,6 +58,7 @@ func TestLoadPoolOverridesAndRejectsInvalidValues(t *testing.T) {
 func TestLoadMissingDBURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	_, err := Load()
 	require.Error(t, err)
 }
@@ -62,6 +66,7 @@ func TestLoadMissingDBURL(t *testing.T) {
 func TestLogRequestsFlag(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	t.Setenv("LOG_REQUESTS", "")
 	c, _ := Load()
 	require.False(t, c.LogRequests)
@@ -76,6 +81,7 @@ func TestLogRequestsFlag(t *testing.T) {
 func TestLoadPublicURLAndPlayURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "support@schism.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	t.Setenv("SCHISM_PUBLIC_URL", "https://schism.test")
 	t.Setenv("SCHISM_PLAY_URL", "https://play.google.com/store/apps/details?id=ai.schism.split")
 
@@ -89,6 +95,7 @@ func TestLoadPublicURLAndPlayURL(t *testing.T) {
 func TestLoadAcceptsEmptyPlayURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "support@schism.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	t.Setenv("SCHISM_PLAY_URL", "")
 
 	c, err := Load()
@@ -102,6 +109,7 @@ func monetizationEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("SCHISM_SUPPORT_EMAIL", "owner@example.test")
+	t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 	for _, name := range []string{
 		"PLUS_ENABLED", "ADS_ENABLED", "PURCHASES_ENABLED",
 		"PLAY_PACKAGE_NAME", "BILLING_TOKEN_KEY", "PLAY_SERVICE_ACCOUNT_JSON",
@@ -207,6 +215,7 @@ func TestLoadRejectsInvalidPublicURL(t *testing.T) {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("DATABASE_URL", "postgres://x")
 			t.Setenv("SCHISM_SUPPORT_EMAIL", "support@schism.test")
+			t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 			t.Setenv("SCHISM_PUBLIC_URL", value)
 
 			_, err := Load()
@@ -225,6 +234,7 @@ func TestLoadRejectsInvalidPlayURL(t *testing.T) {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("DATABASE_URL", "postgres://x")
 			t.Setenv("SCHISM_SUPPORT_EMAIL", "support@schism.test")
+			t.Setenv("SCHISM_LEGAL_VENUE_CITY", "Testville")
 			t.Setenv("SCHISM_PLAY_URL", value)
 
 			_, err := Load()

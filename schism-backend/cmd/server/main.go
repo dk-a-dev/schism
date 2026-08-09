@@ -61,9 +61,10 @@ func main() {
 		log.Fatal(err)
 	}
 	publicSite, err := webui.New(webui.Config{
-		SupportEmail: cfg.SupportEmail,
-		PublicURL:    cfg.PublicURL,
-		PlayURL:      cfg.PlayURL,
+		SupportEmail:   cfg.SupportEmail,
+		PublicURL:      cfg.PublicURL,
+		PlayURL:        cfg.PlayURL,
+		LegalVenueCity: cfg.LegalVenueCity,
 	})
 	if err != nil {
 		log.Fatal(err)

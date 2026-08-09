@@ -21,6 +21,10 @@ type Config struct {
 	SupportEmail string
 	PublicURL    string
 	PlayURL      string
+	// LegalVenueCity names the city whose courts have jurisdiction under the Terms. It has no
+	// default and startup fails without it, for the same reason SupportEmail does: a legal page
+	// that ships with the venue blank is worse than one that never ships.
+	LegalVenueCity string
 }
 
 type site struct {
@@ -36,18 +40,23 @@ type asset struct {
 }
 
 type pageData struct {
-	Title        string
-	Description  string
-	CanonicalURL string
-	SupportEmail string
-	SupportHref  string
-	PlayURL      string
+	Title          string
+	Description    string
+	CanonicalURL   string
+	SupportEmail   string
+	SupportHref    string
+	PlayURL        string
+	LegalVenueCity string
 }
 
 func New(config Config) (http.Handler, error) {
 	config.SupportEmail = strings.TrimSpace(config.SupportEmail)
 	if err := validateSupportEmail(config.SupportEmail); err != nil {
 		return nil, err
+	}
+	config.LegalVenueCity = strings.TrimSpace(config.LegalVenueCity)
+	if config.LegalVenueCity == "" {
+		return nil, fmt.Errorf("legal venue city is required: set SCHISM_LEGAL_VENUE_CITY to the city whose courts have jurisdiction")
 	}
 	var err error
 	if config.PublicURL, err = validateHTTPSURL("public URL", config.PublicURL, false); err != nil {
@@ -156,12 +165,13 @@ func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := pageData{
-		Title:        title,
-		Description:  description,
-		CanonicalURL: s.canonical(r.URL.Path),
-		SupportEmail: s.config.SupportEmail,
-		SupportHref:  "mailto:" + s.config.SupportEmail,
-		PlayURL:      s.config.PlayURL,
+		Title:          title,
+		Description:    description,
+		CanonicalURL:   s.canonical(r.URL.Path),
+		SupportEmail:   s.config.SupportEmail,
+		SupportHref:    "mailto:" + s.config.SupportEmail,
+		PlayURL:        s.config.PlayURL,
+		LegalVenueCity: s.config.LegalVenueCity,
 	}
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
 		// Templates are parsed at startup and execute only against strings, so this is defensive.

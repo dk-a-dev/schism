@@ -65,14 +65,16 @@ type assetLister interface{ AssetRoutes() []string }
 func main() {
 	out := flag.String("out", "dist/site", "directory to write the static site into")
 	supportEmail := flag.String("support-email", os.Getenv("SCHISM_SUPPORT_EMAIL"), "contact address shown on the pages")
+	venueCity := flag.String("legal-venue-city", os.Getenv("SCHISM_LEGAL_VENUE_CITY"), "city whose courts the Terms name; required")
 	publicURL := flag.String("public-url", os.Getenv("SCHISM_PUBLIC_URL"), "absolute https base for canonical links")
 	playURL := flag.String("play-url", os.Getenv("SCHISM_PLAY_URL"), "Play listing; empty renders the truthful coming-soon state")
 	flag.Parse()
 
 	handler, err := webui.New(webui.Config{
-		SupportEmail: *supportEmail,
-		PublicURL:    *publicURL,
-		PlayURL:      *playURL,
+		SupportEmail:   *supportEmail,
+		LegalVenueCity: *venueCity,
+		PublicURL:      *publicURL,
+		PlayURL:        *playURL,
 	})
 	if err != nil {
 		log.Fatalf("configure site: %v", err)

@@ -13,9 +13,10 @@ import (
 func newTestSite(t *testing.T, playURL string) http.Handler {
 	t.Helper()
 	h, err := New(Config{
-		SupportEmail: "support+launch@schism.test",
-		PublicURL:    "https://schism.test",
-		PlayURL:      playURL,
+		SupportEmail:   "support+launch@schism.test",
+		PublicURL:      "https://schism.test",
+		PlayURL:        playURL,
+		LegalVenueCity: "Testville",
 	})
 	require.NoError(t, err)
 	return h

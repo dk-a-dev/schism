@@ -46,7 +46,9 @@ func TestAccountDeletionSeparatesAccountAndSubscriptionActions(t *testing.T) {
 	for _, claim := range []string{
 		"Delete your Schism account", "cancel a Google Play subscription", "separate actions",
 		"after uninstalling", `href="mailto:support&#43;launch@schism.test`,
-		"financial records", "legally required",
+		// Retention must be disclosed concretely: a stated purge window plus the carve-out for
+		// records the law obliges us to keep.
+		"purged within 30 days", "required by law to keep",
 	} {
 		require.Contains(t, body, claim)
 	}

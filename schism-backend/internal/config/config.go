@@ -18,8 +18,11 @@ type Config struct {
 	DatabaseURL string
 	// LogRequests enables per-request access logging. Off by default so production stays quiet;
 	// enable in dev with LOG_REQUESTS=true (also accepts 1/yes/on).
-	LogRequests       bool
-	SupportEmail      string
+	LogRequests  bool
+	SupportEmail string
+	// LegalVenueCity is the city whose courts the Terms name. Required, like SupportEmail: a
+	// published Terms page with a blank venue is worse than a deployment that refuses to start.
+	LegalVenueCity    string
 	PublicURL         string
 	PlayURL           string
 	DBMaxConns        int32
@@ -45,6 +48,7 @@ func Load() (Config, error) {
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		LogRequests:      isTruthy(os.Getenv("LOG_REQUESTS")),
 		SupportEmail:     strings.TrimSpace(os.Getenv("SCHISM_SUPPORT_EMAIL")),
+		LegalVenueCity:   strings.TrimSpace(os.Getenv("SCHISM_LEGAL_VENUE_CITY")),
 		PublicURL:        strings.TrimSpace(os.Getenv("SCHISM_PUBLIC_URL")),
 		PlayURL:          strings.TrimSpace(os.Getenv("SCHISM_PLAY_URL")),
 		PlusEnabled:      isTruthy(os.Getenv("PLUS_ENABLED")),
@@ -84,6 +88,9 @@ func Load() (Config, error) {
 	}
 	if err := validateSupportEmail(c.SupportEmail); err != nil {
 		return Config{}, err
+	}
+	if c.LegalVenueCity == "" {
+		return Config{}, errors.New("SCHISM_LEGAL_VENUE_CITY is required")
 	}
 	if err := validateHTTPSURL("SCHISM_PUBLIC_URL", c.PublicURL, false); err != nil {
 		return Config{}, err

@@ -10,7 +10,7 @@ import (
 )
 
 func TestSiteRoutesMountWithoutChangingAPIHealth(t *testing.T) {
-	site, err := webui.New(webui.Config{SupportEmail: "owner@example.test"})
+	site, err := webui.New(webui.Config{SupportEmail: "owner@example.test", LegalVenueCity: "Testville"})
 	require.NoError(t, err)
 	router := NewRouter(nil, false, site)
 
