@@ -1,6 +1,6 @@
 package ai.schism.split.groups
 
-import ai.schism.split.groups.join.JoinGroupViewModel
+import ai.schism.split.R
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -36,13 +36,19 @@ fun contactNameAndPhone(context: Context, uri: Uri): Pair<String, String?>? =
             name to c.getString(1)?.takeIf { it.isNotBlank() }
         }
 
-/** Prefill an SMS to each invited number with the group's join link. */
-fun sendSmsInvites(context: Context, phones: List<String>, groupName: String, groupId: String) {
+/**
+ * Prefill a heads-up SMS to each invited number. It deliberately carries NO link: an invite is bound
+ * to one participant and is a capability, so it is minted per person from the invite screen
+ * ([ai.schism.split.groups.qr.InviteQrScreen]) rather than blasted to a list of numbers.
+ *
+ * ponytail: no per-phone token minting here — matching a picked contact to the participant it created
+ * is guesswork at create/edit time. Add it when contacts carry participant ids end to end.
+ */
+fun sendSmsInvites(context: Context, phones: List<String>, groupName: String) {
     if (phones.isEmpty()) return
-    val link = JoinGroupViewModel.shareLink(groupId)
     val name = groupName.ifBlank { "our group" }
     val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + phones.joinToString(";"))).apply {
-        putExtra("sms_body", "Join \"$name\" on Schism to split our expenses: $link")
+        putExtra("sms_body", context.getString(R.string.invite_sms_body, name))
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     runCatching { context.startActivity(intent) }

@@ -10,8 +10,12 @@ import ai.schism.split.core.net.GroupDto
 import ai.schism.split.core.settings.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** The server refused a group we thought we belonged to (`403`); the cached copy has been dropped. */
+class NotAMemberException : Exception("not a member of this group")
 
 /**
  * Single source of truth for groups. Reads observe the Room cache (offline-viewable); writes hit
@@ -36,7 +40,23 @@ class GroupRepository @Inject constructor(
     }
 
     suspend fun refreshGroup(id: String): Result<Unit> = runCatching {
-        cache(api.getGroup(id))
+        try {
+            cache(api.getGroup(id))
+        } catch (e: HttpException) {
+            // A group id is an identifier, not a capability: the server saying "you're not a member"
+            // must also erase whatever this device still has cached for it.
+            if (e.code() == 403) {
+                forget(id)
+                throw NotAMemberException()
+            }
+            throw e
+        }
+    }
+
+    /** Forget a group on this device: drop the cached copy and stop refreshing it. */
+    suspend fun forget(id: String) {
+        groupDao.deleteGroup(id)
+        settings.removeKnownGroup(id)
     }
 
     suspend fun createGroup(request: CreateGroupRequest): Result<String> = runCatching {

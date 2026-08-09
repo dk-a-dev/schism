@@ -1,5 +1,10 @@
 package ai.schism.split.sms.itemized
 
+import ai.schism.split.core.billing.EntitlementRepository
+import ai.schism.split.core.billing.EntitlementState
+import ai.schism.split.core.billing.LiveSplitAllowance
+import ai.schism.split.core.billing.PlusRequiredException
+import ai.schism.split.core.billing.isPlus
 import ai.schism.split.core.net.ClaimItemDto
 import ai.schism.split.core.net.CreateClaimSessionRequest
 import ai.schism.split.core.settings.SettingsRepository
@@ -41,6 +46,12 @@ data class ItemizedSplitUiState(
     /** Settings › Labs "Claim links (alpha)" flag — gates the "Let everyone claim" entry point. */
     val claimLinksAlpha: Boolean = false,
     val creatingClaimSession: Boolean = false,
+    /** Free hosted Live Splits left this UTC month; null until the backend has said. */
+    val liveSplitAllowance: LiveSplitAllowance? = null,
+    /** True once the backend has verified this account as Plus — hosting is then unlimited. */
+    val plus: Boolean = false,
+    /** Set when the backend answered a *hosting* attempt with 402; shows the Plus sheet. */
+    val plusRequired: LiveSplitAllowance? = null,
 ) {
     val selectedGroup: Group? get() = groups.firstOrNull { it.id == selectedGroupId }
     val taxMinor: Long get() = draft?.taxMinor ?: 0L
@@ -86,6 +97,7 @@ class ItemizedSplitViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val llmParser: ai.schism.split.core.ai.LlmExpenseParser,
     private val claimSessionRepo: ClaimSessionRepository,
+    private val entitlements: EntitlementRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -108,6 +120,18 @@ class ItemizedSplitViewModel @Inject constructor(
 
         viewModelScope.launch {
             settings.claimLinksAlpha.collect { enabled -> _state.update { it.copy(claimLinksAlpha = enabled) } }
+        }
+
+        // Show what's left *before* hosting, so the limit is never a surprise at the last step.
+        viewModelScope.launch {
+            entitlements.state.collect { entitlement ->
+                _state.update {
+                    it.copy(
+                        plus = entitlement.isPlus,
+                        liveSplitAllowance = (entitlement as? EntitlementState.Free)?.allowance,
+                    )
+                }
+            }
         }
 
         viewModelScope.launch {
@@ -267,12 +291,25 @@ class ItemizedSplitViewModel @Inject constructor(
                     onCreated(session.id)
                 },
                 onFailure = { e ->
+                    // Only the backend's PLUS_REQUIRED opens the sheet; every other failure is just a
+                    // failure, and the manual item assignment on this screen keeps working either way.
+                    val gated = e as? PlusRequiredException
+                    if (gated != null) entitlements.noteAllowance(gated.allowance)
                     _state.update {
-                        it.copy(creatingClaimSession = false, error = e.message ?: "Couldn't create claim link")
+                        it.copy(
+                            creatingClaimSession = false,
+                            plusRequired = gated?.allowance,
+                            error = if (gated == null) e.message ?: "Couldn't create claim link" else null,
+                        )
                     }
                 },
             )
         }
+    }
+
+    /** Dismisses the Plus sheet. The draft, its items and every assignment are untouched. */
+    fun dismissPlusSheet() {
+        _state.update { it.copy(plusRequired = null) }
     }
 
     fun submit(onDone: () -> Unit) {

@@ -3,7 +3,12 @@
 package ai.schism.split.settings
 
 import ai.schism.split.BuildConfig
+import ai.schism.split.R
+import ai.schism.split.core.ads.AdSlotViewModel
 import ai.schism.split.core.theme.ThemeMode
+import ai.schism.split.export.ExportViewModel
+import ai.schism.split.plus.PlusSheet
+import ai.schism.split.plus.PlusViewModel
 import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.SchismPrimaryButton
@@ -64,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
@@ -74,6 +80,7 @@ import androidx.core.content.ContextCompat
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onReplayTour: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -326,6 +333,10 @@ fun SettingsScreen(
             }
 
             // ── Labs ───────────────────────────────────────────────────────
+            SettingsSection("Guided tour") {
+                ai.schism.split.walkthrough.WalkthroughSettingsSection(onReplayTour = onReplayTour)
+            }
+
             SettingsSection("Labs") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -347,6 +358,12 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // ── Schism Plus ────────────────────────────────────────────────
+            PlusSection()
+
+            // ── Export ─────────────────────────────────────────────────────
+            ExportSection()
 
             // ── Account ────────────────────────────────────────────────────
             AccountSection()
@@ -468,6 +485,110 @@ private fun SettingsSection(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 8.dp)) {
                 content()
             }
+        }
+    }
+}
+
+/**
+ * Subscription status plus the two controls Play requires to be reachable: Restore purchases and
+ * Manage subscription. Also hosts the UMP "Privacy choices" entry, shown only where it's required.
+ */
+@Composable
+private fun PlusSection(viewModel: PlusViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    var showSheet by remember { mutableStateOf(false) }
+
+    if (showSheet) PlusSheet(onDismiss = { showSheet = false })
+
+    SettingsSection(stringResource(R.string.plus_title)) {
+        Text(
+            when {
+                state.cancelledButActive -> stringResource(R.string.plus_active_until, state.expiresAt)
+                state.isPlus -> stringResource(R.string.plus_active)
+                else -> stringResource(R.string.plus_free_plan)
+            },
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        state.allowance?.let {
+            Text(
+                stringResource(R.string.live_split_allowance_left, it.remaining, it.limit),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!state.isPlus && state.plusEnabled) {
+            SchismSecondaryButton(onClick = { showSheet = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.plus_see_options))
+            }
+        }
+        SchismSecondaryButton(
+            onClick = viewModel::restore,
+            enabled = !state.busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.plus_restore)) }
+        SchismSecondaryButton(
+            onClick = { context.startActivity(viewModel.manageSubscriptionIntent()) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.plus_manage)) }
+
+        PrivacyChoicesRow()
+    }
+}
+
+@Composable
+private fun PrivacyChoicesRow(adSlot: AdSlotViewModel = hiltViewModel()) {
+    val consent = adSlot.consent
+    val required by consent.privacyOptionsRequired.collectAsState()
+    val context = LocalContext.current
+    if (!required) return
+    SchismSecondaryButton(
+        onClick = { (context as? android.app.Activity)?.let(consent::showPrivacyOptions) },
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text(stringResource(R.string.ads_privacy_choices)) }
+    Text(
+        stringResource(R.string.ads_privacy_choices_body),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** CSV/PDF export of the on-device ledger. A Plus convenience — the records themselves stay free. */
+@Composable
+private fun ExportSection(viewModel: ExportViewModel = hiltViewModel()) {
+    val plus by viewModel.plus.collectAsState()
+    val share by viewModel.share.collectAsState()
+    val failed by viewModel.failed.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(share) {
+        share?.let {
+            context.startActivity(it)
+            viewModel.consumeShare()
+        }
+    }
+
+    SettingsSection(stringResource(R.string.plus_export_title)) {
+        if (!plus) {
+            Text(
+                stringResource(R.string.plus_export_locked),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            SchismSecondaryButton(onClick = viewModel::exportCsv, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.plus_export_csv))
+            }
+            SchismSecondaryButton(onClick = viewModel::exportPdf, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.plus_export_pdf))
+            }
+        }
+        if (failed) {
+            Text(
+                stringResource(R.string.plus_export_failed),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

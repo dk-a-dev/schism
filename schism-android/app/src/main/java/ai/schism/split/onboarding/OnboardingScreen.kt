@@ -4,6 +4,7 @@ package ai.schism.split.onboarding
 
 import ai.schism.split.core.ui.SchismLogo
 import ai.schism.split.core.ui.SchismPrimaryButton
+import ai.schism.split.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -73,7 +75,7 @@ private fun AuthForm(
     var password by rememberSaveable { mutableStateOf("") }
 
     val emailValid = email.contains("@")
-    val passValid = password.length >= 6
+    val passValid = isPasswordValid(password)
     val nameValid = !register || name.trim().length >= 2
     val canSubmit = emailValid && passValid && nameValid && !state.submitting
 
@@ -129,9 +131,9 @@ private fun AuthForm(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Phone (optional)") },
+                    label = { Text(stringResource(R.string.onboarding_phone_label)) },
                     singleLine = true,
-                    supportingText = { Text("Friends who added you by number get linked automatically") },
+                    supportingText = { Text(stringResource(R.string.onboarding_phone_supporting)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -144,7 +146,11 @@ private fun AuthForm(
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 isError = password.isNotEmpty() && !passValid,
-                supportingText = if (register) { { Text("At least 6 characters") } } else null,
+                supportingText = if (register) {
+                    { Text(stringResource(R.string.onboarding_password_supporting)) }
+                } else {
+                    null
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -176,3 +182,5 @@ private fun AuthForm(
         }
     }
 }
+
+internal fun isPasswordValid(password: String): Boolean = password.length >= 8

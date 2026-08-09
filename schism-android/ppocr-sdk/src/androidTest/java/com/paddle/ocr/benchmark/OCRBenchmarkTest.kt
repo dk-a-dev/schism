@@ -23,6 +23,7 @@ import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
 import com.paddle.ocr.model.OCRRunResult
+import com.paddle.ocr.model.ModelSource
 import com.paddle.ocr.util.OpenCVUtils
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -55,7 +56,9 @@ class OCRBenchmarkTest {
         @JvmStatic
         @BeforeClass
         fun setUp() {
-            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val context = instrumentation.targetContext
+            val testContext = instrumentation.context
             OpenCVUtils.init(context)
 
             outputDir = File(context.getExternalFilesDir(null), "ocr_benchmark")
@@ -65,7 +68,22 @@ class OCRBenchmarkTest {
             runBlocking {
                 val batchSize = getInstrumentationArgument(ARG_REC_BATCH_SIZE)?.toIntOrNull() ?: 1
                 val config = PaddleOCRConfig(recBatchSize = batchSize)
-                ocr = PaddleOCR.create(context, config, EngineConfig())
+                val modelRoot = File(context.cacheDir, "ocr-instrumentation-models").apply { mkdirs() }
+                fun model(assetPath: String, fileName: String): ModelSource.FilePath {
+                    val file = File(modelRoot, fileName)
+                    testContext.assets.open(assetPath).use { input ->
+                        file.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    return ModelSource.FilePath(file)
+                }
+                ocr = PaddleOCR.create(
+                    context,
+                    config,
+                    EngineConfig(),
+                    detModel = model("models/det/inference.onnx", "det.onnx"),
+                    recModel = model("models/rec/inference.onnx", "rec.onnx"),
+                    recConfig = model("models/rec/inference.yml", "rec.yml"),
+                )
             }
             println("[OCRBenchmark] Engine ready, coldLoadTimeMs=${ocr.coldLoadTimeMs}")
         }

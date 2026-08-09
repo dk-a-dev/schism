@@ -17,6 +17,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -114,6 +115,20 @@ class GroupRepositoryTest {
         assertTrue(result.isFailure)
         assertTrue(repo.observeGroups().first().isEmpty())
         assertFalse(settings.knownGroupIds.first().contains("g1"))
+    }
+
+    @Test
+    fun forbiddenRefreshDropsTheStaleCachedGroup() = runTest {
+        server.enqueue(MockResponse().setBody(groupJson("g4", "Old Trip")))
+        repo.refreshGroup("g4").getOrThrow()
+        settings.addKnownGroup("g4")
+
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"not a member of this group"}"""))
+        val result = repo.refreshGroup("g4")
+
+        assertTrue(result.exceptionOrNull() is NotAMemberException)
+        assertNull("a group we may not read must not stay cached", repo.observeGroup("g4").first())
+        assertFalse(settings.knownGroupIds.first().contains("g4"))
     }
 
     @Test

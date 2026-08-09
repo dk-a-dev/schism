@@ -25,6 +25,16 @@ interface GroupDao {
     @Query("DELETE FROM participants WHERE groupId = :groupId")
     suspend fun clearParticipants(groupId: String)
 
+    /** Drops a group we may no longer read (a 403), so nothing stale is rendered from the cache. */
+    @Transaction
+    suspend fun deleteGroup(groupId: String) {
+        clearParticipants(groupId)
+        deleteGroupRow(groupId)
+    }
+
+    @Query("DELETE FROM groups WHERE id = :groupId")
+    suspend fun deleteGroupRow(groupId: String)
+
     @Query("UPDATE groups SET isFavorite = :favorite WHERE id = :groupId")
     suspend fun setFavorite(groupId: String, favorite: Boolean)
 

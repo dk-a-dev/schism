@@ -21,6 +21,15 @@ val backendUrl: String = System.getenv("SCHISM_BACKEND_URL")
 //   storePassword=...
 //   keyAlias=...
 //   keyPassword=...
+// AdMob ids default to Google's published *test* ids so no build ever requests production ads by
+// accident; the signed release supplies the real ones via env or Gradle properties.
+val admobAppId: String = System.getenv("SCHISM_ADMOB_APP_ID")
+    ?: (project.findProperty("schism.admobAppId") as String?)
+    ?: "ca-app-pub-3940256099942544~3347511713"
+val admobBannerUnitId: String = System.getenv("SCHISM_ADMOB_BANNER_UNIT_ID")
+    ?: (project.findProperty("schism.admobBannerUnitId") as String?)
+    ?: "ca-app-pub-3940256099942544/9214589741"
+
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
@@ -39,6 +48,10 @@ android {
         versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
+        // AdMob: Google's official *test* ids unless real ones are supplied by the release build
+        // (env or -Pschism.admob*). Never ship a debug/CI build that requests production ads.
+        manifestPlaceholders["admobAppId"] = admobAppId
+        buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$admobBannerUnitId\"")
     }
 
     signingConfigs {
@@ -54,9 +67,13 @@ android {
 
     buildTypes {
         release {
-            // R8 off: the app relies on reflection (serialization/Retrofit/Room/Hilt/MediaPipe); keep
-            // the release build unshrunk so 1.0.0 is reliable. Signed with the release key if present.
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            ndk {
+                // Play and the standalone release target modern 64-bit Android devices. Debug keeps
+                // host x86/x86_64 so emulator development remains unaffected.
+                abiFilters += setOf("arm64-v8a")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -74,6 +91,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        // Play Billing 9 / Mobile Ads 25 / UMP 4 ship Kotlin 2.3 metadata while this project builds
+        // on Kotlin 2.0.21. We only call their Java APIs, so relax the metadata check rather than
+        // dragging the whole app onto a new Kotlin. Drop this when the project moves to Kotlin 2.3+.
+        freeCompilerArgs += "-Xskip-metadata-version-check"
     }
     buildFeatures {
         compose = true
@@ -83,12 +104,19 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
     lint {
-        // AGP's bundled lint crashes (IncompatibleClassChangeError in its own
-        // NonNullableMutableLiveDataDetector) when analysing the Material3 1.5.x-alpha transitive
-        // libraries — a bug in lint, not in this app's code. Don't let lintVital fail the release
-        // build over it; unit tests + the debug build already validate correctness.
-        checkReleaseBuilds = false
-        abortOnError = false
+        checkReleaseBuilds = true
+        abortOnError = true
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val createsReleaseArtifact = allTasks.any { task ->
+        task.project == project &&
+            (task.name.startsWith("bundle") || task.name.startsWith("assemble") || task.name.startsWith("package")) &&
+            task.name.endsWith("Release")
+    }
+    check(!createsReleaseArtifact || hasReleaseSigning) {
+        "Release signing is required. Configure the ignored keystore.properties before building a release artifact."
     }
 }
 
@@ -116,6 +144,9 @@ dependencies {
     implementation(project(":ocr-contract"))
     implementation(project(":ocr-impl"))
     implementation(libs.androidx.exifinterface)
+    implementation(libs.billing)
+    implementation(libs.play.services.ads)
+    implementation(libs.user.messaging.platform)
     implementation(libs.mediapipe.tasks.genai)
     implementation(libs.play.services.code.scanner)
     implementation(libs.zxing.core)

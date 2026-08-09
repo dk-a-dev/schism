@@ -61,7 +61,7 @@ class OnboardingViewModel @Inject constructor(
         t is retrofit2.HttpException -> when (t.code()) {
             409 -> "That email is already registered — log in instead."
             401 -> "Invalid email or password."
-            400 -> "Check your details (password must be at least 6 characters)."
+            400 -> "Check your details (password must be at least 8 characters)."
             else -> "Something went wrong. Please try again."
         }
         t is IOException -> "Can't reach the server. Check your connection."

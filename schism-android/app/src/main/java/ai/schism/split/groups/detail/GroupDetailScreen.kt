@@ -5,7 +5,6 @@ import ai.schism.split.expense.data.Expense
 import ai.schism.split.groups.detail.tabs.ActivityTab
 import ai.schism.split.groups.detail.tabs.BalancesTab
 import ai.schism.split.groups.detail.tabs.ExpensesTab
-import ai.schism.split.groups.join.shareGroupInvite
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,6 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
-import androidx.compose.material.icons.filled.Share
 import ai.schism.split.core.ui.MorphLoader
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,7 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -66,6 +64,7 @@ fun GroupDetailScreen(
     val expenses by viewModel.expenses.collectAsState()
     val balances by viewModel.balances.collectAsState()
     val activities by viewModel.activities.collectAsState()
+    val notMember by viewModel.notMember.collectAsState()
     var selected by remember { mutableIntStateOf(0) }
 
     // Balances/activities are imperative fetches (not Room-observed): re-fetch whenever this screen
@@ -100,12 +99,9 @@ fun GroupDetailScreen(
                 },
                 actions = {
                     if (groupId != null) {
-                        val context = LocalContext.current
+                        // Invites are per participant now, so sharing goes through the invite screen.
                         IconButton(onClick = { onInvite(groupId) }) {
                             Icon(Icons.Filled.QrCode2, contentDescription = "Invite / QR")
-                        }
-                        IconButton(onClick = { shareGroupInvite(context, groupId, g?.name ?: "group") }) {
-                            Icon(Icons.Filled.Share, contentDescription = "Share invite")
                         }
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
@@ -145,6 +141,15 @@ fun GroupDetailScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            // A 403 already dropped the cached copy; say why instead of rendering an empty shell.
+            if (notMember) {
+                Text(
+                    stringResource(ai.schism.split.R.string.invite_error_not_member),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(24.dp),
+                )
+                return@Column
+            }
             TabRow(selectedTabIndex = selected) {
                 DetailTab.entries.forEachIndexed { i, tab ->
                     Tab(selected = selected == i, onClick = { selected = i }, text = { Text(tab.label) })

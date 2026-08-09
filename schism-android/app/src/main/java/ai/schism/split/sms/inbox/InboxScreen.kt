@@ -68,6 +68,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val SMS_PERMISSIONS = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
 
@@ -292,7 +293,7 @@ private fun EditTransactionDialog(
     onSave: (String, Long) -> Unit,
 ) {
     var merchant by remember { mutableStateOf(txn.merchant) }
-    var amount by remember { mutableStateOf(String.format("%.2f", txn.amountMinor / 100.0)) }
+    var amount by remember { mutableStateOf(String.format(Locale.ROOT, "%.2f", txn.amountMinor / 100.0)) }
     val amountMinor = amount.trim().toDoubleOrNull()?.let { (it * 100).toLong() }
 
     AlertDialog(

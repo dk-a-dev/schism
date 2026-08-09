@@ -9,6 +9,7 @@ import ai.schism.split.core.ui.CurrencyPicker
 import ai.schism.split.core.ui.InitialAvatar
 import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
+import ai.schism.split.groups.sendSmsInvites
 import android.content.Context
 import android.net.Uri
 import android.provider.ContactsContract
@@ -189,10 +190,11 @@ fun CreateGroupScreen(
             SchismPrimaryButton(
                 onClick = {
                     viewModel.submit { groupId ->
-                        // Real invites: prefill an SMS to every contact-added member with the link.
+                        // Nudge every contact-added member by SMS; their personal invite link is
+                        // minted per participant from the invite screen.
                         val phones = viewModel.pendingInvitePhones()
                         if (phones.isNotEmpty()) {
-                            sendSmsInvites(inviteContext, phones, viewModel.groupNameForInvite(), groupId)
+                            sendSmsInvites(inviteContext, phones, viewModel.groupNameForInvite())
                         }
                         onCreated(groupId)
                     }
@@ -234,20 +236,6 @@ private fun contactNameAndPhone(context: Context, uri: Uri): Pair<String, String
             val name = c.getString(0)?.takeIf { it.isNotBlank() } ?: return@use null
             name to c.getString(1)?.takeIf { it.isNotBlank() }
         }
-
-/** Prefill an SMS to every invited number with the group's join link. */
-private fun sendSmsInvites(context: Context, phones: List<String>, groupName: String, groupId: String) {
-    val link = ai.schism.split.groups.join.JoinGroupViewModel.shareLink(groupId)
-    val name = groupName.ifBlank { "our group" }
-    val intent = android.content.Intent(
-        android.content.Intent.ACTION_SENDTO,
-        Uri.parse("smsto:" + phones.joinToString(";")),
-    ).apply {
-        putExtra("sms_body", "Join \"$name\" on Schism to split our expenses: $link")
-        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    runCatching { context.startActivity(intent) }
-}
 
 @Composable
 private fun SectionCard(

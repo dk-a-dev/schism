@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- All guided-walkthrough copy lives here so it never collides with strings.xml. -->
+<resources>
+    <!-- Offer -->
+    <string name="walkthrough_offer_title">Want a quick look around?</string>
+    <string name="walkthrough_offer_body">Two minutes with sample data. Nothing is saved, shared, or sent anywhere.</string>
+    <string name="walkthrough_offer_accept">Take the 2-minute tour</string>
+    <string name="walkthrough_offer_decline">Explore myself</string>
+
+    <!-- Overlay chrome -->
+    <string name="walkthrough_step_counter">Step %1$d of %2$d</string>
+    <string name="walkthrough_back">Back</string>
+    <string name="walkthrough_skip">Skip tour</string>
+    <string name="walkthrough_continue">Continue</string>
+    <string name="walkthrough_finish">Finish</string>
+    <string name="walkthrough_got_it">Got it</string>
+
+    <!-- Demo screen chrome -->
+    <string name="walkthrough_demo_title">Guided tour</string>
+    <string name="walkthrough_demo_banner">Sample data. Nothing here is saved to your account.</string>
+    <string name="walkthrough_demo_close">Close tour</string>
+    <string name="walkthrough_demo_receipt_subtotal">Subtotal</string>
+    <string name="walkthrough_demo_receipt_tax">Tax</string>
+    <string name="walkthrough_demo_receipt_total">Total</string>
+    <string name="walkthrough_demo_owes">owes</string>
+    <string name="walkthrough_demo_gets_back">gets back</string>
+    <string name="walkthrough_demo_settled">is settled up</string>
+    <string name="walkthrough_demo_settle_action">Record %1$s from %2$s</string>
+    <string name="walkthrough_demo_live_split">Live Split preview</string>
+    <string name="walkthrough_demo_live_split_progress">%1$d of %2$d items claimed</string>
+    <string name="walkthrough_demo_assign_hint">Tap a name to claim an item.</string>
+    <string name="walkthrough_demo_claimed">%1$s claims %2$s</string>
+
+    <!-- Five demo steps -->
+    <string name="walkthrough_step_group_title">Start with a group</string>
+    <string name="walkthrough_step_group_body">A group holds everyone who shares the bill and the running balance between them. This one is sample data.</string>
+    <string name="walkthrough_step_receipt_title">Add the bill</string>
+    <string name="walkthrough_step_receipt_body">Schism reads a receipt into line items on your device. This tour uses a prepared receipt, so no camera, download, or permission is needed.</string>
+    <string name="walkthrough_step_assign_title">Assign each item</string>
+    <string name="walkthrough_step_assign_body">Tap a name to claim an item. Tax is shared in proportion to what each person ordered.</string>
+    <string name="walkthrough_step_balances_title">See who owes what</string>
+    <string name="walkthrough_step_balances_body">Schism nets everything down to the fewest payments. You can record a settlement whenever the money actually moves.</string>
+    <string name="walkthrough_step_live_split_title">Let everyone claim</string>
+    <string name="walkthrough_step_live_split_body">A Live Split link lets each person pick their own items. This is a preview only, so nothing is shared.</string>
+
+    <!-- Contextual feature hints -->
+    <string name="hint_sms_opt_in_title">Bank messages can fill this in</string>
+    <string name="hint_sms_opt_in_body">Schism can turn bank SMS into ready-to-split expenses. It stays off until you turn it on here, and it explains what it reads before asking for anything.</string>
+    <string name="hint_ocr_download_title">Receipt scanning downloads once</string>
+    <string name="hint_ocr_download_body">Scanning runs entirely on your device. Schism asks before it downloads the model.</string>
+    <string name="hint_participant_invite_title">Invite the others</string>
+    <string name="hint_participant_invite_body">Send an invite link so everyone sees the same balances on their own device.</string>
+    <string name="hint_upi_settle_title">Record a settlement</string>
+    <string name="hint_upi_settle_body">When someone pays you back, record it here so the balance clears.</string>
+    <string name="hint_live_split_host_title">Host a Live Split</string>
+    <string name="hint_live_split_host_body">Share one link and let everyone claim their own items instead of you guessing.</string>
+
+    <!-- Settings controls -->
+    <string name="walkthrough_settings_title">Guided tour</string>
+    <string name="walkthrough_settings_body">Replay the two-minute sample tour, or bring back the one-time tips that appear around the app.</string>
+    <string name="walkthrough_settings_replay">Replay app tour</string>
+    <string name="walkthrough_settings_reset_tips">Reset feature tips</string>
+    <string name="walkthrough_settings_replay_confirm_title">Replay the app tour?</string>
+    <string name="walkthrough_settings_replay_confirm_body">The tour uses sample data only. Your groups and expenses are untouched.</string>
+    <string name="walkthrough_settings_reset_confirm_title">Reset feature tips?</string>
+    <string name="walkthrough_settings_reset_confirm_body">Tips you have already dismissed will show once more.</string>
+    <string name="walkthrough_settings_cancel">Cancel</string>
+</resources>

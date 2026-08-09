@@ -32,11 +32,14 @@ class SettingsViewModelTest {
     private lateinit var settings: SettingsRepository
     private lateinit var db: SchismDb
     private lateinit var smsRepository: SmsRepository
-    private val updateChecker = UpdateChecker()
+    private lateinit var updateChecker: UpdateChecker
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        // Robolectric reports no installer package, so update checks stay enabled here — the
+        // Play-install short-circuit is covered by SelfUpdatePolicyTest.
+        updateChecker = UpdateChecker(ApplicationProvider.getApplicationContext())
         settings = SettingsRepository(ApplicationProvider.getApplicationContext())
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),

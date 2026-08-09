@@ -381,3 +381,27 @@ data class EditItemsRequest(
 data class VersionResponse(
     val version: Int,
 )
+
+// ---- participant invitations ----
+
+@Serializable
+data class InviteTokenDto(
+    val token: String,
+    val expiresAt: String = "",
+)
+
+/**
+ * Deliberately narrower than the server's preview body: the recipient is shown who invited them to
+ * be, and where — nothing about the group's contents. Unknown keys are ignored by the Json config,
+ * so the group id the server also sends is never even decoded, let alone cached.
+ */
+@Serializable
+data class InvitePreviewDto(
+    val groupName: String = "",
+    val participantName: String = "",
+)
+
+@Serializable
+data class RedeemInviteDto(
+    val groupId: String,
+)

@@ -1,5 +1,7 @@
 package ai.schism.split.finance
 
+import ai.schism.split.core.billing.EntitlementRepository
+import ai.schism.split.core.billing.isPlus
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.sms.data.TransactionDao
 import ai.schism.split.sms.data.TransactionEntity
@@ -20,6 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SpendingViewModel @Inject constructor(
     private val dao: TransactionDao,
+    entitlements: EntitlementRepository,
 ) : ViewModel() {
 
     val state: StateFlow<UiState<SpendingSummary>> =
@@ -32,6 +35,19 @@ class SpendingViewModel @Inject constructor(
                 }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)
+
+    /** Backend-verified Plus. Gates only the *extra* insight views — the free summary above stays. */
+    val plus: StateFlow<Boolean> = entitlements.state
+        .map { it.isPlus }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * Computed for everyone (it's the device's own data either way) but only rendered for Plus;
+     * losing Plus therefore hides a *view*, never a record.
+     */
+    val insights: StateFlow<PlusInsightsData?> = dao.observeAll()
+        .map { entities -> plusInsights(entities.map { it.toSpendTxn() }, System.currentTimeMillis()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
 private fun TransactionEntity.toSpendTxn(): SpendTxn = SpendTxn(

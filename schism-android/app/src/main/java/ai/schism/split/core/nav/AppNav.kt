@@ -7,8 +7,8 @@ import ai.schism.split.groups.create.CreateGroupScreen
 import ai.schism.split.expense.edit.ExpenseEditScreen
 import ai.schism.split.groups.detail.GroupDetailScreen
 import ai.schism.split.groups.edit.EditGroupScreen
-import ai.schism.split.groups.join.JoinGroupScreen
-import ai.schism.split.groups.join.OpenGroupScreen
+import ai.schism.split.groups.invite.EnterInviteScreen
+import ai.schism.split.groups.invite.RedeemInviteScreen
 import ai.schism.split.groups.list.GroupsListScreen
 import ai.schism.split.groups.qr.InviteQrScreen
 import ai.schism.split.settings.SettingsScreen
@@ -110,6 +110,9 @@ fun AppNav() {
             modifier = Modifier.padding(padding).windowInsetsPadding(WindowInsets.statusBars),
         ) {
             CloudStatusBanner(online = online, pending = pending)
+            ai.schism.split.walkthrough.WalkthroughOffer(
+                onAccept = { navController.navigate(ai.schism.split.walkthrough.WalkthroughRoutes.DEMO) },
+            )
             val updateVm: ai.schism.split.core.update.UpdateBannerViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel()
             val updateAvailable by updateVm.available.collectAsState()
@@ -133,6 +136,9 @@ fun AppNav() {
                 startDestination = Routes.GROUPS,
                 modifier = Modifier.weight(1f),
             ) {
+            composable(ai.schism.split.walkthrough.WalkthroughRoutes.DEMO) {
+                ai.schism.split.walkthrough.DemoTourScreen(onExit = { navController.popBackStack() })
+            }
             composable(Routes.GROUPS) {
                 GroupsListScreen(
                     onOpenGroup = { id -> navController.navigate(Routes.groupDetail(id)) },
@@ -148,26 +154,49 @@ fun AppNav() {
                 )
             }
             composable(Routes.JOIN_GROUP) {
-                JoinGroupScreen(
+                EnterInviteScreen(
                     onBack = { navController.popBackStack() },
-                    onJoined = { navController.popBackStack() },
+                    onToken = { token ->
+                        navController.navigate(Routes.redeemInvite(token)) {
+                            popUpTo(Routes.JOIN_GROUP) { inclusive = true }
+                        }
+                    },
                 )
             }
+            composable(
+                Routes.REDEEM_INVITE,
+                arguments = listOf(navArgument("token") { type = NavType.StringType }),
+                deepLinks = listOf(navDeepLink { uriPattern = "schism://invite/{token}" }),
+            ) {
+                RedeemInviteScreen(
+                    onJoined = { id ->
+                        navController.navigate(Routes.groupDetail(id)) {
+                            popUpTo(Routes.REDEEM_INVITE) { inclusive = true }
+                        }
+                    },
+                    onDismiss = {
+                        navController.navigate(Routes.GROUPS) {
+                            popUpTo(Routes.REDEEM_INVITE) { inclusive = true }
+                        }
+                    },
+                )
+            }
+            // Retired v1.2 group link. A group id grants nothing now, so this only explains itself —
+            // it never fetches or caches the group behind the id.
             composable(
                 Routes.OPEN_GROUP,
                 arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
                 deepLinks = listOf(navDeepLink { uriPattern = "schism://group/{groupId}" }),
-            ) { entry ->
-                val gid = entry.arguments?.getString("groupId").orEmpty()
-                OpenGroupScreen(
-                    groupId = gid,
-                    onOpened = { id ->
-                        navController.navigate(Routes.groupDetail(id)) {
+            ) {
+                EnterInviteScreen(
+                    legacy = true,
+                    onBack = {
+                        navController.navigate(Routes.GROUPS) {
                             popUpTo(Routes.OPEN_GROUP) { inclusive = true }
                         }
                     },
-                    onFailed = {
-                        navController.navigate(Routes.GROUPS) {
+                    onToken = { token ->
+                        navController.navigate(Routes.redeemInvite(token)) {
                             popUpTo(Routes.OPEN_GROUP) { inclusive = true }
                         }
                     },
@@ -285,7 +314,11 @@ fun AppNav() {
             }
             composable(Routes.DASHBOARD) { PersonalDashboardScreen() }
             composable(Routes.SPENDING) { SpendingScreen() }
-            composable(Routes.SETTINGS) { SettingsScreen() }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(
+                    onReplayTour = { navController.navigate(ai.schism.split.walkthrough.WalkthroughRoutes.DEMO) },
+                )
+            }
             }
         }
     }

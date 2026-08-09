@@ -1,5 +1,8 @@
 package ai.schism.split.core.update
 
+import android.content.Context
+import android.os.Build
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -39,10 +42,42 @@ fun isNewer(latest: String, current: String): Boolean {
     return false
 }
 
+/** Play's installer package names. `com.google.android.feedback` is the legacy one still reported
+ *  on some devices. */
+private val PLAY_INSTALLERS = setOf("com.android.vending", "com.google.android.feedback")
+
+/**
+ * Whether this install may offer its own updates, given the package that installed it.
+ *
+ * A Play-installed build must not: Play's Device and Network Abuse policy forbids an app
+ * distributing app updates outside Play, and the GitHub release banner links straight at an APK.
+ * Play delivers updates for those users. A sideloaded build (installer null, adb, a file manager,
+ * another store) keeps the GitHub check, because nothing else will tell it a new version exists.
+ */
+fun selfUpdateAllowed(installerPackage: String?): Boolean = installerPackage !in PLAY_INSTALLERS
+
 /** Checks GitHub's public Releases API for a newer build than the one installed, and the release
- *  notes for a given version. Never throws — any network/parse failure surfaces as a null result. */
+ *  notes for a given version. Never throws — any network/parse failure surfaces as a null result.
+ *
+ *  On a Play install every lookup short-circuits to null, so no request reaches GitHub at all —
+ *  that keeps the policy guarantee and the privacy disclosure ("the app contacts GitHub") true for
+ *  exactly the builds it applies to. */
 @Singleton
-class UpdateChecker @Inject constructor() {
+class UpdateChecker @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    private val allowed: Boolean by lazy {
+        selfUpdateAllowed(
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getInstallerPackageName(context.packageName)
+                }
+            }.getOrNull(),
+        )
+    }
     // A PLAIN client on purpose — NOT the app's shared OkHttp. That one carries a
     // BackendUrlInterceptor that rewrites every request's host to the Schism backend (so a GitHub
     // call would be sent to api.schism… and fail) plus an AuthInterceptor whose bearer token GitHub
@@ -50,10 +85,12 @@ class UpdateChecker @Inject constructor() {
     private val client = OkHttpClient()
 
     /** The latest published release (for the "update available" check). */
-    suspend fun latestRelease(): ReleaseInfo? = fetch(GITHUB_LATEST_RELEASE_API_URL)
+    suspend fun latestRelease(): ReleaseInfo? =
+        if (!allowed) null else fetch(GITHUB_LATEST_RELEASE_API_URL)
 
     /** The release for a specific tag (e.g. "v1.1.5") — used to show "what's new" for the running build. */
     suspend fun releaseForTag(tag: String): ReleaseInfo? {
+        if (!allowed) return null
         val t = if (tag.startsWith("v")) tag else "v$tag"
         return fetch("$GITHUB_API_BASE/tags/$t")
     }

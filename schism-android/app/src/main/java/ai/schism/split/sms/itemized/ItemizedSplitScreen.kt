@@ -10,6 +10,7 @@ import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.ui.SplitLoader
 import ai.schism.split.groups.data.Group
+import ai.schism.split.plus.PlusSheet
 import ai.schism.split.groups.data.Participant
 import ai.schism.split.sms.receipt.ReceiptLineItem
 import ai.schism.split.sms.receipt.engine.parseMinor
@@ -62,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -80,6 +82,16 @@ fun ItemizedSplitScreen(
 
     LaunchedEffect(state.error) {
         state.error?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
+
+    // Only a backend PLUS_REQUIRED opens this. Dismissing it leaves the draft, the items and every
+    // assignment exactly where they were — splitting this bill by hand never needs Plus.
+    state.plusRequired?.let { allowance ->
+        PlusSheet(
+            onDismiss = viewModel::dismissPlusSheet,
+            reason = stringResource(ai.schism.split.R.string.live_split_allowance_none, allowance.limit) +
+                "\n" + stringResource(ai.schism.split.R.string.live_split_manual_alternative),
+        )
     }
 
     Scaffold(
@@ -209,6 +221,26 @@ fun ItemizedSplitScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(if (state.creatingClaimSession) "Creating…" else "Let everyone claim (alpha)")
+                                }
+                                // What's left is stated up front, before the tap — never discovered
+                                // only after the backend refuses. Plus hosts without a counter.
+                                state.liveSplitAllowance?.takeIf { !state.plus }?.let { allowance ->
+                                    Text(
+                                        if (allowance.remaining > 0) {
+                                            stringResource(
+                                                ai.schism.split.R.string.live_split_allowance_left,
+                                                allowance.remaining,
+                                                allowance.limit,
+                                            )
+                                        } else {
+                                            stringResource(
+                                                ai.schism.split.R.string.live_split_allowance_none,
+                                                allowance.limit,
+                                            )
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                             PerPersonTotals(
@@ -478,7 +510,9 @@ private fun ItemDialog(
         else -> 0L
     }
     var unitPrice by remember {
-        mutableStateOf(if (initialUnitMinor > 0) String.format("%.2f", initialUnitMinor / 100.0) else "")
+        mutableStateOf(
+            if (initialUnitMinor > 0) String.format(java.util.Locale.ROOT, "%.2f", initialUnitMinor / 100.0) else "",
+        )
     }
     val qtyInt = qty.trim().toIntOrNull()
     val unitPriceMinor = parseMinor(unitPrice)

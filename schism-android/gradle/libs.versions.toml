@@ -29,6 +29,9 @@ documentScanner = "16.0.0-beta1"
 onnxruntime = "1.21.1"
 opencv = "4.13.0"
 exifinterface = "1.4.1"
+billing = "9.1.0"
+playServicesAds = "25.4.0"
+userMessagingPlatform = "4.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -75,6 +78,11 @@ mlkit-document-scanner = { group = "com.google.android.gms", name = "play-servic
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 opencv-android = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+# Plain (Java) Billing artifact, not billing-ktx: the ktx extensions drag in a newer Kotlin stdlib
+# than this project builds on, and the suspend wrappers we need are four lines in PlayBilling.kt.
+billing = { group = "com.android.billingclient", name = "billing", version.ref = "billing" }
+play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "playServicesAds" }
+user-messaging-platform = { group = "com.google.android.ump", name = "user-messaging-platform", version.ref = "userMessagingPlatform" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -93,12 +93,32 @@ interface ApiService {
         @Query("groupIds") groupIds: String,
     ): PersonalDashboardDto
 
+    // ---- participant invitations ----
+
+    /** Mints a fresh one-time token for an existing UNLINKED participant of a group we belong to. */
+    @POST("v1/groups/{groupId}/participants/{participantId}/invite")
+    suspend fun createParticipantInvite(
+        @Path("groupId") groupId: String,
+        @Path("participantId") participantId: String,
+    ): InviteTokenDto
+
+    /** Safe pre-redeem peek: group + participant names only. */
+    @GET("v1/invites/{token}")
+    suspend fun previewInvite(@Path("token") token: String): InvitePreviewDto
+
+    /** Atomically links the signed-in user to the invite's participant; returns the group id. */
+    @POST("v1/invites/{token}/redeem")
+    suspend fun redeemInvite(@Path("token") token: String): RedeemInviteDto
+
     // ---- claim links (alpha) ----
 
     @POST("v1/groups/{id}/claim-sessions")
     suspend fun createClaimSession(
         @Path("id") groupId: String,
         @Body body: CreateClaimSessionRequest,
+        // The backend meters this call against the free monthly allowance and requires a bounded key
+        // so a retry returns the original session instead of consuming a second one.
+        @Header("Idempotency-Key") idempotencyKey: String,
     ): ClaimSessionDto
 
     @GET("v1/claim-sessions/{sid}")

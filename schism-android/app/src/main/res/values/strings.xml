@@ -1,4 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Schism</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_get_started">Get started</string>
+
+    <string name="onboarding_groups_title">Groups that stay balanced</string>
+    <string name="onboarding_groups_body">Create groups for homes, trips, and dinners, split shared costs, and see every balance clearly.</string>
+    <string name="onboarding_groups_illustration_description">Three friends sharing a bill</string>
+
+    <string name="onboarding_capture_title">Capture, then review</string>
+    <string name="onboarding_capture_body">Scan a receipt or optionally import supported bank SMS messages on-device, then review the details before you split.</string>
+    <string name="onboarding_capture_illustration_description">A receipt inside a scanning frame</string>
+
+    <string name="onboarding_live_split_title">Claim together with Live Split</string>
+    <string name="onboarding_live_split_body">Invite your group to claim what they had and preview everyone’s totals before the expense is final.</string>
+    <string name="onboarding_live_split_illustration_description">A shared bill divided among a group</string>
+
+    <string name="onboarding_privacy_title">Private where it matters</string>
+    <string name="onboarding_privacy_body">Receipt and opted-in SMS understanding happens on-device. Only group expenses you choose to share are synced.</string>
+    <string name="onboarding_privacy_illustration_description">Private processing represented on a phone</string>
+
+    <string name="onboarding_phone_label">Phone (optional)</string>
+    <string name="onboarding_phone_supporting">Add a number only if you want to. You can use Schism without it.</string>
+    <string name="onboarding_password_supporting">At least 8 characters</string>
+
+    <!-- ── Schism Plus ─────────────────────────────────────────────────── -->
+    <string name="plus_title">Schism Plus</string>
+    <string name="plus_subtitle">Host as many Live Splits as you like, with no ads.</string>
+    <string name="plus_benefit_unlimited">Unlimited hosted Live Splits</string>
+    <string name="plus_benefit_no_ads">No ads, anywhere in the app</string>
+    <string name="plus_benefit_insights">Plus Insights — month-on-month trends and merchant history</string>
+    <string name="plus_benefit_export">Export your expenses to CSV or PDF</string>
+    <string name="plus_free_note">Everything you already use stays free: receipt scanning, bank message import, manual entry, invitations, balances and settle-up are never gated — and joining someone else\'s Live Split always is too.</string>
+    <string name="plus_not_now">Not now</string>
+    <string name="plus_restore">Restore purchases</string>
+    <string name="plus_manage">Manage subscription</string>
+    <string name="plus_per_month">%1$s per month</string>
+    <string name="plus_per_year">%1$s per year</string>
+    <string name="plus_per_period">%1$s per %2$s</string>
+    <string name="plus_renewal_terms">Billed through Google Play and renews automatically until you cancel. Cancel any time in Play.</string>
+    <string name="plus_pending">Google Play is still processing this purchase. Plus turns on by itself once it clears.</string>
+    <string name="plus_verifying">Confirming your purchase…</string>
+    <string name="plus_failed">That didn\'t go through. Try again, or use Restore purchases if you\'ve already paid.</string>
+    <string name="plus_unavailable">Plus isn\'t available on this device right now.</string>
+    <string name="plus_active">Schism Plus is active</string>
+    <string name="plus_active_until">Plus stays active until %1$s</string>
+    <string name="plus_free_plan">Free plan</string>
+    <string name="plus_see_options">See Plus options</string>
+    <string name="plus_export_locked">Exporting to CSV or PDF is part of Schism Plus. Your records stay right here either way.</string>
+
+    <!-- ── Live Split allowance ────────────────────────────────────────── -->
+    <string name="live_split_allowance_left">%1$d of %2$d free Live Splits left this month</string>
+    <string name="live_split_allowance_none">You\'ve used all %1$d free Live Splits this month</string>
+    <string name="live_split_resets">Resets %1$s</string>
+    <string name="live_split_manual_alternative">You can still split this bill right here — assigning items by hand is always free.</string>
+
+    <!-- ── Plus Insights and export ────────────────────────────────────── -->
+    <string name="plus_insights_title">Plus Insights</string>
+    <string name="plus_insights_locked">See how this month compares with last, and every merchant\'s history, with Schism Plus.</string>
+    <string name="plus_insights_unlock">See Plus Insights</string>
+    <string name="plus_insights_change_up">%1$s more than last month</string>
+    <string name="plus_insights_change_down">%1$s less than last month</string>
+    <string name="plus_insights_change_flat">Same as last month</string>
+    <string name="plus_insights_no_comparison">Not enough history to compare months yet</string>
+    <string name="plus_export_title">Export</string>
+    <string name="plus_export_csv">Export spending (CSV)</string>
+    <string name="plus_export_pdf">Export spending (PDF)</string>
+    <string name="plus_export_share">Share export</string>
+    <string name="plus_export_failed">Couldn\'t create that export.</string>
+
+    <!-- ── Ads ─────────────────────────────────────────────────────────── -->
+    <string name="ads_privacy_choices">Privacy choices</string>
+    <string name="ads_privacy_choices_body">Change the advertising consent you gave for this device.</string>
 </resources>

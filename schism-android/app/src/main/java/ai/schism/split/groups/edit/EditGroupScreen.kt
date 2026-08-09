@@ -162,7 +162,7 @@ fun EditGroupScreen(
                         // Text an invite to anyone just added from contacts, then leave.
                         val phones = viewModel.pendingInvitePhones()
                         if (phones.isNotEmpty()) {
-                            sendSmsInvites(context, phones, viewModel.groupNameForInvite(), viewModel.inviteGroupId)
+                            sendSmsInvites(context, phones, viewModel.groupNameForInvite())
                         }
                         android.widget.Toast.makeText(context, "Group saved", android.widget.Toast.LENGTH_SHORT).show()
                         onSaved()

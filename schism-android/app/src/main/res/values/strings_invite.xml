@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Participant invitations: organizer share flow, recipient redeem flow, and their errors. -->
+<resources>
+    <!-- Organizer: pick one unlinked participant and share a fresh one-time invite. -->
+    <string name="invite_title">Invite to group</string>
+    <string name="invite_pick_participant">Choose who this invite is for. Only they can use it.</string>
+    <string name="invite_everyone_joined">Everyone in this group has already joined. Add a person to the group first.</string>
+    <string name="invite_creating">Creating a secure invite…</string>
+    <string name="invite_qr_description">Invite QR code</string>
+    <string name="invite_ready">Send this to %1$s only — it links them to that person and can be used once.</string>
+    <string name="invite_share">Share invite</string>
+    <string name="invite_new_link">New link</string>
+    <string name="invite_share_subject">Join \"%1$s\" on Schism</string>
+    <string name="invite_share_body">Join \"%1$s\" on Schism as %2$s: %3$s</string>
+    <string name="invite_sms_body">I added you to \"%1$s\" on Schism. Install the app and I\'ll send you a personal invite link.</string>
+
+    <!-- Recipient: paste or scan an invite. -->
+    <string name="enter_invite_title">Join a group</string>
+    <string name="enter_invite_hint">Paste the invite link you were sent, or scan the organizer\'s QR code.</string>
+    <string name="enter_invite_label">Invite link</string>
+    <string name="enter_invite_continue">Continue</string>
+    <string name="enter_invite_scan">Scan QR code</string>
+    <string name="enter_invite_scan_failed">Couldn\'t read an invite QR code</string>
+    <string name="enter_invite_empty">Enter or scan an invite link</string>
+    <string name="enter_invite_legacy">This link is from an older version of Schism and no longer works. Ask a group member to send you a new invite.</string>
+
+    <!-- Recipient: preview and confirm. -->
+    <string name="redeem_title">Join group</string>
+    <string name="redeem_waiting_sign_in">Sign in to continue joining this group.</string>
+    <string name="redeem_loading">Checking your invite…</string>
+    <string name="redeem_prompt">You\'ve been invited to join \"%1$s\" as %2$s.</string>
+    <string name="redeem_confirm">Join as %1$s</string>
+    <string name="redeem_cancel">Not now</string>
+
+    <!-- Distinct, explicit outcomes (see the backend\'s invite error mapping). -->
+    <string name="invite_error_not_found">This invite link isn\'t valid. Ask a group member for a new one.</string>
+    <string name="invite_error_expired">This invite has expired. Ask a group member for a new one.</string>
+    <string name="invite_error_used">This invite has already been used. Ask a group member for a new one.</string>
+    <string name="invite_error_linked">That person is already linked to an account, or you are already in this group.</string>
+    <string name="invite_error_not_member">You are not a member of this group.</string>
+    <string name="invite_error_sign_in">Sign in to continue.</string>
+    <string name="invite_error_generic">Something went wrong. Please try again.</string>
+</resources>

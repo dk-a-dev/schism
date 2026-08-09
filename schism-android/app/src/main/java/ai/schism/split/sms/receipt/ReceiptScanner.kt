@@ -1,6 +1,5 @@
 package ai.schism.split.sms.receipt
 
-import ai.schism.split.ocr.BundledOcrModels
 import ai.schism.split.ocr.OcrAvailability
 import ai.schism.split.ocr.OcrCoordinator
 import ai.schism.split.ocr.impl.PaddleOcrProvider
@@ -21,11 +20,9 @@ class ReceiptScanner(
     private val coordinator: OcrCoordinator? = null,
 ) {
     private val provider = PaddleOcrProvider()
-    private val bundledModels = BundledOcrModels()
 
     suspend fun recognizeCells(context: Context, uri: Uri): List<Row> {
-        val models = coordinator?.currentModels()
-            ?: if (coordinator == null) bundledModels.materialize(context.applicationContext) else throw OcrNotReadyException()
+        val models = coordinator?.currentModels() ?: throw OcrNotReadyException()
         return ocrLinesToRows(provider.recognize(context.applicationContext, uri, models).lines)
     }
 

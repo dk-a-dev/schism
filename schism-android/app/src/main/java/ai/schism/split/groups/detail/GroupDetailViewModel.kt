@@ -8,6 +8,7 @@ import ai.schism.split.expense.data.Expense
 import ai.schism.split.expense.data.ExpenseRepository
 import ai.schism.split.groups.data.Group
 import ai.schism.split.groups.data.GroupRepository
+import ai.schism.split.groups.data.NotAMemberException
 import ai.schism.split.groups.detail.settle.buildSettlementRequest
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -58,8 +59,15 @@ class GroupDetailViewModel @Inject constructor(
         refresh()
     }
 
+    /** Set when the server answers `403` for this group; its cached copy has been dropped by then. */
+    private val _notMember = MutableStateFlow(false)
+    val notMember: StateFlow<Boolean> = _notMember.asStateFlow()
+
     fun refresh() {
-        viewModelScope.launch { groupRepo.refreshGroup(groupId) }
+        viewModelScope.launch {
+            groupRepo.refreshGroup(groupId)
+                .onFailure { _notMember.value = it is NotAMemberException }
+        }
         viewModelScope.launch { expenseRepo.refreshExpenses(groupId) }
         viewModelScope.launch { loadBalances() }
         viewModelScope.launch { loadActivities() }

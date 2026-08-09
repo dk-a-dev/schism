@@ -1,5 +1,6 @@
 package ai.schism.split.sms.itemized.claim
 
+import ai.schism.split.core.billing.plusRequiredOrNull
 import ai.schism.split.core.net.ApiService
 import ai.schism.split.core.net.ClaimSessionDto
 import ai.schism.split.core.net.ClaimWeightDto
@@ -10,6 +11,8 @@ import ai.schism.split.core.net.PutClaimsRequest
 import ai.schism.split.core.net.ResolutionDto
 import ai.schism.split.core.net.VersionResponse
 import retrofit2.Response
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,8 +40,26 @@ sealed class ClaimError(message: String) : Exception(message) {
 class ClaimSessionRepository @Inject constructor(
     private val api: ApiService,
 ) {
-    suspend fun createSession(groupId: String, request: CreateClaimSessionRequest): Result<ClaimSessionDto> =
-        runCatching { api.createClaimSession(groupId, request) }
+    /**
+     * Hosting a new Live Split — the one call the backend meters. A free account gets three per UTC
+     * calendar month; a fourth comes back `402 PLUS_REQUIRED`, which is surfaced as
+     * [ai.schism.split.core.billing.PlusRequiredException] so the caller can offer Plus instead of
+     * showing a generic failure. Joining and every operation on an existing session stay free.
+     *
+     * The idempotency key is held per group until the create succeeds, so retrying a failed attempt
+     * reuses it and the backend returns the original session rather than metering a second one. A
+     * later, genuinely new session for the same group gets a fresh key.
+     */
+    suspend fun createSession(groupId: String, request: CreateClaimSessionRequest): Result<ClaimSessionDto> {
+        val key = pendingKeys.getOrPut(groupId) { UUID.randomUUID().toString() }
+        return runCatching { api.createClaimSession(groupId, request, key) }
+            .onSuccess { pendingKeys.remove(groupId) }
+            .recoverCatching { throw plusRequiredOrNull(it) ?: it }
+    }
+
+    // ponytail: a plain map is enough — entries are per group, dropped on success, and bounded by
+    // the number of groups a user hosts in one process.
+    private val pendingKeys = ConcurrentHashMap<String, String>()
 
     suspend fun getSession(sid: String): Result<ClaimSessionDto> =
         runCatching { api.getClaimSession(sid) }

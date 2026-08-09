@@ -9,6 +9,10 @@ object Routes {
     const val CREATE_GROUP = "groups/create"
     const val JOIN_GROUP = "groups/join"
 
+    /** Redeeming a participant invite (`schism://invite/<token>`). */
+    const val REDEEM_INVITE = "invite/{token}"
+    fun redeemInvite(token: String) = "invite/$token"
+
     const val PUSH_SPLIT = "sms/split/{transactionId}"
     fun pushSplit(transactionId: String) = "sms/split/$transactionId"
 
@@ -18,6 +22,7 @@ object Routes {
     const val CLAIM = "claim/{sid}"
     fun claim(sid: String) = "claim/$sid"
 
+    /** Retired v1.2 group link. Kept only to explain that a new participant invite is needed. */
     const val OPEN_GROUP = "open_group/{groupId}"
     const val GROUP_DETAIL = "groups/detail/{groupId}"
     const val GROUP_DASHBOARD = "groups/detail/{groupId}/dashboard"
