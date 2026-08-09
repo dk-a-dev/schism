@@ -50,6 +50,9 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 	r.Route("/v1", func(r chi.Router) {
 		r.Post("/auth/register", h.authRegister)
 		r.Post("/auth/login", h.authLogin)
+		r.Get("/models/ocr/manifest", h.ocrModelManifest)
+		r.Get("/models/ocr/{version}/{file}", h.ocrModelArtifact)
+		r.Head("/models/ocr/{version}/{file}", h.ocrModelArtifact)
 		r.Group(func(r chi.Router) {
 			r.Use(h.withUser)
 			r.Use(h.requireUser)

@@ -7,8 +7,9 @@ All endpoints are under `/v1`. All request and response bodies are JSON with **c
 
 - **Money** is always an integer in **minor units** (cents/paise). `1000` = 10.00 in the group's
   currency. Never a float. The frontend formats using the group's `currency`/`currencyCode`.
-- **No auth.** A group is reached by its `id`. Identity is chosen client-side (device profile);
-  the app passes the acting participant where an endpoint needs it.
+- **Authentication is required** for all `/v1` data routes except register, login, and the OCR
+  model catalog. Send `Authorization: Bearer <token>`. Group IDs are identifiers, not capabilities:
+  an existing non-member receives `403`, an anonymous caller `401`, and a missing group `404`.
 - **IDs** are opaque URL-safe strings (12 chars) except `Category.id` which is an integer.
 - **Errors** use HTTP status + `{ "error": "<message>" }`. Validation → `400`, unknown resource →
   `404`, server fault → `500`.
@@ -22,7 +23,8 @@ All endpoints are under `/v1`. All request and response bodies are JSON with **c
 
 ## Health
 
-`GET /health` → `200 {"status":"ok"}` (liveness+DB check; not under `/v1`).
+`GET /health` → `200 {"status":"ok"}` (liveness; not under `/v1`). Database readiness is
+`GET /ready`.
 
 ## Categories
 
@@ -54,8 +56,8 @@ Transportation, Utilities. `categoryId` `0` (General) is the default.
 `404` if unknown.
 
 ### List by ids
-`GET /v1/groups?ids=a,b,c` → `200 [ Group, ... ]` (unknown ids silently skipped; no `ids` → `[]`).
-Used to render the device's saved groups.
+`GET /v1/groups?ids=a,b,c` → `200 [ Group, ... ]`. Requested IDs are intersected with the caller's
+memberships; unknown/unauthorized IDs are omitted. With no `ids`, all caller memberships are listed.
 
 ### Update
 `PUT /v1/groups/{id}` — same body as create. Participants **with** an `id` are updated, **without**
@@ -169,5 +171,20 @@ the given groups. `participant` matches a group participant by **id** or by **na
 
 - Cache `GET` responses in Room for offline viewing; writes require network (surface a clear
   offline error). Refetch affected resources after a successful write.
-- To render "you", pass the device profile's participant id (or name) to the dashboard endpoints.
+- Activity actors and the group dashboard's "you" participant are derived from the session; client
+  `addedBy` and group-dashboard participant values are not trusted.
 - Prefer the group `dashboard` endpoint over `stats` for anything richer than a headline number.
+
+## Participant invitations
+
+`POST /v1/groups/{groupId}/participants/{participantId}/invite` creates a seven-day one-time token
+for an existing unlinked participant. `GET /v1/invites/{token}` returns safe preview fields;
+`POST /v1/invites/{token}/redeem` atomically links the authenticated user. Replay or an already-linked
+participant returns `409`. Share the HTTPS landing `/i/{token}`, which opens `schism://invite/{token}`.
+
+## OCR model delivery
+
+`GET /v1/models/ocr/manifest` is public and returns version `2026.06`, minimum app code `10300`,
+total bytes, per-file SHA-256 values, and relative download paths. `GET|HEAD
+/v1/models/ocr/2026.06/{det.onnx|rec.onnx|rec.yml}` redirects only to revision-pinned official
+PaddlePaddle Hugging Face files. Versioned redirects are immutable and do not accept upstream URLs.

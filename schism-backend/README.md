@@ -11,21 +11,25 @@ Android client — only expenses the user shares reach this service.
   and `internal/analytics` for dashboard insights — both DB-free and fully unit-tested.
 
 ## Features
-- **User identity & auth** — register a user (`POST /v1/users`) and receive a **bearer token**
-  (stored sha256-hashed); every request carries `Authorization: Bearer …`. Participant ↔ user
-  linking is server-sanitized so it can't be spoofed.
+- **User identity & auth** — register/login through `/v1/auth/*` and receive a 90-day **bearer
+  session** (stored SHA-256-hashed). Group data requires authenticated membership.
+- **Secure invitations** — a member creates a seven-day, one-time token for an existing unlinked
+  participant. Tokens are hash-only at rest; phone numbers never auto-claim memberships.
+- **Downloadable OCR** — a versioned manifest and immutable, checksum-pinned PaddleOCR redirects
+  keep the 6.3 MB model outside the base app while the backend remains the control plane.
 - **Groups & participants** — create / fetch / **update** (participant reconcile: rows with an id are
   updated in place, new rows inserted, absent rows deleted — balances preserved).
 - **Expenses** — all four split modes (evenly / shares / percentage / exact amount) and
   reimbursements (settle-up), with **idempotency keys** so retried creates never double-post.
 - **Balances & suggested reimbursements**, **activity feed** (actor + title), **group & cross-group
   dashboards / stats**, and **expense categories**.
-- Migrations in `internal/store/migrations` (`0001_init` … `0004_user_token`), auto-applied on start.
+- Migrations in `internal/store/migrations` are auto-applied on start.
 
 ## Endpoints (`/v1`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/users` | Register a user → id + bearer token |
+| `POST` | `/auth/register` · `/auth/login` | Create/login account → bearer session |
+| `POST` | `/auth/logout` | Revoke the current session only |
 | `GET`  | `/users/me` | Current authenticated user |
 | `GET`  | `/categories` | Expense categories |
 | `GET`  | `/dashboard` | Cross-group dashboard |
@@ -35,6 +39,10 @@ Android client — only expenses the user shares reach this service.
 | `GET`  | `/groups/{id}/balances` · `/activities` · `/stats` · `/dashboard` | Balances, activity, insights |
 | `GET`/`POST` | `/groups/{id}/expenses` | List / create expense (create takes `Idempotency-Key`) |
 | `GET`/`PUT`/`DELETE` | `/groups/{id}/expenses/{expenseID}` | Read / update / delete an expense |
+| `POST` | `/groups/{id}/participants/{participantID}/invite` | Mint a one-time participant invite |
+| `GET`/`POST` | `/invites/{token}` · `/invites/{token}/redeem` | Preview / redeem an invite |
+| `GET` | `/models/ocr/manifest` | Pinned PaddleOCR model manifest |
+| `GET`/`HEAD` | `/models/ocr/2026.06/{file}` | Immutable allowlisted model redirect |
 
 ## Run
 
