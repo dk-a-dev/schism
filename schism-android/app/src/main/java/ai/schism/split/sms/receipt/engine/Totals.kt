@@ -16,7 +16,9 @@ private val BARE_TOTAL_RE = Regex("""\btotal\b""", RegexOption.IGNORE_CASE)
 // this is the small delta applied to reach that rounded figure, not the figure itself.
 private val ROUND_RE = Regex("""round\s*off|round\s*amount|\brounding\b""", RegexOption.IGNORE_CASE)
 private val DISCOUNT_RE = Regex("""discount|\boff\b|saved""", RegexOption.IGNORE_CASE)
-private val FEES_RE = Regex("""packaging|platform|service|delivery|charge|\btip\b|gratuity""", RegexOption.IGNORE_CASE)
+// "\bfees?\b" is the generic case: a fee line names its own kind ("Packing Fee", "Convenience
+// Fee") and the enumerated words below only cover the kinds we happened to have seen.
+private val FEES_RE = Regex("""packaging|platform|service|delivery|charge|\bfees?\b|\btip\b|gratuity""", RegexOption.IGNORE_CASE)
 private val FREE_RE = Regex("""\bfree\b""", RegexOption.IGNORE_CASE)
 
 private val CGST_RE = Regex("""\bcgst\b""", RegexOption.IGNORE_CASE)

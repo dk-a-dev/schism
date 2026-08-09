@@ -1,0 +1,102 @@
+# Synthetic and redacted test data only; values identify no real person, merchant, or transaction.
+# id	category	tags	style	expectedCurrency	currencyToken	merchant	expectedDate	numberStyle	noise	items(name~qty~unitMinor~amountMinor)	expectedSubtotal	taxes(label~minor)	fees(label~minor)	expectedDiscount	expectedRoundoff	expectedTotal	expectedVerified
+SYN-001	currency	currency,retail	FOUR	₹	₹	SYNTHETIC CURRENCY 1	2026-02-02	DOT	NONE	currency Main 1~2~5000~10000;currency Side 1~1~2500~2500	12500	-	-	0	0	12500	true
+SYN-002	currency	currency,restaurant	QTY_FIRST	₹	INR 	SYNTHETIC CURRENCY 2	2026-03-03	DOT	NONE	currency Main 2~2~5250~10500;currency Side 2~1~2600~2600	13100	-	-	0	0	13100	true
+SYN-003	currency	currency,retail	RATE_QTY	₹	Rs. 	SYNTHETIC CURRENCY 3	2026-04-04	DOT	NONE	currency Main 3~2~5500~11000;currency Side 3~1~2700~2700	13700	-	-	0	0	13700	true
+SYN-004	currency	currency,restaurant	HEADERLESS	$	$	SYNTHETIC CURRENCY 4	2026-05-05	DOT	NONE	currency Main 4~2~5750~11500;currency Side 4~1~2800~2800	14300	-	-	0	0	14300	true
+SYN-005	currency	currency,retail	TWO	$	USD 	SYNTHETIC CURRENCY 5	2026-06-06	DOT	NONE	Currency Sample 5~1~1550~1550	1550	-	-	0	0	1550	true
+SYN-006	currency	currency,restaurant	QTY_FIRST	€	€	SYNTHETIC CURRENCY 6	2026-07-07	DOT	NONE	currency Main 6~2~6250~12500;currency Side 6~1~3000~3000	15500	-	-	0	0	15500	true
+SYN-007	currency	currency,retail	RATE_QTY	€	EUR 	SYNTHETIC CURRENCY 7	2026-08-08	DOT	NONE	currency Main 7~2~6500~13000;currency Side 7~1~3100~3100	16100	-	-	0	0	16100	true
+SYN-008	currency	currency,restaurant	TWO	£	£	SYNTHETIC CURRENCY 8	2026-09-09	DOT	NONE	Currency Sample 8~1~1775~1775	1775	-	-	0	0	1775	true
+SYN-009	currency	currency,retail	FOUR	£	GBP 	SYNTHETIC CURRENCY 9	2026-10-10	DOT	NONE	currency Main 9~2~7000~14000;currency Side 9~1~3300~3300	17300	-	-	0	0	17300	true
+SYN-010	currency	currency,restaurant	QTY_FIRST	₹	₹	SYNTHETIC CURRENCY 10	2026-11-11	DOT	NONE	currency Main 10~2~7250~14500;currency Side 10~1~3400~3400	17900	-	-	0	0	17900	true
+SYN-011	decimals	decimals,retail	FOUR	₹	₹	SYNTHETIC DECIMALS 1	2026-12-12	DOT	NONE	Decimal Item 1~2~1234~2468;Decimal Extra 1~1~567~567	3035	-	-	0	0	3035	true
+SYN-012	decimals	decimals,restaurant	QTY_FIRST	₹	₹	SYNTHETIC DECIMALS 2	2026-01-13	COMMA	NONE	Large Decimal Item 2~1~139900~139900;Grouped Extra 2~1~54950~54950	194850	-	-	0	0	194850	true
+SYN-013	decimals	decimals,retail	RATE_QTY	₹	₹	SYNTHETIC DECIMALS 3	2026-02-14	MID_DOT	NONE	Decimal Item 3~2~1436~2872;Decimal Extra 3~1~593~593	3465	-	-	0	0	3465	true
+SYN-014	decimals	decimals,restaurant	HEADERLESS	₹	₹	SYNTHETIC DECIMALS 4	2026-03-15	SLASH	NONE	Whole Price Item 4~2~12000~24000;Whole Price Extra~1~5000~5000	29000	-	-	0	0	29000	true
+SYN-015	decimals	decimals,retail	FOUR	₹	₹	SYNTHETIC DECIMALS 5	2026-04-16	BARE	NONE	Whole Price Item 5~2~12000~24000;Whole Price Extra~1~5000~5000	29000	-	-	0	0	29000	true
+SYN-016	decimals	decimals,restaurant	QTY_FIRST	₹	₹	SYNTHETIC DECIMALS 6	2026-05-17	DROPPED	NONE	Recovered Decimal Roll~1~9900~9900;Recovered Lime~1~5500~5500	15400	-	-	0	0	15400	true
+SYN-017	decimals	decimals,retail	RATE_QTY	₹	₹	SYNTHETIC DECIMALS 7	2026-06-18	DOT	NONE	Decimal Item 7~2~1840~3680;Decimal Extra 7~1~645~645	4325	-	-	0	0	4325	true
+SYN-018	decimals	decimals,restaurant	HEADERLESS	₹	₹	SYNTHETIC DECIMALS 8	2026-07-19	COMMA	NONE	Large Decimal Item 8~1~199900~199900;Grouped Extra 8~1~54950~54950	254850	-	-	0	0	254850	true
+SYN-019	decimals	decimals,retail	FOUR	₹	₹	SYNTHETIC DECIMALS 9	2026-08-20	MID_DOT	NONE	Decimal Item 9~2~2042~4084;Decimal Extra 9~1~671~671	4755	-	-	0	0	4755	true
+SYN-020	decimals	decimals,restaurant	QTY_FIRST	₹	₹	SYNTHETIC DECIMALS 10	2026-09-21	DOT	NONE	Decimal Item 10~2~2143~4286;Decimal Extra 10~1~684~684	4970	-	-	0	0	4970	true
+SYN-021	tax	tax,retail	FOUR	₹	₹	SYNTHETIC TAX 1	2026-10-22	DOT	NONE	Taxable Item 1~2~5000~10000;Taxable Extra 1~1~5000~5000	15000	GST 5%~750	-	0	0	15750	true
+SYN-022	tax	tax,restaurant	QTY_FIRST	₹	₹	SYNTHETIC TAX 2	2026-11-23	DOT	NONE	Taxable Item 2~2~5000~10000;Taxable Extra 2~1~5000~5000	15000	CGST 2.5%~375;SGST 2.5%~375	-	0	0	15750	true
+SYN-023	tax	tax,retail	RATE_QTY	₹	₹	SYNTHETIC TAX 3	2026-12-24	DOT	NONE	Taxable Item 3~2~5000~10000;Taxable Extra 3~1~5000~5000	15000	IGST 12%~1800	-	0	0	16800	true
+SYN-024	tax	tax,restaurant	HEADERLESS	₹	₹	SYNTHETIC TAX 4	2026-01-25	DOT	NONE	Taxable Item 4~2~5000~10000;Taxable Extra 4~1~5000~5000	15000	VAT 8%~1200	-	0	0	16200	true
+SYN-025	tax	tax,retail	FOUR	₹	₹	SYNTHETIC TAX 5	2026-02-26	DOT	NONE	Taxable Item 5~2~5000~10000;Taxable Extra 5~1~5000~5000	15000	Sales Tax~975	-	0	0	15975	true
+SYN-026	tax	tax,restaurant	QTY_FIRST	₹	₹	SYNTHETIC TAX 6	2026-03-27	DOT	NONE	Taxable Item 6~2~5000~10000;Taxable Extra 6~1~5000~5000	15000	CGST 9%~1350;SGST 9%~1350;CESS~100	-	0	0	17800	true
+SYN-027	tax	tax,retail	RATE_QTY	₹	₹	SYNTHETIC TAX 7	2026-04-01	DOT	NONE	Taxable Item 7~2~5000~10000;Taxable Extra 7~1~5000~5000	15000	GST~2700	-	0	0	17700	true
+SYN-028	tax	tax,restaurant	HEADERLESS	₹	₹	SYNTHETIC TAX 8	2026-05-02	DOT	NONE	Taxable Item 8~2~5000~10000;Taxable Extra 8~1~5000~5000	15000	VAT 14.5%~2175	-	0	0	17175	true
+SYN-029	tax	tax,retail	FOUR	₹	₹	SYNTHETIC TAX 9	2026-06-03	DOT	NONE	Taxable Item 9~2~5000~10000;Taxable Extra 9~1~5000~5000	15000	Local Tax~450	-	0	0	15450	true
+SYN-030	tax	tax,restaurant	QTY_FIRST	₹	₹	SYNTHETIC TAX 10	2026-07-04	DOT	NONE	Taxable Item 10~2~5000~10000;Taxable Extra 10~1~5000~5000	15000	IGST 5%~750;CESS~75	-	0	0	15825	true
+SYN-031	discount	discount,retail	FOUR	₹	₹	SYNTHETIC DISCOUNT 1	2026-08-05	DOT	NONE	discount Main 1~2~5000~10000;discount Side 1~1~2500~2500	12500	-	-	125	0	12375	true
+SYN-032	discount	discount,restaurant	QTY_FIRST	₹	₹	SYNTHETIC DISCOUNT 2	2026-09-06	DOT	NONE	discount Main 2~2~5250~10500;discount Side 2~1~2600~2600	13100	-	-	250	0	12850	true
+SYN-033	discount	discount,retail	RATE_QTY	₹	₹	SYNTHETIC DISCOUNT 3	2026-10-07	DOT	NONE	discount Main 3~2~5500~11000;discount Side 3~1~2700~2700	13700	-	-	375	0	13325	true
+SYN-034	discount	discount,restaurant	HEADERLESS	₹	₹	SYNTHETIC DISCOUNT 4	2026-11-08	DOT	NONE	discount Main 4~2~5750~11500;discount Side 4~1~2800~2800	14300	-	-	500	0	13800	true
+SYN-035	discount	discount,retail	FOUR	₹	₹	SYNTHETIC DISCOUNT 5	2026-12-09	DOT	NONE	discount Main 5~2~6000~12000;discount Side 5~1~2900~2900	14900	-	-	625	0	14275	true
+SYN-036	discount	discount,restaurant	QTY_FIRST	₹	₹	SYNTHETIC DISCOUNT 6	2026-01-10	DOT	NONE	discount Main 6~2~6250~12500;discount Side 6~1~3000~3000	15500	-	-	750	0	14750	true
+SYN-037	discount	discount,retail	RATE_QTY	₹	₹	SYNTHETIC DISCOUNT 7	2026-02-11	DOT	NONE	discount Main 7~2~6500~13000;discount Side 7~1~3100~3100	16100	-	-	875	0	15225	true
+SYN-038	discount	discount,restaurant	HEADERLESS	₹	₹	SYNTHETIC DISCOUNT 8	2026-03-12	DOT	NONE	discount Main 8~2~6750~13500;discount Side 8~1~3200~3200	16700	-	-	1000	0	15700	true
+SYN-039	discount	discount,retail	FOUR	₹	₹	SYNTHETIC DISCOUNT 9	2026-04-13	DOT	NONE	discount Main 9~2~7000~14000;discount Side 9~1~3300~3300	17300	-	-	1125	0	16175	true
+SYN-040	discount	discount,restaurant	QTY_FIRST	₹	₹	SYNTHETIC DISCOUNT 10	2026-05-14	DOT	NONE	discount Main 10~2~7250~14500;discount Side 10~1~3400~3400	17900	-	-	1250	0	16650	true
+SYN-041	fees	fees,retail	FOUR	₹	₹	SYNTHETIC FEES 1	2026-06-15	DOT	NONE	fees Main 1~2~5000~10000;fees Side 1~1~2500~2500	12500	-	Packaging Charge~100	0	0	12600	true
+SYN-042	fees	fees,restaurant	TWO	₹	₹	SYNTHETIC FEES 2	2026-07-16	DOT	NONE	Fee Item 2~1~10000~10000;Fee Extra 2~1~5000~5000	15000	-	Delivery Fee~200	0	0	15200	true
+SYN-043	fees	fees,retail	RATE_QTY	₹	₹	SYNTHETIC FEES 3	2026-08-17	DOT	NONE	fees Main 3~2~5500~11000;fees Side 3~1~2700~2700	13700	-	Platform Fee~300	0	0	14000	true
+SYN-044	fees	fees,restaurant	TWO	₹	₹	SYNTHETIC FEES 4	2026-09-18	DOT	NONE	Fee Item 4~1~10000~10000;Fee Extra 4~1~5000~5000	15000	-	Service Charge~400	0	0	15400	true
+SYN-045	fees	fees,retail	FOUR	₹	₹	SYNTHETIC FEES 5	2026-10-19	DOT	NONE	fees Main 5~2~6000~12000;fees Side 5~1~2900~2900	14900	-	Tip~500	0	0	15400	true
+SYN-046	fees	fees,restaurant	TWO	₹	₹	SYNTHETIC FEES 6	2026-11-20	DOT	NONE	Fee Item 6~1~10000~10000;Fee Extra 6~1~5000~5000	15000	-	Gratuity~600	0	0	15600	true
+SYN-047	fees	fees,retail	RATE_QTY	₹	₹	SYNTHETIC FEES 7	2026-12-21	DOT	NONE	fees Main 7~2~6500~13000;fees Side 7~1~3100~3100	16100	-	Packing Fee~700	0	0	16800	true
+SYN-048	fees	fees,restaurant	TWO	₹	₹	SYNTHETIC FEES 8	2026-01-22	DOT	NONE	Fee Item 8~1~10000~10000;Fee Extra 8~1~5000~5000	15000	-	Delivery Charge~800	0	0	15800	true
+SYN-049	fees	fees,retail	FOUR	₹	₹	SYNTHETIC FEES 9	2026-02-23	DOT	NONE	fees Main 9~2~7000~14000;fees Side 9~1~3300~3300	17300	-	Convenience Charge~900	0	0	18200	true
+SYN-050	fees	fees,restaurant	TWO	₹	₹	SYNTHETIC FEES 10	2026-03-24	DOT	NONE	Fee Item 10~1~10000~10000;Fee Extra 10~1~5000~5000	15000	-	Service Fee~1000	0	0	16000	true
+SYN-051	quantity	quantity,retail	FOUR	₹	₹	SYNTHETIC QUANTITY 1	2026-04-25	DOT	QTY_X	Quantity Item 1~2~100~200;Single Addon 1~1~500~500	700	-	-	0	0	700	true
+SYN-052	quantity	quantity,restaurant	QTY_FIRST	₹	₹	SYNTHETIC QUANTITY 2	2026-05-26	DOT	QTY_NOS	Quantity Item 2~3~125~375;Single Addon 2~1~500~500	875	-	-	0	0	875	true
+SYN-053	quantity	quantity,retail	RATE_QTY	₹	₹	SYNTHETIC QUANTITY 3	2026-06-27	DOT	QTY_DECIMAL	Quantity Item 3~4~150~600;Single Addon 3~1~500~500	1100	-	-	0	0	1100	true
+SYN-054	quantity	quantity,restaurant	HEADERLESS	₹	₹	SYNTHETIC QUANTITY 4	2026-07-01	DOT	NONE	Quantity Item 4~6~175~1050;Single Addon 4~1~500~500	1550	-	-	0	0	1550	true
+SYN-055	quantity	quantity,retail	FOUR	₹	₹	SYNTHETIC QUANTITY 5	2026-08-02	DOT	QTY_X	Quantity Item 5~12~200~2400;Single Addon 5~1~500~500	2900	-	-	0	0	2900	true
+SYN-056	quantity	quantity,restaurant	QTY_FIRST	₹	₹	SYNTHETIC QUANTITY 6	2026-09-03	DOT	QTY_NOS	Quantity Item 6~25~225~5625;Single Addon 6~1~500~500	6125	-	-	0	0	6125	true
+SYN-057	quantity	quantity,retail	RATE_QTY	₹	₹	SYNTHETIC QUANTITY 7	2026-10-04	DOT	NONE	Quantity Item 7~99~250~24750;Single Addon 7~1~500~500	25250	-	-	0	0	25250	true
+SYN-058	quantity	quantity,restaurant	HEADERLESS	₹	₹	SYNTHETIC QUANTITY 8	2026-11-05	DOT	NONE	Quantity Item 8~1~275~275;Single Addon 8~1~500~500	775	-	-	0	0	775	true
+SYN-059	quantity	quantity,retail	FOUR	₹	₹	SYNTHETIC QUANTITY 9	2026-12-06	DOT	QTY_DECIMAL	Quantity Item 9~5~300~1500;Single Addon 9~1~500~500	2000	-	-	0	0	2000	true
+SYN-060	quantity	quantity,restaurant	QTY_FIRST	₹	₹	SYNTHETIC QUANTITY 10	2026-01-07	DOT	QTY_X	Quantity Item 10~8~325~2600;Single Addon 10~1~500~500	3100	-	-	0	0	3100	true
+SYN-061	malformed-ocr	malformed-ocr,retail	FOUR	₹	₹	SYNTHETIC MALFORMED-OCR 1	2026-02-08	DOT	GARBLE	malformed-ocr Main 1~2~5000~10000;malformed-ocr Side 1~1~2500~2500	12500	-	-	0	0	12500	true
+SYN-062	malformed-ocr	malformed-ocr,restaurant	QTY_FIRST	₹	₹	SYNTHETIC MALFORMED-OCR 2	2026-03-09	DOT	PHONE	malformed-ocr Main 2~2~5250~10500;malformed-ocr Side 2~1~2600~2600	13100	-	-	0	0	13100	true
+SYN-063	malformed-ocr	malformed-ocr,retail	RATE_QTY	₹	₹	SYNTHETIC MALFORMED-OCR 3	2026-04-10	DOT	WRAP	malformed-ocr Main 3~2~5500~11000;malformed-ocr Side 3~1~2700~2700	13700	-	-	0	0	13700	true
+SYN-064	malformed-ocr	malformed-ocr,restaurant	HEADERLESS	₹	₹	SYNTHETIC MALFORMED-OCR 4	2026-05-11	DOT	PREAMBLE	malformed-ocr Main 4~2~5750~11500;malformed-ocr Side 4~1~2800~2800	14300	-	-	0	0	14300	true
+SYN-065	malformed-ocr	malformed-ocr,retail	FOUR	₹	₹	SYNTHETIC MALFORMED-OCR 5	2026-06-12	DOT	FOOTER	malformed-ocr Main 5~2~6000~12000;malformed-ocr Side 5~1~2900~2900	14900	-	-	0	0	14900	true
+SYN-066	malformed-ocr	malformed-ocr,restaurant	QTY_FIRST	₹	₹	SYNTHETIC MALFORMED-OCR 6	2026-07-13	DROPPED	GARBLE	Lost Decimal Snack~1~9900~9900;Stable Drink~1~5500~5500	15400	-	-	0	0	15400	true
+SYN-067	malformed-ocr	malformed-ocr,retail	RATE_QTY	₹	₹	SYNTHETIC MALFORMED-OCR 7	2026-08-14	DOT	PHONE	malformed-ocr Main 7~2~6500~13000;malformed-ocr Side 7~1~3100~3100	16100	-	-	0	0	16100	true
+SYN-068	malformed-ocr	malformed-ocr,restaurant	HEADERLESS	₹	₹	SYNTHETIC MALFORMED-OCR 8	2026-09-15	DOT	WRAP	malformed-ocr Main 8~2~6750~13500;malformed-ocr Side 8~1~3200~3200	16700	-	-	0	0	16700	true
+SYN-069	malformed-ocr	malformed-ocr,retail	FOUR	₹	₹	SYNTHETIC MALFORMED-OCR 9	2026-10-16	DOT	PREAMBLE	malformed-ocr Main 9~2~7000~14000;malformed-ocr Side 9~1~3300~3300	17300	-	-	0	0	17300	true
+SYN-070	malformed-ocr	malformed-ocr,restaurant	QTY_FIRST	₹	₹	SYNTHETIC MALFORMED-OCR 10	2026-11-17	DOT	FOOTER	malformed-ocr Main 10~2~7250~14500;malformed-ocr Side 10~1~3400~3400	17900	-	-	0	0	17900	true
+SYN-071	restaurant	restaurant,retail	FOUR	₹	₹	SYNTHETIC RESTAURANT 1	2026-12-18	DOT	NONE	Paneer Tikka~2~6500~13000;Butter Naan~1~3000~3000	16000	GST 5%~500	-	0	0	16500	true
+SYN-072	restaurant	restaurant,restaurant	QTY_FIRST	₹	₹	SYNTHETIC RESTAURANT 2	2026-01-19	DOT	NONE	Cappuccino~2~6750~13500;Croissant~1~3100~3100	16600	-	Service Charge~300	0	0	16900	true
+SYN-073	restaurant	restaurant,retail	RATE_QTY	₹	₹	SYNTHETIC RESTAURANT 3	2026-02-20	DOT	NONE	Veg Biryani~2~7000~14000;Raita Bowl~1~3200~3200	17200	-	-	0	0	17200	true
+SYN-074	restaurant	restaurant,restaurant	TWO	₹	₹	SYNTHETIC RESTAURANT 4	2026-03-21	DOT	NONE	Miso Ramen~1~7250~7250;Green Tea~1~3300~3300	10550	GST 5%~500	-	0	0	11050	true
+SYN-075	restaurant	restaurant,retail	FOUR	₹	₹	SYNTHETIC RESTAURANT 5	2026-04-22	DOT	NONE	Fish Taco~2~7500~15000;Lime Soda~1~3400~3400	18400	-	Service Charge~300	0	0	18700	true
+SYN-076	restaurant	restaurant,restaurant	QTY_FIRST	₹	₹	SYNTHETIC RESTAURANT 6	2026-05-23	DOT	NONE	Dal Makhani~2~7750~15500;Jeera Rice~1~3500~3500	19000	-	-	0	0	19000	true
+SYN-077	restaurant	restaurant,retail	RATE_QTY	₹	₹	SYNTHETIC RESTAURANT 7	2026-06-24	DOT	NONE	Margherita Pizza~2~8000~16000;Garlic Bread~1~3600~3600	19600	GST 5%~500	-	0	0	20100	true
+SYN-078	restaurant	restaurant,restaurant	TWO	₹	₹	SYNTHETIC RESTAURANT 8	2026-07-25	DOT	NONE	Falafel Wrap~1~8250~8250;Mint Cooler~1~3700~3700	11950	-	Service Charge~300	0	0	12250	true
+SYN-079	restaurant	restaurant,retail	FOUR	₹	₹	SYNTHETIC RESTAURANT 9	2026-08-26	DOT	NONE	Idli Sambar~2~8500~17000;Filter Coffee~1~3800~3800	20800	-	-	0	0	20800	true
+SYN-080	restaurant	restaurant,restaurant	QTY_FIRST	₹	₹	SYNTHETIC RESTAURANT 10	2026-09-27	DOT	NONE	Pasta Alfredo~2~8750~17500;Tomato Soup~1~3900~3900	21400	GST 5%~500	-	0	0	21900	true
+SYN-081	retail	retail,retail	TWO	₹	₹	SYNTHETIC RETAIL 1	2026-10-01	DOT	NONE	Cotton Shirt~1~12000~12000;Canvas Belt~1~2500~2500	14500	-	Delivery Fee~250	0	0	14750	true
+SYN-082	retail	retail,restaurant	QTY_FIRST	₹	₹	SYNTHETIC RETAIL 2	2026-11-02	DOT	NONE	Notebook Pack~1~12500~12500;Gel Pen Set~2~2600~5200	17700	-	-	500	0	17200	true
+SYN-083	retail	retail,retail	RATE_QTY	₹	₹	SYNTHETIC RETAIL 3	2026-12-03	DOT	NONE	Rice Bag~1~13000~13000;Lentil Pack~2~2700~5400	18400	-	Delivery Fee~250	0	0	18650	true
+SYN-084	retail	retail,restaurant	HEADERLESS	₹	₹	SYNTHETIC RETAIL 4	2026-01-04	DOT	NONE	Desk Lamp~1~13500~13500;Cable Set~2~2800~5600	19100	-	-	500	0	18600	true
+SYN-085	retail	retail,retail	TWO	₹	₹	SYNTHETIC RETAIL 5	2026-02-05	DOT	NONE	Shampoo Bottle~1~14000~14000;Soap Pack~1~2900~2900	16900	-	Delivery Fee~250	0	0	17150	true
+SYN-086	retail	retail,restaurant	QTY_FIRST	₹	₹	SYNTHETIC RETAIL 6	2026-03-06	DOT	NONE	Toy Blocks~1~14500~14500;Puzzle Box~2~3000~6000	20500	-	-	500	0	20000	true
+SYN-087	retail	retail,retail	RATE_QTY	₹	₹	SYNTHETIC RETAIL 7	2026-04-07	DOT	NONE	Garden Pot~1~15000~15000;Plant Food~2~3100~6200	21200	-	Delivery Fee~250	0	0	21450	true
+SYN-088	retail	retail,restaurant	HEADERLESS	₹	₹	SYNTHETIC RETAIL 8	2026-05-08	DOT	NONE	Phone Case~1~15500~15500;Screen Guard~2~3200~6400	21900	-	-	500	0	21400	true
+SYN-089	retail	retail,retail	TWO	₹	₹	SYNTHETIC RETAIL 9	2026-06-09	DOT	NONE	Bath Towel~1~16000~16000;Hand Towel~1~3300~3300	19300	-	Delivery Fee~250	0	0	19550	true
+SYN-090	retail	retail,restaurant	QTY_FIRST	₹	₹	SYNTHETIC RETAIL 10	2026-07-10	DOT	NONE	Storage Box~1~16500~16500;Label Roll~2~3400~6800	23300	-	-	500	0	22800	true
+SYN-091	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,retail	FOUR	₹	₹	SYNTHETIC MIXED 1	2026-08-11	DOT	NONE	mixed Main 1~2~5000~10000;mixed Side 1~1~2500~2500	12500	GST 5%~225	Packaging Charge~110	20	-5	12810	true
+SYN-092	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,restaurant	QTY_FIRST	₹	₹	SYNTHETIC MIXED 2	2026-09-12	DOT	GARBLE	mixed Main 2~2~5250~10500;mixed Side 2~1~2600~2600	13100	GST 5%~250	Platform Fee~120	40	5	13435	true
+SYN-093	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,retail	RATE_QTY	₹	₹	SYNTHETIC MIXED 3	2026-10-13	DOT	NONE	mixed Main 3~2~5500~11000;mixed Side 3~1~2700~2700	13700	GST 5%~275	Packaging Charge~130	60	-5	14040	true
+SYN-094	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,restaurant	HEADERLESS	$	USD 	SYNTHETIC MIXED 4	2026-11-14	DOT	PHONE	mixed Main 4~2~5750~11500;mixed Side 4~1~2800~2800	14300	Sales Tax~300	Platform Fee~140	80	5	14665	true
+SYN-095	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,retail	FOUR	₹	₹	SYNTHETIC MIXED 5	2026-12-15	DOT	NONE	mixed Main 5~2~6000~12000;mixed Side 5~1~2900~2900	14900	GST 5%~325	Packaging Charge~150	100	-5	15270	true
+SYN-096	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,restaurant	QTY_FIRST	₹	₹	SYNTHETIC MIXED 6	2026-01-16	MID_DOT	NONE	mixed Main 6~2~6250~12500;mixed Side 6~1~3000~3000	15500	GST 5%~350	Platform Fee~160	120	5	15895	true
+SYN-097	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,retail	RATE_QTY	₹	₹	SYNTHETIC MIXED 7	2026-02-17	DOT	NONE	mixed Main 7~2~6500~13000;mixed Side 7~1~3100~3100	16100	GST 5%~375	Packaging Charge~170	140	-5	16500	true
+SYN-098	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,restaurant	HEADERLESS	$	USD 	SYNTHETIC MIXED 8	2026-03-18	DOT	FOOTER	mixed Main 8~2~6750~13500;mixed Side 8~1~3200~3200	16700	Sales Tax~400	Platform Fee~180	160	5	17125	true
+SYN-099	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,retail	FOUR	₹	₹	SYNTHETIC MIXED 9	2026-04-19	DOT	NONE	mixed Main 9~2~7000~14000;mixed Side 9~1~3300~3300	17300	GST 5%~425	Packaging Charge~190	180	-5	17730	true
+SYN-100	mixed	currency,decimals,tax,discount,fees,quantity,malformed-ocr,restaurant	QTY_FIRST	₹	₹	SYNTHETIC MIXED 10	2026-05-20	DOT	NONE	mixed Main 10~2~7250~14500;mixed Side 10~1~3400~3400	17900	GST 5%~450	Platform Fee~200	200	5	18355	true

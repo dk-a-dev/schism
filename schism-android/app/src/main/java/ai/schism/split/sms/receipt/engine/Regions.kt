@@ -86,6 +86,29 @@ private fun looksLikeItemRow(row: Row): Boolean {
 }
 
 /**
+ * True when [row] is a wrapped item-name fragment: one letters-bearing cell and nothing priced —
+ * the top half of an item name OCR split across two lines. A metadata line (date, tax id, phone,
+ * boilerplate) is excluded, so a bill's preamble is never mistaken for one.
+ */
+private fun isWrappedNameFragment(row: Row): Boolean {
+    val text = row.text.trim()
+    return row.cells.size == 1 && text.count { it.isLetter() } >= 2 && !isMetadataRow(text)
+}
+
+/**
+ * Where the items region starts given [moneyRowIdx], the first priced row: at that row, extended
+ * upward over the wrapped-name fragments belonging to its item, so a headerless bill whose first
+ * item's name wrapped ABOVE its price keeps that name instead of cutting it into the header region.
+ * Row 0 is never absorbed — the top line of a bill is its merchant name, which reads as a fragment
+ * too but is not one.
+ */
+private fun itemsStartFrom(rows: List<Row>, moneyRowIdx: Int): Int {
+    var i = moneyRowIdx
+    while (i > 1 && isWrappedNameFragment(rows[i - 1])) i--
+    return i
+}
+
+/**
  * Splits [rows] into a leading `header` region, a line-`items` region, and a trailing `totals`
  * region (subtotal/tax/fee/grand-total lines and anything after).
  *
@@ -93,7 +116,8 @@ private fun looksLikeItemRow(row: Row): Boolean {
  * totals *label* row ([isTotalsLabelRow]); everything from there to the end is `totals`. Within the
  * rows before that cut, the items region starts right after a detected column-header row, or — if
  * no header row is found — at the first row that looks like a priced item line
- * ([looksLikeItemRow]); everything before that is `header`.
+ * ([looksLikeItemRow]), backed up over that item's wrapped-name fragments ([itemsStartFrom]);
+ * everything before that is `header`.
  */
 fun segment(rows: List<Row>): Regions {
     val totalsStart = rows.indexOfFirst { !isColumnHeaderRow(it) && isTotalsLabelRow(it) }
@@ -105,7 +129,7 @@ fun segment(rows: List<Row>): Regions {
 
     val itemsStart = when {
         headerRowIdx >= 0 -> headerRowIdx + 1
-        moneyRowIdx >= 0 -> moneyRowIdx
+        moneyRowIdx >= 0 -> itemsStartFrom(rowsBeforeTotals, moneyRowIdx)
         else -> totalsStart
     }.coerceIn(0, totalsStart)
 

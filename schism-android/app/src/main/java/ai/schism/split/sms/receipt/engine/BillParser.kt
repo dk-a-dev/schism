@@ -2,6 +2,7 @@ package ai.schism.split.sms.receipt.engine
 
 import ai.schism.split.sms.receipt.ReceiptDraft
 import ai.schism.split.sms.receipt.ReceiptLineItem
+import ai.schism.split.sms.receipt.detectCurrency
 import ai.schism.split.sms.receipt.isoDate
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -273,7 +274,7 @@ private val METADATA_KEYWORDS = Regex(
 )
 
 /** True when [text] is bill metadata (a date, or a generic metadata-keyword line) rather than a plausible merchant name. */
-private fun isMetadataRow(text: String): Boolean = isoDate(text) != null || METADATA_KEYWORDS.containsMatchIn(text)
+internal fun isMetadataRow(text: String): Boolean = isoDate(text) != null || METADATA_KEYWORDS.containsMatchIn(text)
 
 /**
  * Assembles the full deterministic bill-reading engine into a [ReceiptDraft]: per-source template
@@ -320,7 +321,7 @@ fun parseBill(rows: List<Row>): ReceiptDraft? {
     return ReceiptDraft(
         merchant = merchant,
         totalMinor = v.grandTotal,
-        currency = "₹",
+        currency = detectCurrency(norm.map { it.text }) ?: "₹",
         date = date,
         lineItems = v.items,
         taxMinor = v.tax + v.fees - v.discount + v.roundoff,

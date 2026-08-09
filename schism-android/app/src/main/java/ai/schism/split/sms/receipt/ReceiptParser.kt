@@ -198,9 +198,15 @@ private fun extractTax(lines: List<String>): Long {
         .sum()
 }
 
-private fun detectCurrency(lines: List<String>): String? {
+/** The first currency hinted at anywhere in [lines] (symbol or ISO code), or null when none is printed. */
+internal fun detectCurrency(lines: List<String>): String? {
     val text = lines.joinToString(" ").lowercase()
-    return CURRENCY_HINTS.entries.firstOrNull { text.contains(it.key) }?.value
+    return CURRENCY_HINTS.entries.firstOrNull { (hint, _) ->
+        // Alphabetic codes must be whole words. As a bare substring "rs" matches Burgers, Crackers
+        // and hours, so a dollar bill with a burger on it reported rupees.
+        if (hint.first().isLetter()) Regex("\\b${Regex.escape(hint)}\\b").containsMatchIn(text)
+        else text.contains(hint)
+    }?.value
 }
 
 /** Largest monetary amount on a line, as minor units, or null if none. */

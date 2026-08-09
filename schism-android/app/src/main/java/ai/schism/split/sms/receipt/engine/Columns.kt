@@ -31,12 +31,6 @@ private fun isMostlyLetters(text: String): Boolean {
     return letters > 0 && letters >= digits
 }
 
-/** True when the cell's text parses as a plain number (int or decimal), ignoring stray punctuation. */
-private fun isNumeric(text: String): Boolean {
-    val cleaned = text.trim().replace(",", "")
-    return cleaned.isNotEmpty() && cleaned.matches(Regex("-?\\d+(\\.\\d+)?"))
-}
-
 /**
  * A cluster of cells whose xCenters fall close together — the raw building block for a [Column]
  * before roles and neighbour-padded bounds are assigned.
@@ -86,8 +80,16 @@ fun detectColumns(rows: List<Row>): List<Column> {
 
     // 1. Header match: find the first row whose cells mostly match a header keyword class, and
     // assign roles to the columns containing its keyword-bearing cells.
+    //
+    // "Mostly" is a STRICT majority of at least 2 cells, because these keywords are ordinary words
+    // that also occur in ordinary bill text. A single-cell row containing one of them — a merchant
+    // line like "Quantity House", a totals label like "Amount Payable" — would otherwise be taken
+    // as the header row and stamp its (usually name-column) cluster with a bogus role, after which
+    // the real header row is never even looked at (firstOrNull). Likewise a 2-cell totals row
+    // ("Sub Total | 1249.00") hits exactly half and must not qualify. A genuine header row is all
+    // labels, so requiring more than half costs it nothing even when OCR garbles one of them.
     val headerRow = rows.firstOrNull { row ->
-        row.cells.isNotEmpty() && row.cells.count { keywordRole(it.text) != null } * 2 >= row.cells.size
+        row.cells.size >= 2 && row.cells.count { keywordRole(it.text) != null } * 2 > row.cells.size
     }
     if (headerRow != null) {
         for (cell in headerRow.cells) {
@@ -105,12 +107,19 @@ fun detectColumns(rows: List<Row>): List<Column> {
     // "Nos" / "Value" — near-misses that don't hit the class threshold). Left in dataRows, its
     // label cells corrupt the majority-vote tallies below (e.g. a non-numeric "Nos" breaks the
     // strict "all cells are small ints" QTY check). Detect that case structurally: the first row
-    // is a label row, not a data row, when none of its cells look numeric — a genuine item row
-    // always carries at least one numeric cell (qty, rate or amount), so this can't misfire on a
+    // is a label row, not a data row, when none of its cells is money-shaped — a genuine item row
+    // always carries at least one such cell (qty, rate or amount), so this can't misfire on a
     // legit item.
+    //
+    // Money-shaped ([isMoneyToken]) is the test throughout this fallback, NOT a bare `\d+(\.\d+)?`
+    // regex: the money columns of a real bill carry currency symbols, thousands separators, mid-dot
+    // decimals and the rupee "120/-" notation, none of which read as plain numbers. Judging them by
+    // a plain-number regex made a whole-rupee "120/-" rate/amount column look non-numeric, so the
+    // AMOUNT role fell through to the narrow QTY column on its left. It also rejects a phone number
+    // (8+ bare digits), which a plain-number regex would have counted as a money column.
     val firstRow = rows.firstOrNull()
     val structuralHeaderRow = firstRow?.takeIf {
-        it !== headerRow && it.cells.isNotEmpty() && it.cells.none { cell -> isNumeric(cell.text) }
+        it !== headerRow && it.cells.isNotEmpty() && it.cells.none { cell -> isMoneyToken(cell.text) }
     }
     val dataRows = rows.filter { it !== headerRow && it !== structuralHeaderRow }
     val dataRowCells = dataRows.flatMap { it.cells }
@@ -127,19 +136,19 @@ fun detectColumns(rows: List<Row>): List<Column> {
         if (itemIdx != null) roles[itemIdx] = ColRole.ITEM
     }
 
-    // Rightmost unassigned column with mostly-numeric cells → AMOUNT.
+    // Rightmost unassigned column with mostly money-shaped cells → AMOUNT.
     if (roles.none { it == ColRole.AMOUNT }) {
         val amountIdx = unassigned().lastOrNull { i ->
             val cells = dataCells[i]
-            cells.isNotEmpty() && cells.count { isNumeric(it.text) } * 2 >= cells.size
+            cells.isNotEmpty() && cells.count { isMoneyToken(it.text) } * 2 >= cells.size
         }
         if (amountIdx != null) roles[amountIdx] = ColRole.AMOUNT
     }
 
-    // Among remaining unassigned numeric columns: a narrow one whose cells are all small
-    // integers → QTY; a remaining decimal-bearing numeric column → RATE.
+    // Among remaining unassigned money-shaped columns: a narrow one whose cells are all small
+    // integers → QTY; a remaining decimal-bearing one → RATE.
     val remainingNumericIdx = unassigned().filter { i ->
-        dataCells[i].isNotEmpty() && dataCells[i].count { isNumeric(it.text) } * 2 >= dataCells[i].size
+        dataCells[i].isNotEmpty() && dataCells[i].count { isMoneyToken(it.text) } * 2 >= dataCells[i].size
     }
     // Column content width (not the neighbour-padded Column bounds): the actual span of a
     // column's own cell text, used to tell a QTY column from a whole-rupee RATE column below.
