@@ -71,7 +71,7 @@ func (h *Handler) extractReceipt(w http.ResponseWriter, r *http.Request) {
 	}
 	user := userFromContext(r.Context())
 
-	nextAt, granted, err := h.store.ClaimReceiptExtraction(r.Context(), user.ID, d.GroupID, time.Now())
+	nextAt, granted, err := h.store.ClaimReceiptExtraction(r.Context(), user.ID, time.Now())
 	if err != nil {
 		writeInternalError(w, r, err)
 		return

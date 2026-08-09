@@ -6,14 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schism/schism-backend/internal/id"
 	"github.com/stretchr/testify/require"
 )
 
-// The boundary is the whole point: a second call inside the hour is refused, and one just past it
-// is granted. The window is walked with an explicit clock so the test costs no wall time.
+// Two calls are allowed inside the window, the third is refused, and the window rolls over on the
+// hour. The clock is explicit so the test costs no wall time.
 func TestClaimReceiptExtractionWindowBoundary(t *testing.T) {
-	s, u, in := allowanceFixture(t)
+	s, u, _ := allowanceFixture(t)
 	ctx := context.Background()
 	start := time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC)
 
@@ -22,84 +21,85 @@ func TestClaimReceiptExtractionWindowBoundary(t *testing.T) {
 		at          time.Time
 		wantGranted bool
 	}{
-		{"first call", start, true},
-		{"immediately after", start, false},
-		{"one minute later", start.Add(time.Minute), false},
-		{"one second before the window closes", start.Add(59*time.Minute + 59*time.Second), false},
-		{"exactly one hour later", start.Add(time.Hour), true},
-		{"straight after the granted retry", start.Add(time.Hour), false},
-		{"61 minutes after the first call", start.Add(61 * time.Minute), false},
-		{"61 minutes after the second", start.Add(2*time.Hour + time.Minute), true},
+		{"first call opens the window", start, true},
+		{"second call spends the last slot", start.Add(time.Minute), true},
+		{"third call inside the window is refused", start.Add(2 * time.Minute), false},
+		{"still refused just before the window rolls", start.Add(ReceiptExtractWindow - time.Second), false},
+		{"granted once the window has rolled over", start.Add(ReceiptExtractWindow + time.Second), true},
+		{"and the new window has its own second slot", start.Add(ReceiptExtractWindow + 2*time.Second), true},
+		{"but not a third", start.Add(ReceiptExtractWindow + 3*time.Second), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			nextAt, granted, err := s.ClaimReceiptExtraction(ctx, u.ID, in.GroupID, tc.at)
+			nextAt, granted, err := s.ClaimReceiptExtraction(ctx, u.ID, tc.at)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantGranted, granted)
-			if granted {
-				require.True(t, nextAt.IsZero())
-				return
+			if !granted {
+				require.True(t, nextAt.After(tc.at), "a refusal must say when the window rolls over")
 			}
-			// A refusal must say when the slot frees up, and that must be in the future.
-			require.False(t, nextAt.IsZero())
-			require.True(t, nextAt.After(tc.at), "nextAt %s should be after %s", nextAt, tc.at)
-			require.LessOrEqual(t, nextAt.Sub(tc.at), ReceiptExtractWindow)
 		})
 	}
 }
 
-// The limit is per (user, group): a different group, or a different user, is unaffected.
-func TestClaimReceiptExtractionIsScopedToUserAndGroup(t *testing.T) {
-	s, u, in := allowanceFixture(t)
+// The limit is per user and deliberately NOT per group. Scoping it per (user, group) bounded
+// nothing, because creating a group is unlimited: an account could loop create-group -> extract and
+// spend our provider keys without a ceiling. This test is the regression guard for that bypass.
+func TestClaimReceiptExtractionIsPerUserNotPerGroup(t *testing.T) {
+	s, u, _ := allowanceFixture(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC)
 
-	_, granted, err := s.ClaimReceiptExtraction(ctx, u.ID, in.GroupID, now)
-	require.NoError(t, err)
-	require.True(t, granted)
+	for i := 0; i < ReceiptExtractLimit; i++ {
+		_, granted, err := s.ClaimReceiptExtraction(ctx, u.ID, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+	}
 
-	other, err := s.CreateGroupForUser(ctx, GroupInput{
-		Name: "Other", Currency: "₹",
-		Participants: []ParticipantInput{{Name: "Host", UserID: &u.ID}},
-	}, u.ID)
-	require.NoError(t, err)
-	_, granted, err = s.ClaimReceiptExtraction(ctx, u.ID, other.ID, now)
-	require.NoError(t, err)
-	require.True(t, granted, "a different group has its own hourly slot")
+	// Spinning up brand-new groups must not buy more calls.
+	for i := 0; i < 3; i++ {
+		_, err := s.CreateGroup(ctx, GroupInput{
+			Name: "Fresh", Currency: "$", Participants: []ParticipantInput{{Name: "A"}},
+		})
+		require.NoError(t, err)
+		_, granted, err := s.ClaimReceiptExtraction(ctx, u.ID, now)
+		require.NoError(t, err)
+		require.False(t, granted, "a new group must not reset the user's allowance")
+	}
 
-	second, _, err := s.RegisterUser(ctx, "Guest", "guest-"+id.New()+"@example.com", "password1", "")
+	// A different user has their own allowance.
+	second, _, err := s.CreateUser(ctx, "Second", "second@example.test", "")
 	require.NoError(t, err)
-	_, granted, err = s.ClaimReceiptExtraction(ctx, second.ID, in.GroupID, now)
+	_, granted, err := s.ClaimReceiptExtraction(ctx, second.ID, now)
 	require.NoError(t, err)
-	require.True(t, granted, "a different user has their own hourly slot")
+	require.True(t, granted, "the limit must be per user, not global")
 }
 
-// Concurrent claims must grant exactly one — this is why the limiter lives in Postgres and not in
-// process memory, where N replicas would grant N.
-func TestClaimReceiptExtractionGrantsOnlyOneUnderRace(t *testing.T) {
-	s, u, in := allowanceFixture(t)
-	now := time.Now().UTC()
+// Replicas racing the same user must not both be granted: the limit is enforced in Postgres
+// precisely because an in-memory limiter would grant the allowance once per instance.
+func TestClaimReceiptExtractionGrantsExactlyTheLimitUnderRace(t *testing.T) {
+	s, u, _ := allowanceFixture(t)
+	now := time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC)
 
 	const racers = 8
 	var wg sync.WaitGroup
 	results := make([]bool, racers)
-	errs := make([]error, racers)
-	wg.Add(racers)
-	for i := range racers {
-		go func() {
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func(i int) {
 			defer wg.Done()
-			_, granted, err := s.ClaimReceiptExtraction(context.Background(), u.ID, in.GroupID, now)
-			results[i], errs[i] = granted, err
-		}()
+			_, granted, err := s.ClaimReceiptExtraction(context.Background(), u.ID, now)
+			if err == nil {
+				results[i] = granted
+			}
+		}(i)
 	}
 	wg.Wait()
 
-	wins := 0
-	for i := range racers {
-		require.NoError(t, errs[i])
-		if results[i] {
-			wins++
+	got := 0
+	for _, granted := range results {
+		if granted {
+			got++
 		}
 	}
-	require.Equal(t, 1, wins, "exactly one concurrent claim may win")
+	require.Equal(t, ReceiptExtractLimit, got, "exactly the allowance may be granted, however many racers")
 }

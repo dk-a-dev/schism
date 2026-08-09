@@ -173,15 +173,19 @@ func TestExtractReceiptOversizeDoesNotSpendTheHourlySlot(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 }
 
-// The second call within the hour is refused with 429, Retry-After, and a machine-readable body.
-func TestExtractReceiptRateLimitsToOnePerGroupPerHour(t *testing.T) {
+// The allowance is per user and per hour. The call after it is exhausted is refused with 429, a
+// Retry-After header and a machine-readable body, and never reaches the provider — the limit exists
+// to bound OUR spend, so a refusal that still called upstream would defeat it.
+func TestExtractReceiptRateLimitsPerUserPerHour(t *testing.T) {
 	ext := &fakeExtractor{draft: sampleDraft()}
 	srv := newExtractServer(t, ext)
 	g := createGroupFixture(t, srv.URL)
 	body := extractBody(g.ID, "image/jpeg", []byte("img"))
 
-	first := authRequest(t, http.MethodPost, srv.URL+"/v1/receipts/extract", g.Token, body)
-	require.Equal(t, http.StatusOK, first.StatusCode)
+	for i := 0; i < store.ReceiptExtractLimit; i++ {
+		ok := authRequest(t, http.MethodPost, srv.URL+"/v1/receipts/extract", g.Token, body)
+		require.Equal(t, http.StatusOK, ok.StatusCode, "call %d of the allowance must be granted", i+1)
+	}
 
 	second := authRequest(t, http.MethodPost, srv.URL+"/v1/receipts/extract", g.Token, body)
 	require.Equal(t, http.StatusTooManyRequests, second.StatusCode)
@@ -197,7 +201,7 @@ func TestExtractReceiptRateLimitsToOnePerGroupPerHour(t *testing.T) {
 	require.Equal(t, retryAfter, refused.RetryAfterSeconds)
 	require.False(t, refused.NextAllowedAt.IsZero())
 
-	require.Equal(t, 1, ext.callCount(), "the refused call must not reach the provider")
+	require.Equal(t, store.ReceiptExtractLimit, ext.callCount(), "the refused call must not reach the provider")
 }
 
 func TestExtractReceiptMapsProviderFailures(t *testing.T) {
