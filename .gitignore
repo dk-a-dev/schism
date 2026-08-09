@@ -31,3 +31,6 @@ keystore.properties
 
 .codegraph/
 .superpowers/
+
+# Release build outputs (artifacts are attached to the GitHub release, not committed)
+dist/
