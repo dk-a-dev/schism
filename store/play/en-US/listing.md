@@ -15,39 +15,42 @@ Scan bills, track spending and split shared expenses privately.
 
 ## Full description
 
-Schism turns a receipt, a bank alert or a quick note into a clear shared expense — and keeps the
-detail that explains it.
+Schism turns a bill, a bank alert or a quick note into a shared expense — and keeps the detail that
+explains it, so nobody has to remember who paid for what.
 
-SCAN AND SPLIT
-• Pick a receipt photo and let Schism read the line items on your phone.
-• Check and edit every item, tax line and total before anything is saved.
-• Split by item, equally, or by custom shares.
-• Add expenses by hand or by voice whenever you prefer.
+SPLIT A BILL LINE BY LINE
+• Scan a receipt and Schism reads the items, taxes and total on your phone.
+• Check and correct every line before anything is saved — including tax, service charge and
+  round-off, each editable on its own.
+• Split by item, evenly, by shares, by percentage, or by exact amounts.
+• Or add an expense by hand, or by speaking it.
 
-GROUPS AND BALANCES
-• Create groups, invite people with a link or a QR code, and see who owes whom.
-• Record settle-ups, browse group activity, and open personal and group spending summaries.
-• Hand off a settlement to your own UPI app when you want to pay someone — Schism does not move
-  the money itself.
+GROUPS AND WHO OWES WHOM
+• Create a group for a flat, a trip or a dinner, and invite people with a link or a QR code.
+• Balances settle down to the fewest transfers, so three people don't make six payments.
+• Record a settle-up, browse group activity, and see personal and group spending summaries.
+• Hand a settlement to your own UPI app when you want to pay — Schism does not move the money.
+
+CLAIM TOGETHER, IN REAL TIME
+• Share a scanned bill with the group and let everyone tick what they had.
+• Watch each person's total update as they claim, then finalise it as one expense.
 
 PRIVATE WHERE IT MATTERS
-• Receipt reading runs on your device by default. Nothing is uploaded unless you switch on the
+• Receipt reading runs on your phone by default. Nothing is uploaded unless you switch on the
   optional cloud reader, which tells you where your photo goes before the first scan.
-• Bank message import is optional and switched off on a fresh install. Schism explains the feature
-  before asking for the Android SMS permission, looks only at supported transaction senders, and
-  parses them on your device. Raw messages are not sent to Schism.
-• Settings has separate controls to switch import off, revoke the Android SMS permission, and
-  delete imported message transactions.
-• Only the groups, expenses and splits you choose to share are synced to your Schism account.
-• Voice quick-add uses your device's speech recognition and prefers the offline engine when your
-  phone has one.
+• Bank message import is optional and off on a fresh install. Schism explains it before asking for
+  the Android SMS permission, reads only recognised bank senders, and parses them on your device.
+  Your messages are never sent to Schism.
+• Settings has separate controls to switch import off, revoke the SMS permission, and delete
+  imported transactions.
+• The database on your phone is encrypted.
 • You can delete your Schism account from inside the app.
 
-ON-DEVICE MODELS, DOWNLOADED WHEN YOU ASK
+WORKS OFFLINE
 • The receipt reading model (about 6 MB) downloads the first time you choose to scan, can wait for
-  Wi-Fi, resumes safely, and works offline afterwards.
-• Settings offers a larger optional language model (about 1.5 GB) for smarter receipt and voice
-  parsing. Both are optional and both run entirely on your device.
+  Wi-Fi, and works offline afterwards.
+• Settings offers a larger optional language model (about 1.5 GB) for smarter parsing. Both are
+  optional and both run entirely on your device.
 
 WHAT SCHISM IS NOT
 • It is not a bank, a payment service or an accounting service. It does not connect to bank
@@ -55,7 +58,7 @@ WHAT SCHISM IS NOT
 • Receipt reading and message parsing can be wrong, and only some senders and layouts are
   understood. You review and edit everything before it becomes an expense.
 
-Schism is free to use. There is no subscription and nothing is locked behind a purchase.
+Schism is free. There is no subscription and nothing is locked behind a purchase.
 
 Support, privacy, terms and account deletion pages are linked below and from Settings.
 

@@ -143,6 +143,25 @@ def check(root):
         if re.search(pattern, listing, re.IGNORECASE):
             errors.append(f"listing.md: prohibited claim matching /{pattern}/")
 
+    # A screenshot that is overwhelmingly one colour is a capture taken before the screen rendered,
+    # not a screenshot. Play rejects the listing for it ("appears to be corrupted, or is a single
+    # solid color"), which is how a blank tablet capture reached review — nothing was looking.
+    for shots in sorted((root / "assets").glob("*/")):
+        for shot in sorted(shots.glob("*.png")):
+            try:
+                from PIL import Image
+                from collections import Counter
+            except ImportError:
+                break
+            image = Image.open(shot).convert("RGB").resize((120, 213))
+            data = list(image.getdata())
+            dominant = Counter(data).most_common(1)[0][1] / len(data) * 100
+            if dominant > 92:
+                errors.append(
+                    f"{shot.relative_to(root)} is {dominant:.0f}% a single colour — "
+                    "it was probably captured before the screen rendered"
+                )
+
     for name, phrases in REQUIRED_PHRASES.items():
         if name in missing:
             continue

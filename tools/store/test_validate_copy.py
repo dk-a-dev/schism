@@ -54,7 +54,7 @@ class ValidateCopyTest(unittest.TestCase):
         self.assertFails("'Short description' is 81 chars")
 
     def test_full_description_too_long(self):
-        self.edit("en-US/listing.md", "SCAN AND SPLIT", "y" * 4001)
+        self.edit("en-US/listing.md", "SPLIT A BILL LINE BY LINE", "y" * 4001)
         self.assertFails("'Full description' is")
 
     def test_release_notes_too_long(self):
@@ -62,7 +62,7 @@ class ValidateCopyTest(unittest.TestCase):
         self.assertFails("limit 500")
 
     def test_prohibited_claim(self):
-        self.edit("en-US/listing.md", "SCAN AND SPLIT", "The best expense app, supports all banks")
+        self.edit("en-US/listing.md", "SPLIT A BILL LINE BY LINE", "The best expense app, supports all banks")
         self.assertFails("prohibited claim")
 
     def test_policy_url_must_be_https(self):
