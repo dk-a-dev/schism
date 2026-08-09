@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -29,8 +28,7 @@ func toSplitExpense(in store.ExpenseInput) split.Expense {
 func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	var d expenseFormDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	in := d.toInput()
@@ -40,7 +38,7 @@ func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 	}
 	g, err := h.store.GetGroup(r.Context(), groupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if g == nil {
@@ -49,7 +47,7 @@ func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := h.store.CreateExpense(r.Context(), groupID, in, r.Header.Get("Idempotency-Key"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	eid := e.ID
@@ -60,7 +58,7 @@ func (h *Handler) createExpense(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listExpenses(w http.ResponseWriter, r *http.Request) {
 	list, err := h.store.ListExpenses(r.Context(), chi.URLParam(r, "groupID"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
@@ -69,7 +67,7 @@ func (h *Handler) listExpenses(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getExpense(w http.ResponseWriter, r *http.Request) {
 	e, err := h.store.GetExpense(r.Context(), chi.URLParam(r, "groupID"), chi.URLParam(r, "expenseID"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if e == nil {
@@ -83,8 +81,7 @@ func (h *Handler) updateExpense(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	expenseID := chi.URLParam(r, "expenseID")
 	var d expenseFormDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	in := d.toInput()
@@ -94,7 +91,7 @@ func (h *Handler) updateExpense(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := h.store.UpdateExpense(r.Context(), groupID, expenseID, in)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if e == nil {
@@ -112,7 +109,7 @@ func (h *Handler) deleteExpense(w http.ResponseWriter, r *http.Request) {
 	// Capture the title before deletion so the activity log can describe what was removed.
 	e, err := h.store.GetExpense(r.Context(), groupID, expenseID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if e == nil {
@@ -121,7 +118,7 @@ func (h *Handler) deleteExpense(w http.ResponseWriter, r *http.Request) {
 	}
 	ok, err := h.store.DeleteExpense(r.Context(), groupID, expenseID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if !ok {

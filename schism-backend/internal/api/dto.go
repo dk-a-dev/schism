@@ -36,9 +36,9 @@ type paidForDTO struct {
 	Shares        int64  `json:"shares"`
 }
 type expenseFormDTO struct {
-	Title           string       `json:"title"`
-	Amount          int64        `json:"amount"`
-	CategoryID      int          `json:"categoryId"`
+	Title      string `json:"title"`
+	Amount     int64  `json:"amount"`
+	CategoryID int    `json:"categoryId"`
 	// Accepts a date-only "2006-01-02" (what the clients send) or a full RFC3339 timestamp;
 	// parsed leniently in toInput so a plain date never fails JSON decoding.
 	ExpenseDate     string       `json:"expenseDate"`

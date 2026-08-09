@@ -9,7 +9,7 @@ import (
 func (h *Handler) getStats(w http.ResponseWriter, r *http.Request) {
 	expenses, err := h.store.ListExpenses(r.Context(), chi.URLParam(r, "groupID"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	var totalSpent int64

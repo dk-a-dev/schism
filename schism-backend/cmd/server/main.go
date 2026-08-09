@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/schism/schism-backend/internal/api"
@@ -11,8 +16,44 @@ import (
 	"github.com/schism/schism-backend/internal/store"
 )
 
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
+func runHTTPServer(ctx context.Context, server *http.Server) error {
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.ListenAndServe() }()
+
+	select {
+	case err := <-serveErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
+}
+
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal(err)
@@ -27,16 +68,19 @@ func main() {
 	defer pool.Close()
 
 	r := chi.NewRouter()
-	r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
+	r.Get("/ready", func(w http.ResponseWriter, req *http.Request) {
 		if err := pool.Ping(req.Context()); err != nil {
 			http.Error(w, "db down", http.StatusServiceUnavailable)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 	r.Mount("/", api.NewRouter(store.NewStore(pool), cfg.LogRequests))
 
 	log.Printf("listening on %s", cfg.Addr)
-	log.Fatal(http.ListenAndServe(cfg.Addr, r))
+	if err := runHTTPServer(ctx, newHTTPServer(cfg.Addr, r)); err != nil {
+		log.Fatal(err)
+	}
 }

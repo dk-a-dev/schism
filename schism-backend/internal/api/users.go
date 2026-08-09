@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -20,13 +19,12 @@ func (h *Handler) registerUser(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 		Phone string `json:"phone"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	u, token, err := h.store.CreateUser(r.Context(), d.Name, d.Email, d.Phone)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, struct {
@@ -56,8 +54,7 @@ func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Phone    string `json:"phone"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	if !strings.Contains(d.Email, "@") {
@@ -74,7 +71,7 @@ func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, authResponse{u.ID, u.Name, u.Email, token})
@@ -85,8 +82,7 @@ func (h *Handler) authLogin(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	u, token, err := h.store.LoginUser(r.Context(), d.Email, d.Password)
@@ -95,7 +91,7 @@ func (h *Handler) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, authResponse{u.ID, u.Name, u.Email, token})
@@ -110,7 +106,7 @@ func (h *Handler) authLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.DeleteToken(r.Context(), rawTokenFromRequest(r)); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -135,7 +131,7 @@ func (h *Handler) myGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	ids, err := h.store.GroupIDsForUser(r.Context(), u.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string][]string{"groupIds": ids})
@@ -148,7 +144,7 @@ func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.DeleteUser(r.Context(), u.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

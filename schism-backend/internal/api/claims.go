@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -38,7 +37,7 @@ func (h *Handler) callerParticipant(w http.ResponseWriter, r *http.Request, grou
 	}
 	pid, err := h.store.ParticipantForUserInGroup(r.Context(), u.ID, groupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return "", false
 	}
 	if pid == "" {
@@ -60,7 +59,7 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	g, err := h.store.GetGroup(r.Context(), groupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if g == nil {
@@ -73,8 +72,7 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var d createClaimSessionDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	cs, err := h.store.CreateClaimSession(r.Context(), store.ClaimSessionInput{
@@ -87,7 +85,7 @@ func (h *Handler) createClaimSession(w http.ResponseWriter, r *http.Request) {
 		Taxes:         d.toStoreTaxes(),
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	_ = h.store.LogActivity(r.Context(), groupID, "CLAIM_SESSION_CREATED", actor(creator), nil, cs.Title)
@@ -98,7 +96,7 @@ func (h *Handler) getClaimSession(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sid")
 	cs, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if cs == nil {
@@ -116,7 +114,7 @@ func (h *Handler) getClaimSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeSession(w http.ResponseWriter, r *http.Request, status int, cs *store.ClaimSession) {
 	g, err := h.store.GetGroup(r.Context(), cs.GroupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	var preview map[string]int64
@@ -138,7 +136,7 @@ func (h *Handler) putClaims(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sid")
 	cs, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if cs == nil {
@@ -150,8 +148,7 @@ func (h *Handler) putClaims(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var d putClaimsDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	weights := map[int]float64{}
@@ -168,7 +165,7 @@ func (h *Handler) putClaims(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	claimed := 0
@@ -180,7 +177,7 @@ func (h *Handler) putClaims(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.LogActivity(r.Context(), cs.GroupID, "CLAIM_SUBMITTED", actor(pid), nil, "claimed "+pluralize(claimed, "item"))
 	updated, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	h.writeSession(w, r, http.StatusOK, updated)
@@ -190,7 +187,7 @@ func (h *Handler) finalizeClaimSession(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sid")
 	cs, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if cs == nil {
@@ -206,8 +203,7 @@ func (h *Handler) finalizeClaimSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var d finalizeDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	eid, err := h.store.FinalizeClaimSession(r.Context(), sid, d.ExpectedVersion, d.toResolutions())
@@ -224,7 +220,7 @@ func (h *Handler) finalizeClaimSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	// Only log when this call actually performed the finalize (cs was loaded before finalize ran, so
@@ -241,7 +237,7 @@ func (h *Handler) cancelClaimSession(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sid")
 	cs, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if cs == nil {
@@ -257,7 +253,7 @@ func (h *Handler) cancelClaimSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.CancelClaimSession(r.Context(), sid); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	// CancelClaimSession is a no-op unless cs was still "open" (loaded above, before cancel ran), so
@@ -272,7 +268,7 @@ func (h *Handler) setReady(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sid")
 	cs, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if cs == nil {
@@ -284,8 +280,7 @@ func (h *Handler) setReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var d setReadyDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	err = h.store.SetReady(r.Context(), sid, pid, d.Ready)
@@ -294,12 +289,12 @@ func (h *Handler) setReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	updated, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	h.writeSession(w, r, http.StatusOK, updated)
@@ -309,7 +304,7 @@ func (h *Handler) editClaimItems(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sid")
 	cs, err := h.store.GetClaimSession(r.Context(), sid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if cs == nil {
@@ -325,8 +320,7 @@ func (h *Handler) editClaimItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var d editItemsDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	items := d.toStoreItems()
@@ -336,7 +330,7 @@ func (h *Handler) editClaimItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	_ = h.store.LogActivity(r.Context(), cs.GroupID, "CLAIM_ITEMS_EDITED", actor(pid), nil, "edited "+pluralize(len(items), "item"))

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -27,8 +26,7 @@ func sanitizeParticipantUserIDs(parts []store.ParticipantInput, self *store.User
 
 func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	var d groupFormDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	if len(strings.TrimSpace(d.Name)) < 2 || len(d.Participants) < 1 {
@@ -39,7 +37,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
 	g, err := h.store.CreateGroup(r.Context(), in)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	_ = h.store.LogActivity(r.Context(), g.ID, "GROUP_CREATED", nil, nil, g.Name)
@@ -49,7 +47,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getGroup(w http.ResponseWriter, r *http.Request) {
 	g, err := h.store.GetGroup(r.Context(), chi.URLParam(r, "groupID"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if g == nil {
@@ -66,20 +64,19 @@ func (h *Handler) getGroupDetails(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	var d groupFormDTO
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &d) {
 		return
 	}
 	in := d.toInput()
 	sanitizeParticipantUserIDs(in.Participants, userFromContext(r.Context()))
 	before, err := h.store.GetGroup(r.Context(), groupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	g, err := h.store.UpdateGroup(r.Context(), groupID, in)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if g == nil {
@@ -129,7 +126,7 @@ func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request) {
 	ids := strings.Split(idsParam, ",")
 	groups, err := h.store.ListGroups(r.Context(), ids)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, groups)

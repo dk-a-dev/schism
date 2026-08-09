@@ -15,11 +15,14 @@ type Handler struct{ store *store.Store }
 func NewRouter(s *store.Store, logRequests bool) http.Handler {
 	h := &Handler{store: s}
 	r := chi.NewRouter()
-	r.Use(middleware.Recoverer)
+	r.Use(middleware.RequestID)
+	r.Use(securityHeaders)
+	r.Use(recoverPanics)
 	if logRequests {
-		r.Use(middleware.RequestID)
 		r.Use(middleware.Logger)
 	}
+
+	r.Get("/health", h.health)
 
 	// Friendly root health check.
 	r.Get("/ping", h.ping)

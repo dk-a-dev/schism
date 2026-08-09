@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -13,4 +14,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
+	log.Printf("request_id=%q internal_error_type=%T", requestID(r), err)
+	writeErr(w, http.StatusInternalServerError, "internal_error")
 }

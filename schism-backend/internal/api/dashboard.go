@@ -14,7 +14,7 @@ func (h *Handler) getGroupDashboard(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "groupID")
 	g, err := h.store.GetGroup(r.Context(), groupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	if g == nil {
@@ -23,12 +23,12 @@ func (h *Handler) getGroupDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	expenses, err := h.store.ListExpenses(r.Context(), groupID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	cats, err := h.store.ListCategories(r.Context())
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, r, err)
 		return
 	}
 	dash := analytics.BuildGroupDashboard(*g, expenses, cats, r.URL.Query().Get("participant"))
@@ -56,7 +56,7 @@ func (h *Handler) getPersonalDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		g, err := h.store.GetGroup(r.Context(), gid)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalError(w, r, err)
 			return
 		}
 		if g == nil {
@@ -64,7 +64,7 @@ func (h *Handler) getPersonalDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		expenses, err := h.store.ListExpenses(r.Context(), gid)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalError(w, r, err)
 			return
 		}
 		ges = append(ges, analytics.GroupExpenses{Group: *g, Expenses: expenses})
