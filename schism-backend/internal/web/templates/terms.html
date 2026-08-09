@@ -1,0 +1,27 @@
+{{define "terms"}}<!doctype html>
+<html lang="en">
+{{template "head" .}}
+<body><div class="page-shell">
+{{template "site-header" .}}
+<main id="main-content" class="legal-page">
+  <p class="eyebrow">Effective 9 August 2026</p>
+  <h1>Terms</h1>
+  <p class="legal-lede">These terms govern your use of Schism. They remain subject to owner and legal approval before public launch.</p>
+
+  <h2>Use Schism carefully</h2>
+  <p>You are responsible for the information you enter, the people you invite, and reviewing scanned, imported, or suggested details before sharing them. OCR and supported message parsing can make mistakes. Schism is an expense-organizing tool, not a bank, payment service, accounting service, or financial adviser, and it does not move money or settle debts.</p>
+
+  <h2>Accounts and shared groups</h2>
+  <p>Provide accurate account information, protect your credentials, and only share group information you have a right to share. Group members can see shared expenses, splits, balances, claims, and related activity. Do not misuse Schism, interfere with the service, or access another person’s account without permission.</p>
+
+  <h2>Availability and subscriptions</h2>
+  <p>Features may change and the service may occasionally be unavailable. If paid features are offered through Google Play, billing, renewal, cancellation, and refunds are also governed by Google Play’s terms. Cancelling a subscription does not delete your Schism account.</p>
+
+  <h2>Ending use</h2>
+  <p>You may stop using Schism and request <a href="/account-deletion">account deletion</a>. We may limit access where necessary to protect people, the service, or comply with law. Jurisdiction, warranty, liability, and dispute language must be supplied and approved by the owner’s legal reviewer before launch.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about these terms can be sent to <a href="{{.SupportHref}}">{{.SupportEmail}}</a>.</p>
+</main>
+{{template "site-footer" .}}
+</div></body></html>{{end}}

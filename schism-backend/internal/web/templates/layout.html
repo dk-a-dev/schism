@@ -1,0 +1,53 @@
+{{define "head"}}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{.Description}}">
+  <meta name="theme-color" content="#fbfaf4">
+  <title>{{.Title}}</title>
+  {{if .CanonicalURL}}<link rel="canonical" href="{{.CanonicalURL}}">{{end}}
+  <link rel="icon" href="/assets/site/split-coin.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/site/site.css">
+</head>
+{{end}}
+
+{{define "site-header"}}
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="Schism home">
+    <img src="/assets/site/split-coin.svg" width="40" height="40" alt="">
+    <span>Schism</span>
+  </a>
+  <nav aria-label="Primary navigation">
+    <a href="/privacy">Privacy</a>
+    <a href="/support">Support</a>
+    {{template "play-cta-small" .}}
+  </nav>
+</header>
+{{end}}
+
+{{define "play-cta"}}
+{{if .PlayURL}}<a class="cta" href="{{.PlayURL}}">Get Schism on Google Play</a>{{else}}<span class="cta cta-disabled" aria-disabled="true">Coming soon on Google Play</span>{{end}}
+{{end}}
+
+{{define "play-cta-small"}}
+{{if .PlayURL}}<a class="cta cta-small" href="{{.PlayURL}}">Get the app</a>{{else}}<span class="cta cta-small cta-disabled" aria-disabled="true">Coming soon</span>{{end}}
+{{end}}
+
+{{define "site-footer"}}
+<footer class="site-footer">
+  <div>
+    <a class="brand footer-brand" href="/" aria-label="Schism home">
+      <img src="/assets/site/split-coin.svg" width="32" height="32" alt="">
+      <span>Schism</span>
+    </a>
+    <p>Shared expenses, with their context intact.</p>
+  </div>
+  <nav aria-label="Legal and support">
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="/support">Support</a>
+    <a href="/account-deletion">Account deletion</a>
+  </nav>
+</footer>
+{{end}}

@@ -1,0 +1,18 @@
+{{define "support"}}<!doctype html>
+<html lang="en">
+{{template "head" .}}
+<body><div class="page-shell">
+{{template "site-header" .}}
+<main id="main-content" class="legal-page">
+  <p class="eyebrow">Effective 9 August 2026</p>
+  <h1>Support</h1>
+  <p class="legal-lede">Need help with Schism? Email <a href="{{.SupportHref}}">{{.SupportEmail}}</a>.</p>
+
+  <h2>Help us find the issue</h2>
+  <p>Include the app version, Android version, what you were trying to do, and the steps that led to the problem. Do not email passwords, authentication tokens, raw bank SMS, full receipt images, payment-card details, or other people’s private information.</p>
+
+  <h2>Privacy and account requests</h2>
+  <p>For a privacy question, use the same support address. To remove an account, follow the <a href="/account-deletion">account deletion instructions</a>. Subscription cancellation and account deletion are separate actions.</p>
+</main>
+{{template "site-footer" .}}
+</div></body></html>{{end}}

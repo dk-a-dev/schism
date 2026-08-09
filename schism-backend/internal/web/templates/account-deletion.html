@@ -1,0 +1,28 @@
+{{define "account-deletion"}}<!doctype html>
+<html lang="en">
+{{template "head" .}}
+<body><div class="page-shell">
+{{template "site-header" .}}
+<main id="main-content" class="legal-page">
+  <p class="eyebrow">Effective 9 August 2026</p>
+  <h1>Account deletion</h1>
+  <p class="legal-lede">Delete your Schism account in the app or request deletion after uninstalling it.</p>
+
+  <h2>Delete in the app</h2>
+  <ol>
+    <li>Open Schism and sign in.</li>
+    <li>Open Settings, then choose Delete account.</li>
+    <li>Review the warning and confirm deletion.</li>
+  </ol>
+
+  <h2>Request deletion without the app</h2>
+  <p>If you cannot sign in or are requesting deletion after uninstalling Schism, email <a href="{{.SupportHref}}?subject=Schism%20account%20deletion">{{.SupportEmail}}</a> from the address on your account with the subject “Schism account deletion.” We may ask for limited information to verify that the account is yours.</p>
+
+  <h2>Subscriptions are separate</h2>
+  <p>Deleting your account and choosing to cancel a Google Play subscription are separate actions. To stop a subscription, open Google Play, choose Payments &amp; subscriptions, then Subscriptions, select Schism, and cancel it. Cancelling a subscription alone does not delete your Schism account.</p>
+
+  <h2>What deletion covers</h2>
+  <p>Deletion removes or de-identifies account information and data controlled only by your account. Shared expense records may remain visible to other group members where needed to preserve their group ledger. Backups expire on their normal cycle, and financial records may be retained only when legally required. Exact retention and jurisdictional wording require owner and legal approval before launch.</p>
+</main>
+{{template "site-footer" .}}
+</div></body></html>{{end}}
