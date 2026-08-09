@@ -8,6 +8,7 @@ import android.provider.Telephony
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
+import com.pennywiseai.parser.core.bank.BankParserFactory
 
 /**
  * Receives incoming bank SMS and hands each message off to [SmsIngestWorker] for on-device parsing.
@@ -33,6 +34,15 @@ class SmsReceiver : BroadcastReceiver() {
 
         val workManager = WorkManager.getInstance(context)
         for ((sender, value) in bySender) {
+            // Drop anything that is not a recognised bank sender here, before the body is handed to
+            // anything else. SmsScanWorker has always filtered on this; the live path did not, so a
+            // personal message was read, written into WorkManager's database as job input, parsed,
+            // and only then discarded for producing no transaction. The stored outcome was the same,
+            // but the message had already been through storage to reach it.
+            //
+            // This is also what makes the Play SMS declaration literally true: access really is
+            // restricted to financial senders, on both paths, not just in effect.
+            if (!BankParserFactory.isKnownBankSender(sender)) continue
             val envelope = SmsEnvelope.create(sender, value.first.toString(), value.second)
             if (envelope.body.toByteArray().size > SmsIngestWorker.MAX_BODY_BYTES) continue
             val request = OneTimeWorkRequestBuilder<SmsIngestWorker>()

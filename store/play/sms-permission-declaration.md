@@ -1,4 +1,4 @@
-# SMS permission declaration — Schism 1.3.0
+# SMS permission declaration — Schism 1.3.4
 
 ## Permissions requested
 
@@ -18,8 +18,10 @@ senders, so a user can turn a real payment into an expense without retyping it.
 `SmsReceiver` (registered for `SMS_RECEIVED`, guarded by `BROADCAST_SMS`) needs `RECEIVE_SMS` to see
 a new transaction alert as it arrives. `SmsScanWorker` needs `READ_SMS` to run one backfill over
 `Telephony.Sms.Inbox` so alerts that arrived before the user opted in also appear. Both check
-`SmsImportPreference.isEnabled` first and stop immediately when it is false, and both skip every
-sender that `BankParserFactory.isKnownBankSender` does not recognise.
+`SmsImportPreference.isEnabled` first and stop immediately when it is false, and both discard every
+sender that `BankParserFactory.isKnownBankSender` does not recognise before the message is passed to
+anything else — `SmsReceiver.onReceive` and `SmsScanWorker` each test it in their own loop. A message
+from any other sender is never parsed, never queued, and never stored.
 
 ## Why no alternative API is sufficient
 
