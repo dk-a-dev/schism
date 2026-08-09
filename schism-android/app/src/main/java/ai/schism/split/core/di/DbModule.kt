@@ -22,7 +22,6 @@ object DbModule {
     @Singleton
     fun provideDb(@ApplicationContext context: Context): SchismDb =
         Room.databaseBuilder(context, SchismDb::class.java, "schism.db")
-            .fallbackToDestructiveMigration()
             .build()
 
     @Provides

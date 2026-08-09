@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
         OutboxEntity::class,
     ],
     version = 5,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class SchismDb : RoomDatabase() {
     abstract fun groupDao(): GroupDao

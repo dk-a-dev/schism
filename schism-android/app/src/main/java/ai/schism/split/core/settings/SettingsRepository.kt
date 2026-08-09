@@ -1,6 +1,7 @@
 package ai.schism.split.core.settings
 
 import android.content.Context
+import ai.schism.split.core.security.SecureTokenStore
 import ai.schism.split.sms.ingest.SmsIngestWorker
 import ai.schism.split.sms.settings.SmsImportPreference
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -11,8 +12,13 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,6 +36,9 @@ class SettingsRepository @Inject constructor(
     private val ds = context.dataStore
     private val appContext = context.applicationContext
     private val smsPreference = SmsImportPreference(appContext)
+    private val secureTokenStore = SecureTokenStore(appContext)
+    private val tokenVersion = MutableStateFlow(0L)
+    private val tokenMigrationMutex = Mutex()
 
     /** Optional automatic bank-message import. Disabled on every fresh install. */
     val smsImportEnabled: Flow<Boolean> = smsPreference.enabled
@@ -43,7 +52,10 @@ class SettingsRepository @Inject constructor(
     /** The backend user id for this device's identity (empty until registered). */
     val userId: Flow<String> = ds.data.map { it[KEY_USER_ID] ?: "" }
     /** Bearer auth token issued at registration (empty until registered). */
-    val authToken: Flow<String> = ds.data.map { it[KEY_TOKEN] ?: "" }
+    val authToken: Flow<String> = flow {
+        migrateLegacyToken()
+        emitAll(tokenVersion.map { secureTokenStore.read() })
+    }
     val email: Flow<String> = ds.data.map { it[KEY_EMAIL] ?: "" }
     val phone: Flow<String> = ds.data.map { it[KEY_PHONE] ?: "" }
     /** Whether the one-time onboarding (identity capture) has been completed on this device. */
@@ -112,10 +124,12 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setIdentity(id: String, token: String) {
+        if (token.isNotBlank()) secureTokenStore.write(token)
         ds.edit {
             it[KEY_USER_ID] = id
-            if (token.isNotBlank()) it[KEY_TOKEN] = token
+            it.remove(KEY_TOKEN)
         }
+        tokenVersion.value++
     }
 
     /**
@@ -124,7 +138,9 @@ class SettingsRepository @Inject constructor(
      * device identity (name/email/phone/userId) is left alone; signing back in mints a fresh token.
      */
     suspend fun clearAuthToken() {
-        ds.edit { it[KEY_TOKEN] = "" }
+        secureTokenStore.clear()
+        ds.edit { it.remove(KEY_TOKEN) }
+        tokenVersion.value++
     }
 
     suspend fun addKnownGroup(id: String) {
@@ -173,8 +189,16 @@ class SettingsRepository @Inject constructor(
 
     /** Wipe all device-local settings (used by "reset" and to isolate tests). */
     suspend fun clear() {
+        secureTokenStore.clear()
         ds.edit { it.clear() }
         smsPreference.setEnabled(false)
+        tokenVersion.value++
+    }
+
+    private suspend fun migrateLegacyToken() = tokenMigrationMutex.withLock {
+        val legacy = ds.data.first()[KEY_TOKEN].orEmpty()
+        if (legacy.isNotBlank()) secureTokenStore.write(legacy)
+        if (legacy.isNotEmpty()) ds.edit { it.remove(KEY_TOKEN) }
     }
 
     companion object {
