@@ -79,6 +79,7 @@ func TestUpdateGroupLogsMemberAndRenameActivity(t *testing.T) {
 	body := fmt.Sprintf(`{"name":"Trip 2","currency":"$",
 	  "participants":[{"id":%q,"name":"A"},{"name":"C"}]}`, g.Participants[0].ID)
 	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/v1/groups/"+g.ID, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)

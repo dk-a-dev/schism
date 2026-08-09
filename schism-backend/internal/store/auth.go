@@ -35,6 +35,8 @@ func newToken() (raw, hash string, err error) {
 // participants added earlier by friends under that number are claimed for this account, so their
 // groups show up the moment the user joins the platform.
 func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone string) (User, string, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	name = strings.TrimSpace(name)
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, "", err
@@ -56,7 +58,7 @@ func (s *Store) RegisterUser(ctx context.Context, name, email, password, phone s
 		`INSERT INTO users (id, name, email, phone, token_hash, password_hash)
 		 VALUES ($1,$2,$3,$4,$5,$6)
 		 RETURNING id, name, email, phone, created_at`,
-		id.New(), name, strings.TrimSpace(email), normPhone, tokenHash, string(hash)).
+		id.New(), name, email, normPhone, tokenHash, string(hash)).
 		Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -108,11 +110,12 @@ func (s *Store) GroupIDsForUser(ctx context.Context, userID string) ([]string, e
 // row) rather than rotating the account's single token, so existing sessions on other devices stay
 // valid — logging in here no longer signs anyone else out.
 func (s *Store) LoginUser(ctx context.Context, email, password string) (User, string, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
 	var u User
 	var passHash string
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, name, email, phone, created_at, password_hash FROM users
-		 WHERE lower(email) = lower($1) AND password_hash <> '' LIMIT 1`, strings.TrimSpace(email)).
+		 WHERE email = $1 AND password_hash <> '' LIMIT 1`, email).
 		Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.CreatedAt, &passHash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, "", ErrInvalidLogin

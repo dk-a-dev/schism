@@ -2,9 +2,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/schism/schism-backend/internal/id"
@@ -134,6 +137,109 @@ func TestAuthLogoutRequiresAuth(t *testing.T) {
 	srv := newTestServer(t)
 	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/logout", "", "")
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestRequireUserRejectsMissingSession(t *testing.T) {
+	h := &Handler{}
+	protected := h.requireUser(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	rec := httptest.NewRecorder()
+	protected.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/protected", nil))
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.JSONEq(t, `{"error":"unauthorized"}`, rec.Body.String())
+}
+
+func TestRequireUserAllowsResolvedSession(t *testing.T) {
+	h := &Handler{}
+	protected := h.requireUser(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req = req.WithContext(context.WithValue(req.Context(), userKey, &store.User{ID: "user-1"}))
+	rec := httptest.NewRecorder()
+	protected.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestAuthRegisterValidatesAndNormalizesIdentity(t *testing.T) {
+	unique := id.New()
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"empty name", fmt.Sprintf(`{"name":"  ","email":"empty-%s@example.com","password":"password1"}`, unique)},
+		{"seven character password", fmt.Sprintf(`{"name":"Asha","email":"short-%s@example.com","password":"1234567"}`, unique)},
+		{"password over one hundred twenty eight characters", fmt.Sprintf(`{"name":"Asha","email":"password-%s@example.com","password":%q}`, unique, strings.Repeat("p", 129))},
+		{"name over one hundred characters", fmt.Sprintf(`{"name":%q,"email":"name-%s@example.com","password":"password1"}`, strings.Repeat("n", 101), unique)},
+		{"email over one hundred twenty characters", fmt.Sprintf(`{"name":"Asha","email":%q,"password":"password1"}`, strings.Repeat("e", 109)+"@example.com")},
+		{"phone over thirty two characters", fmt.Sprintf(`{"name":"Asha","email":"phone-%s@example.com","password":"password1","phone":%q}`, unique, strings.Repeat("1", 33))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			resp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/register", "", tc.body)
+			defer resp.Body.Close()
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
+	}
+
+	srv := newTestServer(t)
+	email := "  MixedCase-" + unique + "@Example.COM  "
+	body := fmt.Sprintf(`{"name":"  Asha  ","email":%q,"password":"password1"}`, email)
+	first := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/register", "", body)
+	defer first.Body.Close()
+	require.Equal(t, http.StatusOK, first.StatusCode)
+	var registered authResponse
+	require.NoError(t, json.NewDecoder(first.Body).Decode(&registered))
+	require.Equal(t, "Asha", registered.Name)
+	require.Equal(t, strings.ToLower(strings.TrimSpace(email)), registered.Email)
+
+	conflict := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/register", "",
+		fmt.Sprintf(`{"name":"Rohan","email":%q,"password":"password2"}`, strings.ToLower(strings.TrimSpace(email))))
+	defer conflict.Body.Close()
+	require.Equal(t, http.StatusConflict, conflict.StatusCode)
+}
+
+func TestAuthLoginRejectsOversizedCredentials(t *testing.T) {
+	srv := newTestServer(t)
+	cases := []string{
+		fmt.Sprintf(`{"email":%q,"password":"password1"}`, strings.Repeat("e", 109)+"@example.com"),
+		fmt.Sprintf(`{"email":"asha@example.com","password":%q}`, strings.Repeat("p", 129)),
+	}
+	for _, body := range cases {
+		resp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/login", "", body)
+		resp.Body.Close()
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	}
+}
+
+func TestLoginRateLimitRejectsSixthRapidAttempt(t *testing.T) {
+	srv := newTestServer(t)
+	email := "rate-" + id.New() + "@example.com"
+	reg := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/register", "",
+		fmt.Sprintf(`{"name":"Asha","email":%q,"password":"password1"}`, email))
+	reg.Body.Close()
+	require.Equal(t, http.StatusOK, reg.StatusCode)
+
+	for attempt := 1; attempt <= 6; attempt++ {
+		resp := authRequest(t, http.MethodPost, srv.URL+"/v1/auth/login", "",
+			fmt.Sprintf(`{"email":%q,"password":"wrong-password"}`, email))
+		resp.Body.Close()
+		if attempt <= 5 {
+			require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+			continue
+		}
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.NotEmpty(t, resp.Header.Get("Retry-After"))
+	}
+}
+
+func TestLegacyUserRegistrationRouteIsDisabled(t *testing.T) {
+	srv := newTestServer(t)
+	resp := authRequest(t, http.MethodPost, srv.URL+"/v1/users", "", `{"name":"Legacy"}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 // createAndFetchUserID creates a group (optionally authenticated) then returns the stored userId of

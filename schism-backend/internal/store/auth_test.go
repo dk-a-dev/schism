@@ -3,10 +3,62 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/schism/schism-backend/internal/id"
 	"github.com/stretchr/testify/require"
 )
+
+func TestExpiredSessionDoesNotAuthenticate(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, token, err := s.RegisterUser(ctx, "Expired", "expired-"+id.New()+"@example.com", "password1", "")
+	require.NoError(t, err)
+	_, err = s.pool.Exec(ctx, `UPDATE tokens SET expires_at = now() - interval '1 second' WHERE user_id=$1`, u.ID)
+	require.NoError(t, err)
+
+	got, err := s.UserByToken(ctx, token)
+	require.NoError(t, err)
+	require.Nil(t, got)
+}
+
+func TestNewSessionExpiresInNinetyDays(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _, err := s.RegisterUser(ctx, "Fresh", "fresh-"+id.New()+"@example.com", "password1", "")
+	require.NoError(t, err)
+
+	var createdAt, lastUsedAt, expiresAt time.Time
+	require.NoError(t, s.pool.QueryRow(ctx,
+		`SELECT created_at, last_used_at, expires_at FROM tokens WHERE user_id=$1`, u.ID).
+		Scan(&createdAt, &lastUsedAt, &expiresAt))
+	require.WithinDuration(t, createdAt, lastUsedAt, time.Second)
+	require.WithinDuration(t, createdAt.Add(90*24*time.Hour), expiresAt, time.Second)
+}
+
+func TestSessionLastUsedUpdatesAtMostHourly(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, token, err := s.RegisterUser(ctx, "Touch", "touch-"+id.New()+"@example.com", "password1", "")
+	require.NoError(t, err)
+	old := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Microsecond)
+	_, err = s.pool.Exec(ctx, `UPDATE tokens SET last_used_at=$1 WHERE user_id=$2`, old, u.ID)
+	require.NoError(t, err)
+
+	got, err := s.UserByToken(ctx, token)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	var firstTouch time.Time
+	require.NoError(t, s.pool.QueryRow(ctx, `SELECT last_used_at FROM tokens WHERE user_id=$1`, u.ID).Scan(&firstTouch))
+	require.WithinDuration(t, time.Now(), firstTouch, 2*time.Second)
+
+	got, err = s.UserByToken(ctx, token)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	var secondTouch time.Time
+	require.NoError(t, s.pool.QueryRow(ctx, `SELECT last_used_at FROM tokens WHERE user_id=$1`, u.ID).Scan(&secondTouch))
+	require.Equal(t, firstTouch, secondTouch)
+}
 
 // TestLoginDoesNotInvalidateOtherSessions is the core multi-session assertion for the tokens-table
 // cutover: logging in again (a second device) must NOT kick out the first session.

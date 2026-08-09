@@ -18,40 +18,17 @@ func registerUser(t *testing.T, srv string, name, email, phone string) store.Use
 	return u
 }
 
-// registerUserToken is the variant used when the caller also needs the one-time bearer token (the
-// token is present only on the register response — never on the plain User).
+// registerUserToken creates the password-backed account used by API integration fixtures and returns
+// its one-time bearer token.
 func registerUserToken(t *testing.T, srv string, name, email, phone string) (store.User, string) {
 	t.Helper()
-	body := fmt.Sprintf(`{"name":%q,"email":%q,"phone":%q}`, name, email, phone)
-	resp, err := http.Post(srv+"/v1/users", "application/json", bytes.NewBufferString(body))
+	body := fmt.Sprintf(`{"name":%q,"email":%q,"phone":%q,"password":"password1"}`, name, email, phone)
+	resp, err := http.Post(srv+"/v1/auth/register", "application/json", bytes.NewBufferString(body))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var out struct {
-		store.User
-		Token string `json:"token"`
-	}
+	var out authResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
-	return out.User, out.Token
-}
-
-func TestRegisterUserAlwaysCreates(t *testing.T) {
-	srv := newTestServer(t)
-
-	// Email is unverified, so it is NOT a unique key: registering the same email twice yields two
-	// distinct ids (no account takeover). The response echoes what was sent.
-	email := "alice-" + id.New() + "@example.com"
-	u1 := registerUser(t, srv.URL, "Alice", email, "111")
-	require.NotEmpty(t, u1.ID)
-	require.Equal(t, "Alice", u1.Name)
-	require.Equal(t, email, u1.Email)
-
-	u2 := registerUser(t, srv.URL, "Mallory", email, "222")
-	require.NotEqual(t, u1.ID, u2.ID)
-
-	// Empty email also always inserts a distinct id.
-	e1 := registerUser(t, srv.URL, "Anon", "", "")
-	e2 := registerUser(t, srv.URL, "Anon", "", "")
-	require.NotEqual(t, e1.ID, e2.ID)
+	return store.User{ID: out.ID, Name: out.Name, Email: out.Email, Phone: phone}, out.Token
 }
 
 func TestGroupParticipantUserID(t *testing.T) {

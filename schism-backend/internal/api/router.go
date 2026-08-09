@@ -2,18 +2,28 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/schism/schism-backend/internal/store"
+	"golang.org/x/time/rate"
 )
 
-type Handler struct{ store *store.Store }
+type Handler struct {
+	store           *store.Store
+	registerLimiter *keyedLimiter
+	loginLimiter    *keyedLimiter
+}
 
 // NewRouter builds the API router. When logRequests is true, per-request access logging is
 // enabled (intended for dev; keep it off in production).
 func NewRouter(s *store.Store, logRequests bool) http.Handler {
-	h := &Handler{store: s}
+	h := &Handler{
+		store:           s,
+		registerLimiter: newKeyedLimiter(rate.Every(20*time.Second), 3, 15*time.Minute),
+		loginLimiter:    newKeyedLimiter(rate.Every(12*time.Second), 5, 15*time.Minute),
+	}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(securityHeaders)
@@ -43,7 +53,6 @@ func NewRouter(s *store.Store, logRequests bool) http.Handler {
 		r.Get("/users/me", h.me)
 		r.Get("/users/me/groups", h.myGroups)
 		r.Delete("/users/me", h.deleteMe)
-		r.Post("/users", h.registerUser)
 		r.Post("/auth/register", h.authRegister)
 		r.Post("/auth/login", h.authLogin)
 		r.Post("/auth/logout", h.authLogout)

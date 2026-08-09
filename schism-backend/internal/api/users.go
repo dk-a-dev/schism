@@ -3,39 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
+	"net/mail"
 	"strings"
-	"time"
+	"unicode/utf8"
 
 	"github.com/schism/schism-backend/internal/store"
 )
-
-// registerUser creates an unverified identity, mints its secret bearer token, and returns both. The
-// token is present ONLY on this response — the client stores it and sends it as `Authorization:
-// Bearer <token>` thereafter. There is no GET-by-id endpoint on purpose: email/phone are PII and,
-// without auth, must not be readable by anyone holding a user id.
-func (h *Handler) registerUser(w http.ResponseWriter, r *http.Request) {
-	var d struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
-		Phone string `json:"phone"`
-	}
-	if !decodeJSON(w, r, &d) {
-		return
-	}
-	u, token, err := h.store.CreateUser(r.Context(), d.Name, d.Email, d.Phone)
-	if err != nil {
-		writeInternalError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, struct {
-		ID        string    `json:"id"`
-		Name      string    `json:"name"`
-		Email     string    `json:"email"`
-		Phone     string    `json:"phone"`
-		CreatedAt time.Time `json:"createdAt"`
-		Token     string    `json:"token"`
-	}{u.ID, u.Name, u.Email, u.Phone, u.CreatedAt, token})
-}
 
 // me returns the authenticated caller (resolved from the bearer token by withUser). It answers 401
 // when unauthenticated — this is how a client verifies "who am I" without exposing PII to id holders.
@@ -48,6 +21,10 @@ type authResponse struct {
 }
 
 func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
+	if !h.registerLimiter.Allow(limiterKey(clientIP(r))) {
+		writeRateLimited(w)
+		return
+	}
 	var d struct {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
@@ -57,15 +34,26 @@ func (h *Handler) authRegister(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &d) {
 		return
 	}
-	if !strings.Contains(d.Email, "@") {
+	d.Name = strings.TrimSpace(d.Name)
+	d.Email = strings.ToLower(strings.TrimSpace(d.Email))
+	parsedEmail, emailErr := mail.ParseAddress(d.Email)
+	if emailErr != nil || parsedEmail.Address != d.Email || len(d.Email) > 120 {
 		writeErr(w, http.StatusBadRequest, "enter a valid email")
 		return
 	}
-	if len(d.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "password must be at least 6 characters")
+	if utf8.RuneCountInString(d.Name) < 1 || utf8.RuneCountInString(d.Name) > 100 {
+		writeErr(w, http.StatusBadRequest, "name must be between 1 and 100 characters")
 		return
 	}
-	u, token, err := h.store.RegisterUser(r.Context(), strings.TrimSpace(d.Name), d.Email, d.Password, d.Phone)
+	if len(d.Password) < 8 || len(d.Password) > 128 {
+		writeErr(w, http.StatusBadRequest, "password must be between 8 and 128 characters")
+		return
+	}
+	if len(d.Phone) > 32 {
+		writeErr(w, http.StatusBadRequest, "phone must not exceed 32 characters")
+		return
+	}
+	u, token, err := h.store.RegisterUser(r.Context(), d.Name, d.Email, d.Password, d.Phone)
 	if errors.Is(err, store.ErrEmailTaken) {
 		writeErr(w, http.StatusConflict, "that email is already registered")
 		return
@@ -83,6 +71,15 @@ func (h *Handler) authLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if !decodeJSON(w, r, &d) {
+		return
+	}
+	d.Email = strings.ToLower(strings.TrimSpace(d.Email))
+	if len(d.Email) == 0 || len(d.Email) > 120 || len(d.Password) == 0 || len(d.Password) > 128 {
+		writeErr(w, http.StatusBadRequest, "invalid_credentials")
+		return
+	}
+	if !h.loginLimiter.Allow(limiterKey(clientIP(r), d.Email)) {
+		writeRateLimited(w)
 		return
 	}
 	u, token, err := h.store.LoginUser(r.Context(), d.Email, d.Password)

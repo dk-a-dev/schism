@@ -87,12 +87,18 @@ func (s *Store) UserByToken(ctx context.Context, rawToken string) (*User, error)
 	var u User
 	err := s.pool.QueryRow(ctx,
 		`SELECT u.id, u.name, u.email, u.phone, u.created_at FROM users u
-		 JOIN tokens t ON t.user_id = u.id WHERE t.token_hash=$1`, TokenHash(rawToken)).
+		 JOIN tokens t ON t.user_id = u.id
+		 WHERE t.token_hash=$1 AND t.expires_at > now()`, TokenHash(rawToken)).
 		Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE tokens SET last_used_at=now()
+		 WHERE token_hash=$1 AND last_used_at <= now() - interval '1 hour'`, TokenHash(rawToken)); err != nil {
 		return nil, err
 	}
 	return &u, nil

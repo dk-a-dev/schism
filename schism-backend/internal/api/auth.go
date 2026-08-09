@@ -35,9 +35,22 @@ func rawTokenFromRequest(r *http.Request) string {
 func (h *Handler) withUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token := rawTokenFromRequest(r); token != "" {
-			if u, err := h.store.UserByToken(r.Context(), token); err == nil && u != nil {
+			if u, err := h.store.UserByToken(r.Context(), token); err != nil {
+				writeInternalError(w, r, err)
+				return
+			} else if u != nil {
 				r = r.WithContext(context.WithValue(r.Context(), userKey, u))
 			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *Handler) requireUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if userFromContext(r.Context()) == nil {
+			writeErr(w, http.StatusUnauthorized, "unauthorized")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
