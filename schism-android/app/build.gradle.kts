@@ -21,14 +21,19 @@ val backendUrl: String = System.getenv("SCHISM_BACKEND_URL")
 //   storePassword=...
 //   keyAlias=...
 //   keyPassword=...
-// AdMob ids default to Google's published *test* ids so no build ever requests production ads by
-// accident; the signed release supplies the real ones via env or Gradle properties.
+// AdMob ids are PUBLIC — they ship inside the APK — so the production ones are committed rather
+// than treated as secrets. They are applied to the RELEASE variant only: a debug or CI build that
+// requests production ads generates invalid traffic, which is an AdMob policy violation and can get
+// the account terminated. Every other variant keeps Google's published test ids.
+val TEST_ADMOB_APP_ID = "ca-app-pub-3940256099942544~3347511713"
+val TEST_ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/9214589741"
+
 val admobAppId: String = System.getenv("SCHISM_ADMOB_APP_ID")
     ?: (project.findProperty("schism.admobAppId") as String?)
-    ?: "ca-app-pub-3940256099942544~3347511713"
+    ?: "ca-app-pub-1250081810965574~3212649945"
 val admobBannerUnitId: String = System.getenv("SCHISM_ADMOB_BANNER_UNIT_ID")
     ?: (project.findProperty("schism.admobBannerUnitId") as String?)
-    ?: "ca-app-pub-3940256099942544/9214589741"
+    ?: "ca-app-pub-1250081810965574/2871924504"
 
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
@@ -48,10 +53,9 @@ android {
         versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
-        // AdMob: Google's official *test* ids unless real ones are supplied by the release build
-        // (env or -Pschism.admob*). Never ship a debug/CI build that requests production ads.
-        manifestPlaceholders["admobAppId"] = admobAppId
-        buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$admobBannerUnitId\"")
+        // Test ids by default; the release build type below swaps in the production pair.
+        manifestPlaceholders["admobAppId"] = TEST_ADMOB_APP_ID
+        buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$TEST_ADMOB_BANNER_UNIT_ID\"")
     }
 
     signingConfigs {
@@ -67,6 +71,9 @@ android {
 
     buildTypes {
         release {
+            // The only variant that talks to the real AdMob account.
+            manifestPlaceholders["admobAppId"] = admobAppId
+            buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$admobBannerUnitId\"")
             isMinifyEnabled = true
             isShrinkResources = true
             ndk {

@@ -27,18 +27,47 @@ no app-open, no rewarded ads.
    collected and the banner will not serve in regulated regions.
 5. AdMob → Payments: complete address verification and add a payment method, or nothing pays out.
 
-**Supply them at build time** (never committed):
+**Schism's live identifiers** (already wired in `app/build.gradle.kts`):
+
+```
+App ID           ca-app-pub-1250081810965574~3212649945
+Banner unit ID   ca-app-pub-1250081810965574/2871924504
+```
+
+These are **not secrets** — they ship inside the APK and anyone can read them out of it — so they
+are committed rather than injected. What matters is *which variant uses them*:
+
+| Variant | AdMob ids |
+|---|---|
+| `release` | the production pair above |
+| `debug`, tests, CI | Google's published **test** ids |
+
+A debug build requesting production ads is invalid traffic, which is an AdMob policy violation and
+can get the account terminated. That is why the production pair is attached to the release build
+type only, never to `defaultConfig`.
+
+To override without editing the build file — a second AdMob account, or a throwaway experiment —
+either environment variables:
 
 ```bash
-export SCHISM_ADMOB_APP_ID='ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY'
-export SCHISM_ADMOB_BANNER_UNIT_ID='ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ'
+export SCHISM_ADMOB_APP_ID='ca-app-pub-…~…'
+export SCHISM_ADMOB_BANNER_UNIT_ID='ca-app-pub-…/…'
 ./gradlew :app:assembleRelease
 ```
 
-or as Gradle properties `schism.admobAppId` / `schism.admobBannerUnitId`.
+or Gradle properties, in `~/.gradle/gradle.properties` (machine-local, never committed):
 
-Both default to **Google's official test IDs**, so debug and CI builds request test ads and can
-never generate invalid traffic against your account. Only a build with these set requests real ads.
+```properties
+schism.admobAppId=ca-app-pub-…~…
+schism.admobBannerUnitId=ca-app-pub-…/…
+```
+
+Env wins over the Gradle property, which wins over the committed default.
+
+**Test devices.** Register every phone you test on: AdMob → Settings → Test devices, or copy the
+`Use RequestConfiguration.Builder().setTestDeviceIds(...)` line AdMob prints in logcat on first ad
+request. A registered device gets test ads even from a production build, so you can tap them safely.
+An unregistered device on a release build is generating real traffic.
 
 > Clicking your own live ads is policy-violating and can get the account terminated. Test with the
 > default test IDs, or register your device as a test device in AdMob.
