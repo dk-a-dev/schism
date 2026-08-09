@@ -1,0 +1,5 @@
+Receipt reading still runs on your phone by default, and nothing is uploaded.
+
+New: if you want a large vision model to read a difficult bill, Settings can now send that one photo to Google or Groq instead — either through Schism, or straight from your phone using your own API key. It is off until you turn it on, tells you exactly where the photo goes, and you can switch back at any time.
+
+Bills are also read more accurately, especially thermal-printed and delivery-app receipts.
