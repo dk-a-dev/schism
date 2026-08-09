@@ -8,6 +8,7 @@ import ai.schism.split.sms.ingest.SmsScanWorker
 import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.sms.itemized.PendingReceipt
 import ai.schism.split.sms.receipt.ReceiptScanner
+import ai.schism.split.ocr.OcrAvailability
 import ai.schism.split.sms.receipt.engine.buildLlmHandoff
 import ai.schism.split.sms.receipt.engine.parseBill
 import android.content.Context
@@ -69,6 +70,11 @@ class InboxViewModel @Inject constructor(
     /** True while a receipt image is being OCR'd + parsed (drives a progress dialog). */
     private val _scanningReceipt = MutableStateFlow(false)
     val scanningReceipt: StateFlow<Boolean> = _scanningReceipt.asStateFlow()
+    private val _ocrAvailability = MutableStateFlow<OcrAvailability>(OcrAvailability.Ready)
+    val ocrAvailability: StateFlow<OcrAvailability> = _ocrAvailability.asStateFlow()
+    private val _waitingForOcr = MutableStateFlow(false)
+    val waitingForOcr: StateFlow<Boolean> = _waitingForOcr.asStateFlow()
+    private var pendingReceiptUri: Uri? = null
 
     private val _filter = MutableStateFlow(InboxFilter.ToSplit)
     val filter: StateFlow<InboxFilter> = _filter.asStateFlow()
@@ -78,6 +84,21 @@ class InboxViewModel @Inject constructor(
             .flatMapLatest { f -> repo.observeByStatus(f.status) }
             .map { txns -> if (txns.isEmpty()) UiState.Empty else UiState.Data(txns) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)
+
+    init {
+        viewModelScope.launch {
+            receiptScanner.observeAvailability().collect { availability ->
+                _ocrAvailability.value = availability
+                if (availability == OcrAvailability.Ready) {
+                    pendingReceiptUri?.let { uri ->
+                        pendingReceiptUri = null
+                        _waitingForOcr.value = false
+                        performReceiptScan(uri)
+                    }
+                }
+            }
+        }
+    }
 
     fun setFilter(f: InboxFilter) {
         _filter.value = f
@@ -115,6 +136,25 @@ class InboxViewModel @Inject constructor(
 
     /** Scan a receipt image on-device (PaddleOCR → parse) and add it to the inbox to split/keep. */
     fun scanReceipt(uri: Uri) {
+        if (_ocrAvailability.value != OcrAvailability.Ready) {
+            pendingReceiptUri = uri
+            _waitingForOcr.value = true
+            return
+        }
+        performReceiptScan(uri)
+    }
+
+    fun prepareOcr(allowCellular: Boolean) {
+        receiptScanner.prepare(allowCellular)
+    }
+
+    fun cancelOcrPreparation() {
+        pendingReceiptUri = null
+        _waitingForOcr.value = false
+        receiptScanner.cancelDownload()
+    }
+
+    private fun performReceiptScan(uri: Uri) {
         viewModelScope.launch {
             _scanningReceipt.value = true
             runCatching {

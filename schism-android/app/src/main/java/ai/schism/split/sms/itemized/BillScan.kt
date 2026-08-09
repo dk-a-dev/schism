@@ -1,6 +1,8 @@
 package ai.schism.split.sms.itemized
 
 import ai.schism.split.core.ui.SplitLoader
+import ai.schism.split.ocr.OcrAvailability
+import ai.schism.split.ocr.OcrFailure
 import ai.schism.split.sms.receipt.ReceiptScanner
 import ai.schism.split.sms.receipt.engine.buildLlmHandoff
 import ai.schism.split.sms.receipt.engine.parseBill
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,12 +64,52 @@ class BillScanViewModel @Inject constructor(
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
 
+    private val _ocrAvailability = MutableStateFlow<OcrAvailability>(OcrAvailability.Ready)
+    val ocrAvailability: StateFlow<OcrAvailability> = _ocrAvailability.asStateFlow()
+    private val _waitingForOcr = MutableStateFlow(false)
+    val waitingForOcr: StateFlow<Boolean> = _waitingForOcr.asStateFlow()
+    private var pendingScan: Pair<Uri, () -> Unit>? = null
+
+    init {
+        viewModelScope.launch {
+            receiptScanner.observeAvailability().collect { availability ->
+                _ocrAvailability.value = availability
+                if (availability == OcrAvailability.Ready) {
+                    pendingScan?.let { (uri, callback) ->
+                        pendingScan = null
+                        _waitingForOcr.value = false
+                        performScan(uri, callback)
+                    }
+                }
+            }
+        }
+    }
+
     /** Drops any leftover scanned draft — used before a "start with an empty bill" manual entry. */
     fun clearPending() {
         pending.draft = null
     }
 
     fun scan(uri: Uri, onItemized: () -> Unit) {
+        if (_ocrAvailability.value != OcrAvailability.Ready) {
+            pendingScan = uri to onItemized
+            _waitingForOcr.value = true
+            return
+        }
+        performScan(uri, onItemized)
+    }
+
+    fun prepareOcr(allowCellular: Boolean) {
+        receiptScanner.prepare(allowCellular)
+    }
+
+    fun cancelOcrPreparation() {
+        pendingScan = null
+        _waitingForOcr.value = false
+        receiptScanner.cancelDownload()
+    }
+
+    private fun performScan(uri: Uri, onItemized: () -> Unit) {
         viewModelScope.launch {
             _scanning.value = true
             runCatching {
@@ -124,6 +167,8 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 fun rememberBillScan(onItemized: () -> Unit, onManualEntry: () -> Unit = onItemized): () -> Unit {
     val viewModel: BillScanViewModel = hiltViewModel()
     val scanning by viewModel.scanning.collectAsState()
+    val ocrAvailability by viewModel.ocrAvailability.collectAsState()
+    val waitingForOcr by viewModel.waitingForOcr.collectAsState()
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     var showChooser by remember { mutableStateOf(false) }
@@ -178,7 +223,85 @@ fun rememberBillScan(onItemized: () -> Unit, onManualEntry: () -> Unit = onItemi
     if (scanning) {
         BillScanProgressDialog()
     }
+    if (waitingForOcr) {
+        OcrPreparationDialog(
+            availability = ocrAvailability,
+            onWifiOnly = { viewModel.prepareOcr(allowCellular = false) },
+            onAnyNetwork = { viewModel.prepareOcr(allowCellular = true) },
+            onCancel = viewModel::cancelOcrPreparation,
+        )
+    }
     return { showChooser = true }
+}
+
+@Composable
+fun OcrPreparationDialog(
+    availability: OcrAvailability,
+    onWifiOnly: () -> Unit,
+    onAnyNetwork: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val title: String
+    val body: @Composable () -> Unit
+    when (availability) {
+        is OcrAvailability.ConsentRequired -> {
+            title = "Download receipt scanner?"
+            body = {
+                Text(
+                    "Schism needs a 6.0 MB on-device OCR model. Receipt photos and extracted text " +
+                        "stay on your phone, and scanning works offline after this download.",
+                )
+            }
+        }
+        OcrAvailability.WaitingForWifi -> {
+            title = "Waiting for Wi-Fi"
+            body = { Text("The download will start automatically on an unmetered network.") }
+        }
+        OcrAvailability.Queued -> {
+            title = "Preparing receipt scanner"
+            body = { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
+        }
+        is OcrAvailability.Downloading -> {
+            title = "Downloading receipt scanner"
+            val fraction = if (availability.totalBytes > 0) {
+                availability.downloadedBytes.toFloat() / availability.totalBytes.toFloat()
+            } else 0f
+            body = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LinearProgressIndicator(progress = { fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                    Text("${(fraction * 100).toInt()}% — you can leave this screen")
+                }
+            }
+        }
+        is OcrAvailability.Failed -> {
+            title = "Scanner download paused"
+            val message = when (availability.reason) {
+                OcrFailure.NoSpace -> "Free some storage, then try again."
+                OcrFailure.Integrity -> "The downloaded model did not pass verification. Try again."
+                OcrFailure.IncompatibleApp -> "Update Schism before downloading this scanner model."
+                OcrFailure.Network -> "Check your connection, then try again."
+                OcrFailure.Unknown -> "Something went wrong while preparing the scanner."
+            }
+            body = { Text(message) }
+        }
+        OcrAvailability.Ready -> return
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = body,
+        confirmButton = {
+            TextButton(onClick = onWifiOnly) {
+                Text(if (availability is OcrAvailability.Failed) "Retry on Wi-Fi" else "Wi-Fi only")
+            }
+        },
+        dismissButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onAnyNetwork) { Text("Use any network") }
+                TextButton(onClick = onCancel) { Text("Not now") }
+            }
+        },
+    )
 }
 
 /**

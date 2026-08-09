@@ -9,6 +9,7 @@ import ai.schism.split.core.ui.SchismPrimaryButton
 import ai.schism.split.core.ui.SchismSecondaryButton
 import ai.schism.split.core.ui.UiState
 import ai.schism.split.sms.data.Transaction
+import ai.schism.split.sms.itemized.OcrPreparationDialog
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -81,8 +82,18 @@ fun InboxScreen(
     val permissionNeeded by viewModel.permissionNeeded.collectAsState()
     val smsImportEnabled by viewModel.smsImportEnabled.collectAsState()
     val scanningReceipt by viewModel.scanningReceipt.collectAsState()
+    val ocrAvailability by viewModel.ocrAvailability.collectAsState()
+    val waitingForOcr by viewModel.waitingForOcr.collectAsState()
     if (scanningReceipt) {
         ai.schism.split.sms.itemized.BillScanProgressDialog()
+    }
+    if (waitingForOcr) {
+        OcrPreparationDialog(
+            availability = ocrAvailability,
+            onWifiOnly = { viewModel.prepareOcr(allowCellular = false) },
+            onAnyNetwork = { viewModel.prepareOcr(allowCellular = true) },
+            onCancel = viewModel::cancelOcrPreparation,
+        )
     }
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
