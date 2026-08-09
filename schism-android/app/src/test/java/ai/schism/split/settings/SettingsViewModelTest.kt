@@ -1,6 +1,9 @@
 package ai.schism.split.settings
 
 import ai.schism.split.core.settings.SettingsRepository
+import ai.schism.split.core.db.SchismDb
+import ai.schism.split.sms.data.SmsRepository
+import androidx.room.Room
 import ai.schism.split.core.update.UpdateChecker
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
@@ -27,23 +30,31 @@ import okhttp3.OkHttpClient
 class SettingsViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var settings: SettingsRepository
+    private lateinit var db: SchismDb
+    private lateinit var smsRepository: SmsRepository
     private val updateChecker = UpdateChecker()
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         settings = SettingsRepository(ApplicationProvider.getApplicationContext())
+        db = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            SchismDb::class.java,
+        ).allowMainThreadQueries().build()
+        smsRepository = SmsRepository(db.transactionDao())
         runBlocking { settings.clear() } // DataStore is a JVM singleton; isolate from other tests
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+        db.close()
     }
 
     @Test
     fun exposesDefaultsForFreshlyClearedRepo() = runTest(dispatcher) {
-        val vm = SettingsViewModel(settings, updateChecker)
+        val vm = SettingsViewModel(settings, updateChecker, smsRepository)
         backgroundScope.launch { vm.state.collect {} } // keep the WhileSubscribed flow hot
 
         val ui = vm.state.first { it.currencyCode == "INR" }
@@ -54,7 +65,7 @@ class SettingsViewModelTest {
 
     @Test
     fun savedValuesPersistAndSurfaceInState() = runTest(dispatcher) {
-        val vm = SettingsViewModel(settings, updateChecker)
+        val vm = SettingsViewModel(settings, updateChecker, smsRepository)
         backgroundScope.launch { vm.state.collect {} } // keep the WhileSubscribed flow hot
 
         vm.saveProfileName("  Dev  ") // setProfileName trims

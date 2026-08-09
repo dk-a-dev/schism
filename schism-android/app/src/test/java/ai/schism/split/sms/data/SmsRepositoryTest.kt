@@ -1,6 +1,7 @@
 package ai.schism.split.sms.data
 
 import ai.schism.split.core.db.SchismDb
+import ai.schism.split.sms.receipt.ReceiptDraft
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
@@ -71,6 +72,17 @@ class SmsRepositoryTest {
         assertEquals(TransactionStatus.PUSHED, row.status)
         assertEquals("g1", row.remoteGroupId)
         assertEquals("e1", row.remoteExpenseId)
+    }
+
+    @Test
+    fun deletingImportedMessagesPreservesReceiptEntries() = runTest {
+        repo.ingest(HDFC_SMS, "HDFCBK", 1_720_000_000_000L)
+        val receiptId = repo.addReceipt(ReceiptDraft("Cafe", 1_200, "₹", "2026-07-05"))
+
+        repo.deleteImportedSmsData()
+
+        assertEquals(receiptId, db.transactionDao().getById(receiptId)?.id)
+        assertEquals(1, db.transactionDao().observeAll().first().size)
     }
 
     companion object {

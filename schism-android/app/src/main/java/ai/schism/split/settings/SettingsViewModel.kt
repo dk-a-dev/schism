@@ -5,6 +5,7 @@ import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.core.update.ReleaseInfo
 import ai.schism.split.core.update.UpdateChecker
 import ai.schism.split.core.update.isNewer
+import ai.schism.split.sms.data.SmsRepository
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -62,6 +63,7 @@ private data class Prefs(
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val updateChecker: UpdateChecker,
+    private val smsRepository: SmsRepository,
 ) : ViewModel() {
 
     // combine() tops out at 5 typed flows, so fold the eight sources into two groups first.
@@ -127,6 +129,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setSmsImportEnabled(enabled: Boolean) {
         settings.setSmsImportEnabled(enabled)
+    }
+
+    fun deleteImportedSmsData() {
+        viewModelScope.launch { smsRepository.deleteImportedSmsData() }
     }
 
     /** Wipe all device-local settings (profile, currency, theme, joined groups). */

@@ -13,6 +13,8 @@ import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.compose.animation.AnimatedVisibility
@@ -92,6 +94,7 @@ fun SettingsScreen(
     var code by remember { mutableStateOf(state.currencyCode) }
     var confirmReset by remember { mutableStateOf(false) }
     var confirmSmsEnable by remember { mutableStateOf(false) }
+    var confirmSmsDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.profileName) { name = state.profileName }
     LaunchedEffect(state.email) { email = state.email }
@@ -300,6 +303,26 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (state.smsImportEnabled) {
+                    SchismSecondaryButton(
+                        onClick = {
+                            viewModel.setSmsImportEnabled(false)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                runCatching {
+                                    context.revokeSelfPermissionOnKill(Manifest.permission.READ_SMS)
+                                    context.revokeSelfPermissionOnKill(Manifest.permission.RECEIVE_SMS)
+                                }.onFailure { context.openSchismAppSettings() }
+                            } else {
+                                context.openSchismAppSettings()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Disable and revoke Android permission") }
+                }
+                SchismSecondaryButton(
+                    onClick = { confirmSmsDelete = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Delete imported message transactions") }
             }
 
             // ── Labs ───────────────────────────────────────────────────────
@@ -388,6 +411,34 @@ fun SettingsScreen(
             dismissButton = { TextButton(onClick = { confirmSmsEnable = false }) { Text("Not now") } },
         )
     }
+    if (confirmSmsDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmSmsDelete = false },
+            title = { Text("Delete imported transactions?") },
+            text = {
+                Text(
+                    "This permanently deletes transactions created from bank messages on this device. " +
+                        "Receipt scans and expenses already shared with groups are not deleted.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteImportedSmsData()
+                    confirmSmsDelete = false
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSmsDelete = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+private fun android.content.Context.openSchismAppSettings() {
+    startActivity(
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 }
 
 @Composable

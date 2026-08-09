@@ -76,4 +76,6 @@ class SmsRepository @Inject constructor(
         dao.markPushed(id, groupId, expenseId)
 
     suspend fun getById(id: String): Transaction? = dao.getById(id)?.toDomain()
+
+    suspend fun deleteImportedSmsData() = dao.deleteImportedSmsData()
 }

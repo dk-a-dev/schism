@@ -34,4 +34,8 @@ interface TransactionDao {
 
     @Query("SELECT * FROM sms_transactions WHERE id = :id")
     suspend fun getById(id: String): TransactionEntity?
+
+    /** Deletes only bank-message imports; manually scanned receipt entries are a separate source. */
+    @Query("DELETE FROM sms_transactions WHERE rawSender != 'receipt'")
+    suspend fun deleteImportedSmsData()
 }
