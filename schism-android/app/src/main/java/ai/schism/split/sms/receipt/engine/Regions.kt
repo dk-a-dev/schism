@@ -28,8 +28,8 @@ private fun isNumericCellText(text: String): Boolean {
     return t.isEmpty() || isMoneyToken(t) || isSmallInt(t)
 }
 
-/** The leftmost cell in [row] that isn't numeric-shaped — the item/label cell — or `null` if every cell is numeric. */
-private fun labelCell(row: Row): Cell? = row.cells.sortedBy { it.xLeft }.firstOrNull { !isNumericCellText(it.text) }
+/** The cells in [row] that aren't numeric-shaped — its item/label cells, left to right. */
+private fun labelCells(row: Row): List<Cell> = row.cells.sortedBy { it.xLeft }.filter { !isNumericCellText(it.text) }
 
 /**
  * True when [row] is a genuine totals/fee *label* row rather than a priced item row whose name
@@ -42,11 +42,15 @@ private fun labelCell(row: Row): Cell? = row.cells.sortedBy { it.xLeft }.firstOr
  * keyword occupies its item/label cell *entirely*, not merely appears inside a longer item name —
  * so "Total Wrap | 1 | 150.00 | 150.00" stays an item row while "Grand Total | 18% | 1381.00" is
  * still recognised as totals.
+ *
+ * EVERY label cell is checked, not just the leftmost: a totals line routinely carries two labels
+ * ("Total Qty: 13 | Sub Total | 1249.00"), and requiring the *first* of them to be a whole totals
+ * label would push the row — and the whole totals block after it — into the item list. An item row
+ * has exactly one label cell (its name), so this can't turn a dish into a totals boundary.
  */
 private fun isTotalsLabelRow(row: Row): Boolean {
     if (row.cells.size <= 2) return TOTALS_LABEL.containsMatchIn(row.text)
-    val label = labelCell(row) ?: return false
-    return TOTALS_LABEL.matches(label.text.trim().trimEnd(':').trim())
+    return labelCells(row).any { TOTALS_LABEL.matches(it.text.trim().trimEnd(':').trim()) }
 }
 
 /** True when [cell]'s text is a money amount written with a decimal fraction (e.g. "159.00") — the clearest sign of a priced item line. */

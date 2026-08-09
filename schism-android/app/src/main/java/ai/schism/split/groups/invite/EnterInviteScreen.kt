@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 fun EnterInviteScreen(
     onBack: () -> Unit,
     onToken: (String) -> Unit,
+    onGroupToken: (String) -> Unit,
     legacy: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -55,6 +56,14 @@ fun EnterInviteScreen(
 
     fun accept(value: String?) {
         val raw = value.orEmpty()
+        // Group links are checked first: `/i/g/<token>` also contains "/g/", which is how a v1.2
+        // group id used to look.
+        val groupToken = parseGroupInviteToken(raw)
+        if (groupToken.isNotBlank()) {
+            error = null
+            onGroupToken(groupToken)
+            return
+        }
         error = when {
             raw.isBlank() -> context.getString(R.string.enter_invite_empty)
             isLegacyGroupLink(raw) -> legacyMessage
@@ -119,6 +128,20 @@ fun EnterInviteScreen(
             }
         }
     }
+}
+
+/** Share the group's link through the system share sheet — no participant name, anyone can use it. */
+fun shareGroupInviteLink(context: Context, link: String, groupName: String) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.invite_group_share_subject, groupName))
+        putExtra(Intent.EXTRA_TEXT, context.getString(R.string.invite_group_share_body, groupName, link))
+    }
+    context.startActivity(
+        Intent.createChooser(send, context.getString(R.string.invite_group_share)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        },
+    )
 }
 
 /** Share one participant's invite link through the system share sheet. */

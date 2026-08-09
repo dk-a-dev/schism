@@ -17,6 +17,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -37,6 +39,17 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            // enableEdgeToEdge() picks system-bar icon colours from the SYSTEM dark-mode setting,
+            // which is wrong whenever the app's own theme disagrees with it: a light Schism surface
+            // on a dark-mode phone got white-on-cream status icons, i.e. invisible. Drive the bar
+            // appearance from the theme actually being drawn.
+            val view = LocalView.current
+            LaunchedEffect(dark) {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
             }
             SchismTheme(darkTheme = dark) {
                 // Gate the app on first-run onboarding; null = not yet loaded (avoid flashing either UI).

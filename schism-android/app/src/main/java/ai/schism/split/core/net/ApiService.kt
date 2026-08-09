@@ -110,6 +110,23 @@ interface ApiService {
     @POST("v1/invites/{token}/redeem")
     suspend fun redeemInvite(@Path("token") token: String): RedeemInviteDto
 
+    // ---- shareable group link ----
+
+    /** Mints the group's shareable link, revoking whichever one was live before it. */
+    @POST("v1/groups/{groupId}/invite-link")
+    suspend fun createGroupInvite(@Path("groupId") groupId: String): InviteTokenDto
+
+    @DELETE("v1/groups/{groupId}/invite-link")
+    suspend fun revokeGroupInvite(@Path("groupId") groupId: String)
+
+    /** Safe pre-redeem peek for a link holder: group name and member count, no ids. */
+    @GET("v1/group-invites/{token}")
+    suspend fun previewGroupInvite(@Path("token") token: String): GroupInvitePreviewDto
+
+    /** Creates the caller's own participant in the group; returns the group id. */
+    @POST("v1/group-invites/{token}/redeem")
+    suspend fun redeemGroupInvite(@Path("token") token: String): RedeemInviteDto
+
     // ---- claim links (alpha) ----
 
     @POST("v1/groups/{id}/claim-sessions")

@@ -58,6 +58,9 @@ class GroupsListViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
+                // Reconcile with server-side membership first, so groups created on another device
+                // (or ones someone added us to) appear without needing to sign in again.
+                repo.syncMembership()
                 val ids = settings.knownGroupIds.first().toList()
                 repo.refreshGroups(ids).onFailure {
                     _errors.tryEmit(it.message ?: "Couldn't refresh groups")

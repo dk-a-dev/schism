@@ -2,7 +2,6 @@ package ai.schism.split.groups.invite
 
 import ai.schism.split.core.settings.SettingsRepository
 import ai.schism.split.groups.data.GroupRepository
-import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,26 +13,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-sealed interface RedeemState {
-    /** Deep link opened before this device has a session — we wait rather than fail. */
-    data object WaitingForSignIn : RedeemState
-    data object Loading : RedeemState
-    data class Preview(val groupName: String, val participantName: String) : RedeemState
-
-    /** A shareable group link: there is no participant yet, redeeming creates one for the caller. */
-    data class GroupPreview(val groupName: String, val memberCount: Int) : RedeemState
-    data object Redeeming : RedeemState
-    data class Failed(@StringRes val messageRes: Int) : RedeemState
-}
-
 /**
- * Drives `schism://invite/<token>`: waits for a session, previews the invite (names only), then on
- * confirmation redeems it and remembers the group id the server hands back. No group data is fetched
- * or cached before a successful redeem.
+ * Drives `schism://group-invite/<token>`: same shape as [RedeemInviteViewModel] — wait for a session,
+ * preview, confirm — but redeeming creates the caller's own participant rather than claiming a
+ * pre-named one. Redeeming twice is a no-op on the server, so a re-tap simply lands on the group.
  */
 @HiltViewModel
-class RedeemInviteViewModel @Inject constructor(
-    private val invites: ParticipantInviteRepository,
+class RedeemGroupInviteViewModel @Inject constructor(
+    private val invites: GroupInviteRepository,
     private val groups: GroupRepository,
     private val settings: SettingsRepository,
     savedStateHandle: SavedStateHandle,
@@ -48,20 +35,15 @@ class RedeemInviteViewModel @Inject constructor(
         viewModelScope.launch {
             // Suspends until onboarding/sign-in stores a token, then the link continues on its own.
             settings.authToken.first { it.isNotBlank() }
-            load()
+            _state.value = RedeemState.Loading
+            invites.preview(token)
+                .onSuccess { _state.value = RedeemState.GroupPreview(it.groupName, it.memberCount) }
+                .onFailure { _state.value = RedeemState.Failed(inviteMessageRes(it)) }
         }
     }
 
-    private suspend fun load() {
-        _state.value = RedeemState.Loading
-        invites.preview(token)
-            .onSuccess { _state.value = RedeemState.Preview(it.groupName, it.participantName) }
-            .onFailure { _state.value = RedeemState.Failed(inviteMessageRes(it)) }
-    }
-
-    /** Confirm: link this account to the participant, remember the group, then hand off to it. */
     fun confirm(onJoined: (String) -> Unit) {
-        if (_state.value !is RedeemState.Preview) return
+        if (_state.value !is RedeemState.GroupPreview) return
         viewModelScope.launch {
             _state.value = RedeemState.Redeeming
             invites.redeem(token)

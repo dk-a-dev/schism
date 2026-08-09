@@ -35,6 +35,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,9 +97,21 @@ fun DemoTourScreen(
     val scroll = rememberScrollState()
     val step = state.currentStep
 
-    // Skip/complete/sign-out all land here; the demo data is dropped on the way out.
+    // This screen activates its own tour rather than trusting whoever navigated here to have done
+    // it. hiltViewModel() is scoped per nav destination, so Settings holds a DIFFERENT
+    // WalkthroughViewModel instance; its Replay only reaches this one via DataStore, asynchronously.
+    LaunchedEffect(Unit) {
+        if (state.status != WalkthroughStatus.ACTIVE) viewModel.replayTour()
+    }
+
+    // Skip/complete/sign-out all land here; the demo data is dropped on the way out. Gated on
+    // having actually been active: without that, the default (not-yet-loaded) state reads as
+    // "finished" and the screen pops itself the instant it opens.
+    var wasActive by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.status) {
-        if (state.status != WalkthroughStatus.ACTIVE) {
+        if (state.status == WalkthroughStatus.ACTIVE) {
+            wasActive = true
+        } else if (wasActive) {
             viewModel.endDemo()
             onExit()
         }

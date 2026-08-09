@@ -52,18 +52,20 @@ class ParticipantInviteRepository @Inject constructor(
         runCatching { api.redeemInvite(token).groupId }
             .mapInviteErrors(onConflict = InviteError.AlreadyLinked)
 
-    private fun <T> Result<T>.mapInviteErrors(onConflict: InviteError): Result<T> =
-        recoverCatching { e ->
-            throw when ((e as? HttpException)?.code()) {
-                401 -> InviteError.SignInRequired
-                403 -> InviteError.NotMember
-                404 -> InviteError.NotFound
-                409 -> onConflict
-                410 -> InviteError.Expired
-                else -> e
-            }
-        }
 }
+
+/** Shared by both invite repositories — the backend uses one error mapping for both flows. */
+internal fun <T> Result<T>.mapInviteErrors(onConflict: InviteError): Result<T> =
+    recoverCatching { e ->
+        throw when ((e as? HttpException)?.code()) {
+            401 -> InviteError.SignInRequired
+            403 -> InviteError.NotMember
+            404 -> InviteError.NotFound
+            409 -> onConflict
+            410 -> InviteError.Expired
+            else -> e
+        }
+    }
 
 /**
  * The https landing to share (`<backend>/i/<token>`) so messengers linkify it; that page bounces

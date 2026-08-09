@@ -43,6 +43,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="schism" android:host="invite" />
             </intent-filter>
+            <!-- Shareable group link: schism://group-invite/<token> joins you as yourself. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="schism" android:host="group-invite" />
+            </intent-filter>
             <!-- Retired v1.2 link: schism://group/<id> now only explains that a new invite is needed. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

@@ -212,7 +212,7 @@ fun ItemizedSplitScreen(
                                 Icon(Icons.Filled.Add, contentDescription = null)
                                 Text("  Add item")
                             }
-                            if (state.claimLinksAlpha && state.items.isNotEmpty()) {
+                            if (state.items.isNotEmpty()) {
                                 SchismSecondaryButton(
                                     onClick = {
                                         viewModel.startClaimSession { sid -> onClaimSessionCreated(sid) }
@@ -220,7 +220,7 @@ fun ItemizedSplitScreen(
                                     enabled = !state.creatingClaimSession,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
-                                    Text(if (state.creatingClaimSession) "Creating…" else "Let everyone claim (alpha)")
+                                    Text(if (state.creatingClaimSession) "Creating…" else "Let everyone claim")
                                 }
                                 // What's left is stated up front, before the tap — never discovered
                                 // only after the backend refuses. Plus hosts without a counter.

@@ -405,3 +405,10 @@ data class InvitePreviewDto(
 data class RedeemInviteDto(
     val groupId: String,
 )
+
+/** All a group-link holder may see before redeeming — no ids, no members, no expenses. */
+@Serializable
+data class GroupInvitePreviewDto(
+    val groupName: String = "",
+    val memberCount: Int = 0,
+)

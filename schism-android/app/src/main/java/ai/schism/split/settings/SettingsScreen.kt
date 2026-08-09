@@ -332,32 +332,12 @@ fun SettingsScreen(
                 ) { Text("Delete imported message transactions") }
             }
 
-            // ── Labs ───────────────────────────────────────────────────────
+            // ── Guided tour ────────────────────────────────────────────────
             SettingsSection("Guided tour") {
                 ai.schism.split.walkthrough.WalkthroughSettingsSection(onReplayTour = onReplayTour)
             }
 
-            SettingsSection("Labs") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Claim links (alpha)", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "Let everyone in a group claim what they had off a scanned bill instead of " +
-                                "you assigning it for them.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    androidx.compose.material3.Switch(
-                        checked = state.claimLinksAlpha,
-                        onCheckedChange = viewModel::setClaimLinksAlpha,
-                    )
-                }
-            }
+            // Labs removed: Live Split claiming is a shipped feature, not an opt-in experiment.
 
             // ── Schism Plus ────────────────────────────────────────────────
             PlusSection()

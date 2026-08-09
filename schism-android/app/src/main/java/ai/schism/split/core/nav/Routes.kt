@@ -13,6 +13,10 @@ object Routes {
     const val REDEEM_INVITE = "invite/{token}"
     fun redeemInvite(token: String) = "invite/$token"
 
+    /** Redeeming a shareable group link (`schism://group-invite/<token>`). */
+    const val REDEEM_GROUP_INVITE = "group-invite/{token}"
+    fun redeemGroupInvite(token: String) = "group-invite/$token"
+
     const val PUSH_SPLIT = "sms/split/{transactionId}"
     fun pushSplit(transactionId: String) = "sms/split/$transactionId"
 

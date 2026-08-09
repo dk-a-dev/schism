@@ -53,6 +53,23 @@ class GroupRepository @Inject constructor(
         }
     }
 
+    /**
+     * Ask the server which groups this account actually belongs to and adopt any this device has
+     * never seen.
+     *
+     * Without this the device only ever refetches the ids it happened to learn locally, so a group
+     * created on another phone — or one someone else added you to — stays invisible until the next
+     * sign-in. That silently broke the promise that an account syncs groups across devices.
+     *
+     * Membership is only ever added here, never removed: leaving a group is an explicit action, and
+     * a transient server hiccup must not wipe a device's list.
+     */
+    suspend fun syncMembership(): Result<List<String>> = runCatching {
+        val ids = api.myGroups().groupIds
+        ids.forEach { settings.addKnownGroup(it) }
+        ids
+    }
+
     /** Forget a group on this device: drop the cached copy and stop refreshing it. */
     suspend fun forget(id: String) {
         groupDao.deleteGroup(id)

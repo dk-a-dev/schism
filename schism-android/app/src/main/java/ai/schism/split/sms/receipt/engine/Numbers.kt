@@ -21,6 +21,16 @@ private fun cleanNumeric(raw: String): String {
 }
 
 /**
+ * True when [raw] carries a letter. Stripping is only ever meant to drop currency/grouping noise
+ * (`₹`, `,`, `/-`), so anything with a letter in it is a LABEL that happens to contain digits — a
+ * merchant name ("The Pizza Bakery 2"), a tax id ("GSTIN:29AAFCP1234M1ZK"), a reference
+ * ("Bill No.: 3241"). Without this guard [cleanNumeric] deletes the letters and the leftover digits
+ * parse as an amount, so those rows are mistaken for priced rows — and the merchant-name line, which
+ * is skipped precisely because it "ends in a money cell", is never found at all.
+ */
+private fun hasLetter(raw: String): Boolean = raw.any { it.isLetter() }
+
+/**
  * Parses a money-shaped token (grouped digits with an optional 2-decimal fraction, e.g. "2,532",
  * "1,299.00", "₹40.00") into minor units (paise/cents), or `null` when [raw] doesn't look like an
  * amount at all, or looks more like a non-money number than a bill amount.
@@ -36,7 +46,7 @@ private fun cleanNumeric(raw: String): String {
  * percentage column could be misread as an amount when detecting money columns / regions.
  */
 fun parseMinor(raw: String): Long? {
-    if (raw.contains('%')) return null
+    if (raw.contains('%') || hasLetter(raw)) return null
     val cleaned = cleanNumeric(raw)
     if (cleaned.isEmpty() || !cleaned.matches(PLAIN_NUMBER)) return null
 

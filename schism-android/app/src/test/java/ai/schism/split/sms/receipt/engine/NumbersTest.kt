@@ -26,6 +26,16 @@ class NumbersTest {
         assertTrue(isMoneyToken("23.60"))
     }
 
+    @Test fun labelWithDigitsIsNotMoney() {
+        // Stripping is only meant to drop currency/grouping noise. A label that happens to carry
+        // digits must NOT survive as its leftover digits, or a merchant line ends in a "money" cell
+        // (and is skipped as a would-be item) and a tax id becomes an amount.
+        assertNull(parseMinor("SYNTHETIC CURRENCY 1"))
+        assertNull(parseMinor("GSTIN:29AAFCP1234M1ZK"))
+        assertNull(parseMinor("Bill No.: 3241"))
+        assertFalse(isMoneyToken("Total Qty: 13"))
+    }
+
     @Test fun rupeeSlashDashAndMidDotStyles() {
         // "149/-" (Indian "₹149 flat" notation) parses as ₹149, not null.
         assertEquals(14900L, parseMinor("149/-"))

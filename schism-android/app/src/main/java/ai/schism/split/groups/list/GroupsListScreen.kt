@@ -85,16 +85,14 @@ fun GroupsListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Groups") },
-                actions = {
-                    IconButton(onClick = scanBill) {
-                        Icon(Icons.Filled.DocumentScanner, contentDescription = "Scan a bill")
-                    }
-                },
+                // No bare scan icon here: an unlabelled scanner glyph on the Groups list read as
+                // decoration and gave no hint what it did. It lives in the labelled FAB menu below,
+                // alongside Create/Join, and on the Inbox tab.
                 scrollBehavior = scrollBehavior,
             )
         },
         floatingActionButton = {
-            ExpandableGroupFab(onCreate = onCreateGroup, onJoin = onJoinGroup)
+            ExpandableGroupFab(onCreate = onCreateGroup, onJoin = onJoinGroup, onScanBill = scanBill)
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -164,7 +162,7 @@ private fun GroupCard(group: GroupSummary, onOpenGroup: (String) -> Unit) {
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit) {
+private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit, onScanBill: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
 
     FloatingActionButtonMenu(
@@ -191,6 +189,11 @@ private fun ExpandableGroupFab(onCreate: () -> Unit, onJoin: () -> Unit) {
                 onClick = { expanded = false; onJoin() },
                 icon = { Icon(Icons.Filled.GroupAdd, contentDescription = null) },
                 text = { Text("Join group") },
+            )
+            FloatingActionButtonMenuItem(
+                onClick = { expanded = false; onScanBill() },
+                icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                text = { Text("Scan a bill") },
             )
         },
     )

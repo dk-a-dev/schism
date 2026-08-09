@@ -8,6 +8,7 @@ import ai.schism.split.expense.edit.ExpenseEditScreen
 import ai.schism.split.groups.detail.GroupDetailScreen
 import ai.schism.split.groups.edit.EditGroupScreen
 import ai.schism.split.groups.invite.EnterInviteScreen
+import ai.schism.split.groups.invite.RedeemGroupInviteScreen
 import ai.schism.split.groups.invite.RedeemInviteScreen
 import ai.schism.split.groups.list.GroupsListScreen
 import ai.schism.split.groups.qr.InviteQrScreen
@@ -161,6 +162,11 @@ fun AppNav() {
                             popUpTo(Routes.JOIN_GROUP) { inclusive = true }
                         }
                     },
+                    onGroupToken = { token ->
+                        navController.navigate(Routes.redeemGroupInvite(token)) {
+                            popUpTo(Routes.JOIN_GROUP) { inclusive = true }
+                        }
+                    },
                 )
             }
             composable(
@@ -181,6 +187,24 @@ fun AppNav() {
                     },
                 )
             }
+            composable(
+                Routes.REDEEM_GROUP_INVITE,
+                arguments = listOf(navArgument("token") { type = NavType.StringType }),
+                deepLinks = listOf(navDeepLink { uriPattern = "schism://group-invite/{token}" }),
+            ) {
+                RedeemGroupInviteScreen(
+                    onJoined = { id ->
+                        navController.navigate(Routes.groupDetail(id)) {
+                            popUpTo(Routes.REDEEM_GROUP_INVITE) { inclusive = true }
+                        }
+                    },
+                    onDismiss = {
+                        navController.navigate(Routes.GROUPS) {
+                            popUpTo(Routes.REDEEM_GROUP_INVITE) { inclusive = true }
+                        }
+                    },
+                )
+            }
             // Retired v1.2 group link. A group id grants nothing now, so this only explains itself —
             // it never fetches or caches the group behind the id.
             composable(
@@ -197,6 +221,11 @@ fun AppNav() {
                     },
                     onToken = { token ->
                         navController.navigate(Routes.redeemInvite(token)) {
+                            popUpTo(Routes.OPEN_GROUP) { inclusive = true }
+                        }
+                    },
+                    onGroupToken = { token ->
+                        navController.navigate(Routes.redeemGroupInvite(token)) {
                             popUpTo(Routes.OPEN_GROUP) { inclusive = true }
                         }
                     },
