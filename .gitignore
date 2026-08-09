@@ -34,3 +34,6 @@ keystore.properties
 
 # Release build outputs (artifacts are attached to the GitHub release, not committed)
 dist/
+
+# Generated static site (rendered from internal/web by cmd/sitegen)
+site/
