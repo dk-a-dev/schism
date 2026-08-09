@@ -78,7 +78,8 @@ check_apk() {
     local badging
     badging=$("$bt/aapt2" dump badging "$apk")
     grep -Fq "versionName='$VERSION_NAME'" <<<"$badging" || fail "$apk versionName is not $VERSION_NAME"
-    grep -Fq "sdkVersion:'$MIN_SDK'" <<<"$badging" || fail "$apk minSdk is not $MIN_SDK"
+    # aapt2 prints "minSdkVersion:'26'"; the bare "sdkVersion:" spelling is the old aapt1 format.
+    grep -Fq "minSdkVersion:'$MIN_SDK'" <<<"$badging" || fail "$apk minSdk is not $MIN_SDK"
 
     certs=$("$bt/apksigner" verify --print-certs "$apk")
     if grep -qi 'CN=Android Debug' <<<"$certs"; then

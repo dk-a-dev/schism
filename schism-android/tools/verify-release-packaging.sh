@@ -10,22 +10,27 @@ apksigner="$build_tools/apksigner"
 zipalign="$build_tools/zipalign"
 apkanalyzer=$(find "$sdk_root/cmdline-tools" -type f -name apkanalyzer | head -1)
 
-"$apksigner" verify --verbose "$apk" | grep -q '^Verifies$'
+# Read each tool's output into a variable before matching. Piping into `grep -q` under
+# `set -o pipefail` makes grep close the pipe on its first match, killing the producer with
+# SIGPIPE and failing the script with 141 on a perfectly good APK.
+signer_output=$("$apksigner" verify --verbose "$apk")
+grep -q '^Verifies$' <<<"$signer_output"
 [[ $("$apkanalyzer" manifest application-id "$apk") == "ai.schism.split" ]]
 [[ $("$apkanalyzer" manifest version-code "$apk") == "10300" ]]
 [[ $("$apkanalyzer" manifest target-sdk "$apk") == "36" ]]
 [[ $("$apkanalyzer" manifest debuggable "$apk") == "false" ]]
 "$zipalign" -c -P 16 4 "$apk" >/dev/null
 
-if unzip -l "$apk" | grep -Eq 'assets/models/(det|rec)/inference'; then
+listing=$(unzip -l "$apk")
+if grep -Eq 'assets/models/(det|rec)/inference' <<<"$listing"; then
     echo "Production OCR models leaked into the APK; they must be delivered by the backend." >&2
     exit 1
 fi
-if unzip -l "$apk" | grep -Eq 'lib/(x86|x86_64|armeabi-v7a)/'; then
+if grep -Eq 'lib/(x86|x86_64|armeabi-v7a)/' <<<"$listing"; then
     echo "Release APK contains an unsupported ABI." >&2
     exit 1
 fi
-unzip -l "$apk" | grep -q 'lib/arm64-v8a/'
+grep -q 'lib/arm64-v8a/' <<<"$listing"
 
 size=$(stat -f %z "$apk" 2>/dev/null || stat -c %s "$apk")
 (( size < 100 * 1024 * 1024 )) || {
