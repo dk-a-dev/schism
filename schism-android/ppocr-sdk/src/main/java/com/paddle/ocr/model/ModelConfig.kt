@@ -22,17 +22,21 @@ data class ModelConfig(
 ) {
     companion object {
         fun parse(context: Context, assetPath: String): ModelConfig {
+            return parse(context, ModelSource.Asset(assetPath))
+        }
+
+        fun parse(context: Context, source: ModelSource): ModelConfig {
             val content = try {
-                context.assets.open(assetPath).bufferedReader().use { it.readText() }
+                source.open(context).bufferedReader().use { it.readText() }
             } catch (t: Throwable) {
-                throw OCRError.ConfigParseFailed(assetPath, t)
+                throw OCRError.ConfigParseFailed(source.toString(), t)
             }
             val characterDict = try {
-                extractCharacterDict(content, assetPath)
+                extractCharacterDict(content, source.toString())
             } catch (e: OCRError.ConfigParseFailed) {
                 throw e
             } catch (t: Throwable) {
-                throw OCRError.ConfigParseFailed(assetPath, t)
+                throw OCRError.ConfigParseFailed(source.toString(), t)
             }
             val charListWithSpace = characterDict.toMutableList().apply {
                 if (lastOrNull() != " ") add(" ")

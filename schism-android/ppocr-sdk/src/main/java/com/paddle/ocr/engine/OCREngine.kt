@@ -19,6 +19,7 @@ import android.graphics.Bitmap
 import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCRConfig
 import com.paddle.ocr.model.ModelConfig
+import com.paddle.ocr.model.ModelSource
 import com.paddle.ocr.model.OCRError
 import com.paddle.ocr.model.OCRResult
 import com.paddle.ocr.postprocess.BoxSorter
@@ -29,9 +30,9 @@ class OCREngine(
     context: Context,
     private val config: PaddleOCRConfig,
     engineConfig: EngineConfig,
-    detModelAsset: String = "models/det/inference.onnx",
-    recModelAsset: String = "models/rec/inference.onnx",
-    recConfigAsset: String = "models/rec/inference.yml",
+    detModel: ModelSource = ModelSource.Asset("models/det/inference.onnx"),
+    recModel: ModelSource = ModelSource.Asset("models/rec/inference.onnx"),
+    recConfig: ModelSource = ModelSource.Asset("models/rec/inference.yml"),
 ) {
     private val ortManager = ORTSessionManager(context, engineConfig)
     private val detectionEngine: DetectionEngine
@@ -40,8 +41,8 @@ class OCREngine(
 
     init {
         val configured = try {
-            ortManager.loadModels(detModelAsset, recModelAsset)
-            val recModelConfig = ModelConfig.parse(context, recConfigAsset)
+            ortManager.loadModels(detModel, recModel)
+            val recModelConfig = ModelConfig.parse(context, recConfig)
             recModelConfig
         } catch (t: Throwable) {
             ortManager.release()

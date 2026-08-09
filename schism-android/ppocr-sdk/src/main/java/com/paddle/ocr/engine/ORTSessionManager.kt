@@ -20,6 +20,7 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.model.OCRError
+import com.paddle.ocr.model.ModelSource
 import java.nio.FloatBuffer
 
 class ORTSessionManager(
@@ -34,7 +35,7 @@ class ORTSessionManager(
     var coldLoadTimeMs: Long = 0
         private set
 
-    fun loadModels(detAssetPath: String, recAssetPath: String) {
+    fun loadModels(detModel: ModelSource, recModel: ModelSource) {
         val loadStart = System.currentTimeMillis()
         env = OrtEnvironment.getEnvironment()
         val opts = OrtSession.SessionOptions().apply {
@@ -43,15 +44,13 @@ class ORTSessionManager(
         }
         try {
             val ortEnv = env ?: throw OCRError.ModelLoadFailed("OCR", Exception("Environment not initialized"))
-            val detBytes = readModelAsset(detAssetPath)
-            val recBytes = readModelAsset(recAssetPath)
             try {
-                detSession = ortEnv.createSession(detBytes, opts)
+                detSession = createSession(ortEnv, detModel, opts)
             } catch (t: Throwable) {
                 throw OCRError.ModelLoadFailed("detection", t)
             }
             try {
-                recSession = ortEnv.createSession(recBytes, opts)
+                recSession = createSession(ortEnv, recModel, opts)
             } catch (t: Throwable) {
                 detSession?.close()
                 detSession = null
@@ -104,11 +103,14 @@ class ORTSessionManager(
         }
     }
 
-    private fun readModelAsset(assetPath: String): ByteArray {
-        return try {
-            context.assets.open(assetPath).use { it.readBytes() }
-        } catch (t: Throwable) {
-            throw OCRError.ModelNotFound(assetPath, t)
+    private fun createSession(
+        ortEnv: OrtEnvironment,
+        source: ModelSource,
+        options: OrtSession.SessionOptions,
+    ): OrtSession {
+        return when (source) {
+            is ModelSource.Asset -> source.open(context).use { ortEnv.createSession(it.readBytes(), options) }
+            is ModelSource.FilePath -> ortEnv.createSession(source.validatedFile().absolutePath, options)
         }
     }
 

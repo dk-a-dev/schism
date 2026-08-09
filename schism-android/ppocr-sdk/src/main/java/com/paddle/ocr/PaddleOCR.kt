@@ -20,6 +20,7 @@ import com.paddle.ocr.engine.OCREngine
 import com.paddle.ocr.engine.OCREngineResult
 import com.paddle.ocr.model.OCRRunResult
 import com.paddle.ocr.model.OCRError
+import com.paddle.ocr.model.ModelSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -63,11 +64,25 @@ class PaddleOCR private constructor(
             return withContext(Dispatchers.IO) {
                 val engine = OCREngine(
                     appContext, config, engineConfig,
-                    detModelAsset = detModelAssetPath,
-                    recModelAsset = recModelAssetPath,
-                    recConfigAsset = recConfigAssetPath,
+                    detModel = ModelSource.Asset(detModelAssetPath),
+                    recModel = ModelSource.Asset(recModelAssetPath),
+                    recConfig = ModelSource.Asset(recConfigAssetPath),
                 )
                 PaddleOCR(engine)
+            }
+        }
+
+        suspend fun create(
+            context: Context,
+            config: PaddleOCRConfig,
+            engineConfig: EngineConfig,
+            detModel: ModelSource,
+            recModel: ModelSource,
+            recConfig: ModelSource,
+        ): PaddleOCR {
+            val appContext = context.applicationContext
+            return withContext(Dispatchers.IO) {
+                PaddleOCR(OCREngine(appContext, config, engineConfig, detModel, recModel, recConfig))
             }
         }
     }
