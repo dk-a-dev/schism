@@ -30,7 +30,7 @@ jobs:
       version_code: ${{ steps.version.outputs.code }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.2
@@ -134,12 +134,12 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/schism-release.jks" schism-android/keystore.properties
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-github
           path: dist/github/*
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-play
           path: dist/play/*
@@ -152,8 +152,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: release-github
           path: dist
@@ -179,8 +179,8 @@ jobs:
     needs: [build, github-release]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: release-play
           path: dist
